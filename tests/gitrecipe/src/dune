@@ -1,0 +1,3 @@
+(library
+ (name cjson)
+ (foreign_stubs (language c) (names json_stubs)))

@@ -1,0 +1,4 @@
+cJSON 1.7.18
+name=ocaml-emcc pi=3.14159 langs=3
+{"name":"ocaml-emcc","pi":3.14159,"langs":["ocaml","c","wasm"]}
+Failure cJSON_Parse

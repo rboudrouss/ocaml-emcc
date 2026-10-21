@@ -1,0 +1,3 @@
+(library
+ (name mystubs)
+ (foreign_stubs (language c) (names mystubs_c) (flags (:standard -DMYSTUBS_MAGIC=7))))

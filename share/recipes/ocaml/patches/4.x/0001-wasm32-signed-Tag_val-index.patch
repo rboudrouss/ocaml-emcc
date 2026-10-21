@@ -1,0 +1,17 @@
+wasm32: index Tag_val with a signed offset.
+
+On 32-bit targets `-sizeof(value)` is an unsigned 0xFFFFFFFC; native
+32-bit code wraps around, but a wasm `load` adds it to the pointer as a
+33-bit offset and traps (out of bounds).  Fixed upstream in OCaml 5.
+
+--- a/runtime/caml/mlvalues.h
++++ b/runtime/caml/mlvalues.h
+@@ -188,7 +188,7 @@
+ #define Tag_hp(hp) (((unsigned char *) (hp)) [sizeof(value)-1])
+                                                  /* Also an l-value. */
+ #else
+-#define Tag_val(val) (((unsigned char *) (val)) [-sizeof(value)])
++#define Tag_val(val) (((unsigned char *) (val)) [-(int)sizeof(value)])
+                                                  /* Also an l-value. */
+ #define Tag_hp(hp) (((unsigned char *) (hp)) [0])
+                                                  /* Also an l-value. */

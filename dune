@@ -1,0 +1,6 @@
+(dirs bin src share)
+
+(install
+ (section share)
+ (files
+  (glob_files_rec (share/** with_prefix .))))

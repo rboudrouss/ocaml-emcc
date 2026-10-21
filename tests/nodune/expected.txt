@@ -1,0 +1,4 @@
+hello from a hand-compiled stub
+triple 14 = 42
+unix time > 0: true
+zarith 2^80 = 1208925819614629174706176

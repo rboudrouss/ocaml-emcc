@@ -1,0 +1,70 @@
+#!/bin/sh
+# ocamlc wrapper for the wasm32/wasm64 (emscripten) findlib toolchains.
+#
+# The bytecode itself is the host's, so every real compilation is forwarded
+# to the host ocamlc.  Only `ocamlc -config` is rewritten, because that is
+# where dune learns which C compiler, flags and archiver to use for
+# (foreign_stubs ...):
+#
+#   c_compiler             -> emcc
+#   ocamlc_cflags/cppflags -> wasm flags, with the wasm <caml/*.h> headers
+#                             placed before dune's own `-I <stdlib>`
+#
+# Linking skips the primitive check: the stub "dlls" are empty placeholders
+# (see ocamlmklib), the real check happens in `ocaml-emcc link`.
+
+: "${OCAML_EMCC_HOST_BIN:?OCAML_EMCC_HOST_BIN not set}"
+: "${OCAML_EMCC_SYSROOT:?OCAML_EMCC_SYSROOT not set}"
+
+host="$OCAML_EMCC_HOST_BIN/ocamlc"
+: "${OCAML_EMCC_CFLAGS:?OCAML_EMCC_CFLAGS not set}"
+emcc="${OCAML_EMCC_EMCC:-emcc}"
+cflags="$OCAML_EMCC_CFLAGS${OCAML_EMCC_EXTRA_CFLAGS:+ $OCAML_EMCC_EXTRA_CFLAGS}"
+case "$cflags" in *-m64*) OCAML_EMCC_TRIPLE=wasm64-unknown-emscripten ;; *) OCAML_EMCC_TRIPLE=wasm32-unknown-emscripten ;; esac
+cppflags="-I$OCAML_EMCC_SYSROOT/lib/ocaml -I$OCAML_EMCC_SYSROOT/include -D_FILE_OFFSET_BITS=64"
+
+rewrite_config() {
+  "$host" -config | sed \
+    -e "s|^c_compiler: .*|c_compiler: $emcc|" \
+    -e "s|^ocamlc_cflags: .*|ocamlc_cflags: $cflags|" \
+    -e "s|^ocamlc_cppflags: .*|ocamlc_cppflags: $cppflags|" \
+    -e "s|^ocamlopt_cflags: .*|ocamlopt_cflags: $cflags|" \
+    -e "s|^ocamlopt_cppflags: .*|ocamlopt_cppflags: $cppflags|" \
+    -e "s|^bytecomp_c_compiler: .*|bytecomp_c_compiler: $emcc $cflags $cppflags|" \
+    -e "s|^native_c_compiler: .*|native_c_compiler: $emcc $cflags $cppflags|" \
+    -e "s|^bytecomp_c_libraries: .*|bytecomp_c_libraries: -lm|" \
+    -e "s|^native_c_libraries: .*|native_c_libraries: -lm|" \
+    -e "s|^ar: .*|ar: emar|" \
+    -e "s|^ranlib: .*|ranlib: emranlib|" \
+    -e "s|^host: .*|host: $OCAML_EMCC_TRIPLE|" \
+    -e "s|^target: .*|target: $OCAML_EMCC_TRIPLE|" \
+    -e "s|^native_compiler: .*|native_compiler: false|" \
+    -e "s|^natdynlink_supported: .*|natdynlink_supported: false|"
+}
+
+case "$1" in
+  -config) rewrite_config; exit 0 ;;
+  -config-var)
+    rewrite_config | sed -n "s|^$2: ||p"
+    exit 0 ;;
+esac
+
+for a in "$@"; do
+  case "$a" in
+    -c|-a|-i|-pack|-version|-vnum|-where|-help|--help) exec "$host" "$@" ;;
+  esac
+done
+
+# Executables.  Without a native compiler dune builds (modes exe) as
+# byte_complete, i.e. `ocamlc -output-complete-exe`, which would link the
+# host runtime with the host C compiler.  Produce plain bytecode instead
+# (same output name): `ocaml-emcc link` does the C side.  Same for -custom.
+args=
+for a in "$@"; do
+  case "$a" in
+    -output-complete-exe|-custom) ;;
+    *) args="$args '$(printf '%s' "$a" | sed "s/'/'\\\\''/g")'" ;;
+  esac
+done
+eval "set -- $args"
+exec "$host" -no-check-prims "$@"

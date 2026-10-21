@@ -1,0 +1,11 @@
+_build/
+*.install
+tests/**/out/
+tests/*/out.log
+
+# ignore bins
+*.cmi
+*.cmo
+*.a
+*.bc
+*.o

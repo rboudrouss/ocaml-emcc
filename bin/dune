@@ -1,0 +1,4 @@
+(executable
+ (name main)
+ (public_name ocaml-emcc)
+ (libraries ocaml_emcc))
