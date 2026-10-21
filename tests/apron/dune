@@ -1,0 +1,3 @@
+(executable
+ (name ap)
+ (libraries gmp apron apron.boxMPQ apron.octMPQ apron.polkaMPQ))
