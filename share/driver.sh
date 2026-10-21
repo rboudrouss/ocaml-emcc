@@ -32,8 +32,9 @@
 #   SHA256   checksum of the tarball (url: sources)
 #   REF      git tag, branch or commit (git: sources; default: HEAD)
 #   DEPENDS  space separated recipe names built first
-# and must define a `build` function.  `build` runs inside a fresh copy of the
-# sources with the helpers below available (install_lib, install_headers,
+# and must define a `build` function (or include one: `include_recipe NAME`,
+# with an optional `pre_build` function run before it).  `build` runs inside
+# a fresh copy of the sources with the helpers below available (install_lib, install_headers,
 # link_flags, mklib, apply_patches...).
 
 set -euo pipefail
@@ -82,7 +83,9 @@ EMAR=$EMSDK_BIN/emar
 EMCC_VERSION=$("$EMCC" -dumpversion)
 export EMAR
 
-mkdir -p "$SYSROOT"/{lib,include,bin,build,src,stamps,meta} "$OCAML_INC"
+# Target-independent files (host tools built by recipes, big source archives)
+SHARED=$(dirname "$SYSROOT")/shared
+mkdir -p "$SYSROOT"/{lib,include,bin,build,src,stamps,meta} "$OCAML_INC" "$SHARED"
 
 log() { printf '\033[1;34m[ocaml-emcc]\033[0m %s\n' "$*" >&2; }
 die() { printf '\033[1;31m[ocaml-emcc]\033[0m %s\n' "$*" >&2; exit 1; }
@@ -350,6 +353,12 @@ apply_patches() { # apply_patches <dir>: apply <dir>/*.patch in order
   done
 }
 
+# make_var <dir> <variable>: value of a variable of <dir>/Makefile
+make_var() {
+  printf '__ocaml_emcc_var:\n\t@echo $(%s)\n' "$2" \
+    | make -s --no-print-directory -C "$1" -f Makefile -f - __ocaml_emcc_var
+}
+
 # mklib <name> <objects...>: archive objects into lib<name>.a
 mklib() { local n=$1; shift; rm -f "lib$n.a"; "$EMAR" rcs "lib$n.a" "$@"; }
 
@@ -376,6 +385,26 @@ find_recipe() {
     [ -f "$d/$1/recipe.sh" ] && { echo "$d/$1"; return 0; }
   done
   return 1
+}
+
+# include_recipe <name>: in a recipe, read the recipe <name>; for the recipe's
+# own name, the next one down the recipe path.  A project recipe can thus
+# refine a builtin one:
+#   LLVM_VERSION=9.0.1; include_recipe clang
+# BASE_RECIPE_DIR is the directory of the included recipe.
+include_recipe() {
+  local IFS=: d seen=no found=
+  if [ "$1" != "$RECIPE_NAME" ]; then found=$(find_recipe "$1") || die "include_recipe: no recipe $1"
+  else
+    for d in $RECIPES_PATH; do
+      if [ $seen = yes ] && [ -f "$d/$1/recipe.sh" ]; then found=$d/$1; break; fi
+      [ "$d/$1" = "$RECIPE_DIR" ] && seen=yes
+    done
+    [ -n "$found" ] || die "include_recipe $1: no other recipe named $1 after $RECIPE_DIR"
+  fi
+  BASE_RECIPE_DIR=$found
+  # shellcheck disable=SC1091
+  . "$found/recipe.sh"
 }
 
 # --------------------------------------------------------------- toolchain
@@ -466,7 +495,8 @@ run_recipe() {
   (
     SOURCE=none DEPENDS= SHA256= REF=
     HEADER= VERSION_MACROS= PKGCONFIG= RELEASES= TARBALL= COMPAT= OPAM_SOURCES= LINK=
-    RECIPE_DIR=$dir
+    RECIPE_DIR=$dir RECIPE_NAME=$name BASE_RECIPE_DIR=$dir
+    unset -f pre_build fetch
     # shellcheck disable=SC1091
     . "$dir/recipe.sh"
     local d
@@ -492,6 +522,8 @@ run_recipe() {
     esac
     log "building $name ${SOURCE_VERSION:-}"
     cd "$work"
+    # pre_build: a hook for project recipes refining a builtin one
+    if declare -F pre_build >/dev/null; then pre_build; fi
     build
     case "$SOURCE" in system:*) record_use_flags "$name" ;; esac
     echo "${SOURCE_VERSION:-} emcc-$EMCC_VERSION" > "$stamp"
