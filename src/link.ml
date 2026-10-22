@@ -455,6 +455,11 @@ let run o =
     ]
   in
   let defaults = List.filter (( <> ) "") defaults in
+  (* the standard streams of node, as bytes (not for a standalone .wasm) *)
+  let defaults =
+    if Filename.check_suffix o.output ".wasm" then defaults
+    else defaults @ [ "--pre-js"; Filename.concat (Env.share ()) "runtime/node_stdio.js" ]
+  in
   let args ?(extra = []) ~output () =
     defaults @ fs_flags @ [ main_o; prims_o; compat_o ] @ foreign_objs @ extra @ archives @ o.libs
     @ [ "-L" ^ Env.sysroot_file "lib" ]
