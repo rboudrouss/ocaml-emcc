@@ -29,8 +29,11 @@ zstd      | zs       |            | zstd                        | wasm32 wasm64 
 gsl       | gs       |            | gsl                         | wasm32 wasm64 |
 camlzip   | cz       |            | camlzip                     | wasm32 wasm64 |
 ctypes    | cf       |            | ctypes-foreign              | wasm32 wasm64 |
+yaml      | ym       |            | yaml                        | wasm64        |
 '
-# hello is wasm64 only on purpose: 63-bit literals and arithmetic.
+# hello is wasm64 only on purpose: 63-bit literals and arithmetic.  yaml too:
+# its ctypes structs were laid out for the host (LP64) when the bytecode was
+# built, which only wasm64 matches.
 
 has_pkg() {
   case $1 in
