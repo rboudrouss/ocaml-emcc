@@ -501,10 +501,17 @@ write_toolchain() {
   # -pthread (lwt's configuration adds it) is dropped: the program is
   # single-threaded, and with it emcc compiles `caml_state` as a real
   # thread-local variable, which the runtime's is not (see the ocaml recipe).
+  # The headers and libraries of the sysroot come last (after the package's
+  # own): dune-configurator's C tests only get the C flags, not -I.
   cat > "$cc" <<EOF
 #!/bin/sh
-for a; do shift; [ "\$a" = -pthread ] || set -- "\$@" "\$a"; done
-exec '$EMCC' $TARGET_FLAGS $STUB_STD "\$@"
+link=-L'$SYSROOT/lib'
+for a; do
+  shift
+  case \$a in -c|-E|-S|-M|-MM) link= ;; esac
+  [ "\$a" = -pthread ] || set -- "\$@" "\$a"
+done
+exec '$EMCC' $TARGET_FLAGS $STUB_STD -idirafter '$SYSROOT/include' \$link "\$@"
 EOF
   chmod +x "$cc"
   for tool in ocamlc ocamlmklib; do
