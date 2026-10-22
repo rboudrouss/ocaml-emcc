@@ -26,8 +26,9 @@ build() {
   install_headers apron apron/*.h num/*.h itv/*.h mlapronidl/apron_caml.h
 
   # OCaml stubs: the camlidl output is in the opam build directory, or is
-  # regenerated with the host camlidl
-  local inc="-Iapron -Inum -Iitv -Imlapronidl" m objs= ent dir pre lib num
+  # regenerated with the host camlidl.  -std=c99 as in apron's own build: its
+  # headers define bool, a keyword since C23.
+  local inc="-std=c99 -Iapron -Inum -Iitv -Imlapronidl" m objs= ent dir pre lib num
   local idl
   idl=$(make_var mlapronidl IDLMODULES)
   for m in $idl; do
