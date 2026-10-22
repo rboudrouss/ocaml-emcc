@@ -21,6 +21,13 @@ __attribute__((weak)) void *shmat(int shmid, const void *shmaddr, int shmflg)
   return (void *)-1;
 }
 
+/* OCaml >= 5.5: ocamlc defines these in the C file it links with the runtime
+   (prims.c for ocamlrun).  STANDARD mode: the runtime opens argv[0] as the
+   bytecode first (see main.c).  The standard library directory is the one
+   the runtime of older versions has built in (configure's default prefix). */
+__attribute__((weak)) const int caml_byte_program_mode = 0; /* STANDARD */
+__attribute__((weak)) const char *caml_runtime_standard_library_default = "/usr/local/lib/ocaml";
+
 /* wasm32: stubs compiled against the headers of an older ocaml-emcc runtime,
    built with ARCH_ALIGN_DOUBLE / ARCH_ALIGN_INT64, read floats and int64s
    through these functions, which the runtime no longer defines.  (A value is
