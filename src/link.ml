@@ -464,12 +464,38 @@ let run o =
   (* First link: find the stubs whose C signature differs from the call site. *)
   let code, err = Env.run_capture_stderr emcc (args ~output:o.output ()) in
   let adapted = parse_mismatches ~prims_o ~prims err in
-  let other_lines =
-    String.split_on_char '\n' err
-    |> List.filter (fun l -> l <> "" && Str_util.find l "signature mismatch" = None && not (Str_util.starts_with ~prefix:">>>" l))
+  (* emcc's messages, without the mismatches of primitives (adapted).  The
+     other mismatches are calls between C functions that wasm-ld replaced
+     with a trap: shown, with an explanation. *)
+  let report err =
+    let lines = Array.of_list (String.split_on_char '\n' err) in
+    let marker = "function signature mismatch: " in
+    let traps = ref [] in
+    let skip = ref false in
+    Array.iter
+      (fun l ->
+        if Str_util.starts_with ~prefix:">>>" l then (if not !skip then prerr_endline l)
+        else (
+          skip := false;
+          match Str_util.find l marker with
+          | Some j ->
+              let name = String.trim (String.sub l (j + String.length marker) (String.length l - j - String.length marker)) in
+              if List.mem name prims then skip := true
+              else (
+                traps := name :: !traps;
+                prerr_endline l)
+          | None -> if l <> "" then prerr_endline l))
+      lines;
+    if !traps <> [] then
+      Env.log
+        "warning: C function(s) called with a signature different from their definition: %s.\n\
+        \  wasm-ld replaced those calls with a trap: the program stops with \"RuntimeError: unreachable\"\n\
+        \  if it makes them.  Most likely a stub declares the function itself with other types\n\
+        \  (int for long, which differ on wasm64)."
+        (String.concat " " (List.sort_uniq compare !traps))
   in
   if adapted = [] then (
-    List.iter prerr_endline other_lines;
+    report err;
     if code <> 0 then Env.fail "emcc failed (exit %d)" code)
   else (
     Env.log "%d stub(s) with a C signature different from their OCaml arity, adapting: %s" (List.length adapted)
@@ -480,6 +506,6 @@ let run o =
     cc_prims ();
     Env.run_exn emcc (cflags @ [ o.opt; "-w"; "-c"; adapters_src; "-o"; adapters_o ]);
     let code, err = Env.run_capture_stderr emcc (args ~extra:[ adapters_o ] ~output:o.output ()) in
-    prerr_string err;
+    report err;
     if code <> 0 then Env.fail "emcc failed (exit %d)" code);
   if foreign <> None then keep_raw_exports o.output
