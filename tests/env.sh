@@ -1,8 +1,12 @@
 # Source me: environment used by the tests (emsdk + an opam switch + dev CLI).
-#   SWITCH=bench . tests/env.sh   to use another switch (default: emcc-4.14)
+#   SWITCH=bench . tests/env.sh   to use another switch (default: emcc-4.14),
+#   or the switch prefix: SWITCH=$(opam var prefix)
 OE_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 . "${EMSDK:-$HOME/tools/emsdk}/emsdk_env.sh" >/dev/null 2>&1
-export OPAM_SWITCH_PREFIX=$HOME/.opam/${SWITCH:-emcc-4.14}
+case ${SWITCH:-emcc-4.14} in
+  /*) export OPAM_SWITCH_PREFIX=$SWITCH ;;
+  *) export OPAM_SWITCH_PREFIX=$HOME/.opam/${SWITCH:-emcc-4.14} ;;
+esac
 export PATH=$OPAM_SWITCH_PREFIX/bin:$PATH
 export CAML_LD_LIBRARY_PATH=$OPAM_SWITCH_PREFIX/lib/stublibs:$OPAM_SWITCH_PREFIX/lib/ocaml/stublibs
 # host C libraries built locally (this machine has no -dev packages), for the native runs
@@ -15,3 +19,4 @@ for d in "$HOME"/tools/cmake-*/bin "$HOME/tools/ninja"; do [ -d "$d" ] && PATH=$
 ocaml-emcc() { "$OE_ROOT/_build/default/bin/main.exe" "$@"; }
 # memory64 needs node >= 24 (emsdk ships one)
 NODE=$(ls -d "${EMSDK:-$HOME/tools/emsdk}"/node/*/bin 2>/dev/null | tail -1)/node
+[ -x "$NODE" ] || NODE=$(command -v node)
