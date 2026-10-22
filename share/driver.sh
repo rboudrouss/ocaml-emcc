@@ -621,12 +621,22 @@ run_recipe() {
 run_dune_package() {
   local pkg=$1 stamp=$SYSROOT/stamps/dune-$1 work=$SYSROOT/build/dune-$1
   if [ -f "$stamp" ] && [ "$FORCE" = no ]; then return 0; fi
+  rm -rf "$work"
+  fetch_opam_source "$pkg" "$work"
+  ( cd "$work" && dune_stubs "$pkg" "dune-$pkg" )
+  echo "$SOURCE_VERSION emcc-$EMCC_VERSION" > "$stamp"
+}
+
+# dune_stubs <opam-package> [<provider>]: in the sources of a dune package
+# (the current directory), build its stub archives with `dune build -x` and
+# install them, with the link flags of the system libraries it uses.  Also
+# for recipes that patch a package before (`SOURCE=opam:PKG`, see
+# mirage-crypto).
+dune_stubs() {
+  local pkg=$1 provider=${2:-$RECIPE_NAME}
   [ -f "$SYSROOT/findlib.conf.d/$TARGET.conf" ] || run_recipe ocaml
   local sysflags
   sysflags=$(system_deps "$pkg")
-  rm -rf "$work"
-  fetch_opam_source "$pkg" "$work"
-  cd "$work"
   log "building the C stubs of $pkg with dune -x $TARGET"
   local a l found=no archives
   if PATH=$SYSROOT/bin/path:$PATH OCAMLFIND_CONF=$SYSROOT/findlib.conf \
@@ -639,12 +649,11 @@ run_dune_package() {
   while IFS= read -r a; do
     [ -n "$a" ] || continue
     l=$(basename "$a" .a | sed 's/^lib//')
-    install_lib "$a"; provides "dune-$pkg" "$l"; found=yes
+    install_lib "$a"; provides "$provider" "$l"; found=yes
     [ -z "${sysflags// }" ] || link_flags "$l" "${sysflags# }"
     log "  $(basename "$a")"
   done <<< "$archives"
   [ $found = yes ] || log "  (no C archive produced)"
-  echo "$SOURCE_VERSION emcc-$EMCC_VERSION" > "$stamp"
 }
 
 # Fallback of run_dune_package, for what dune cannot cross-compile: the
