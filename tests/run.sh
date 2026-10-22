@@ -22,6 +22,7 @@ gitrecipe | bin/main |            |                             | wasm32 wasm64 
 nodune    | prog     |            | zarith                      | wasm32 wasm64 |
 syslibs   | bin/main |            | mlmpfr zlib                 | wasm32 wasm64 |
 apron     | ap       |            | apron                       | wasm32 wasm64 | could not set fpu|cannot change the FPU
+sqlite    | sq       |            | sqlite3                     | wasm32 wasm64 |
 '
 # hello is wasm64 only on purpose: 63-bit literals and arithmetic.
 
