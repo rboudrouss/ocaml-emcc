@@ -301,25 +301,41 @@ record_use_flags() {
   done
 }
 
-# opam packages of <pkg> that stand for system libraries (installed conf-X
-# among its dependencies) and for which a recipe X exists.
+# The system libraries <pkg> uses for which a recipe exists: its installed
+# conf-X dependencies (recipe X), and the -lX its OCaml libraries ask for
+# (glpk, which has no conf-glpk; see lib_recipe).
 system_recipes_of() {
-  local pkg=$1 ver f c
+  local pkg=$1 ver f c l
   ver=$(opam_pkg_version "$pkg") || return 0
   f=$PREFIX/.opam-switch/packages/$pkg.$ver/opam
   [ -f "$f" ] || return 0
-  for c in $(grep -oE '"conf-[a-z0-9_-]+"' "$f" | tr -d '"' | sort -u); do
-    opam_pkg_version "$c" >/dev/null || continue
-    find_recipe "${c#conf-}" >/dev/null && echo "${c#conf-}"
-  done
+  {
+    for c in $(grep -oE '"conf-[a-z0-9_-]+"' "$f" | tr -d '"' | sort -u); do
+      opam_pkg_version "$c" >/dev/null || continue
+      find_recipe "${c#conf-}" >/dev/null && echo "${c#conf-}"
+    done
+    for l in $(cma_libs "$pkg"); do lib_recipe "$l" || true; done
+  } | awk '!seen[$0]++'
   return 0
+}
+
+# cma_libs <pkg>: the X of the -lX recorded in the .cma files <pkg> installed
+# (ocamlmklib -l, -cclib), its own stubs included.
+cma_libs() {
+  local f
+  f=$PREFIX/.opam-switch/install/$1.changes
+  [ -f "$f" ] || return 0
+  grep -oE '"lib/[^"]*\.cma"' "$f" | tr -d '"' | while read -r f; do
+    "$HOST_BIN/ocamlobjinfo" "$PREFIX/$f" 2>/dev/null | sed -n -e '/^Unit name/q' \
+      -e 's/^Extra C object files: *//p' -e 's/^Extra C options: *//p'
+  done | tr ' ' '\n' | sed -n 's/^-l//p' | sort -u
 }
 
 # Build the system recipes <pkg> needs; prints the link flags they require.
 system_deps() {
   local r flags=
   for r in $(system_recipes_of "$1"); do
-    log "$1 uses the system library $r (conf-$r): building the $r recipe"
+    log "$1 uses the system library $r: building the $r recipe"
     run_recipe "$r" >&2 || die "$1: the $r recipe failed"
     flags="$flags $(cat "$SYSROOT/meta/$r.uselink" 2>/dev/null)"
   done
