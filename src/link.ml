@@ -230,8 +230,11 @@ let resolve_libs ~extra_dirs ~auto_deps ~bc_path bc =
    by the toolchain's ocamlc in meta/cclibs/<md5 of PROG.bc>: each -lX
    becomes the wasm libX.a if there is one.  Host flags (-L, -Wl,-rpath...)
    are dropped, so are the libraries emcc provides (libc, libm...), and
-   -lstdc++ links as C++. *)
-let cclib_flags ~dirs bc_path =
+   -lstdc++ links as C++.  A library built with `ocamlmklib -custom`
+   (stb_image) forces a custom link: its stubs are only named here, not in
+   the DLLS section, and are obtained like those (when the opam package
+   installed a dllX.so as well). *)
+let cclib_flags ~auto_deps ~dirs bc_path =
   let file = Env.sysroot_file (Filename.concat "meta/cclibs" (Digest.to_hex (Digest.file bc_path))) in
   if not (Sys.file_exists file) then []
   else
@@ -249,11 +252,32 @@ let cclib_flags ~dirs bc_path =
                | "m" | "c" | "dl" | "rt" | "pthread" -> []
                | _ -> (
                    (* with the flags the library itself needs (libffi: -sALLOW_TABLE_GROWTH) *)
-                   match Deps.find_lib dirs n with
-                   | Some a -> a :: Deps.link_flags n
-                   | None ->
-                       Env.log "note: %s asks for -l%s, no wasm lib%s.a found: ignored" (Filename.basename bc_path) n n;
-                       [])))
+                   let found () = Option.map (fun a -> a :: Deps.link_flags n) (Deps.find_lib dirs n) in
+                   match found () with
+                   | Some l -> l
+                   | None -> (
+                       let built =
+                         if not auto_deps then None
+                         else
+                           match Deps.owner_of_dll n with
+                           | Some pkg ->
+                               Env.log "lib%s.a missing (-l%s), building it from opam package %s" n n pkg;
+                               Deps.obtain pkg n;
+                               found ()
+                           | None -> (
+                               (* a C library (argon2, bound with ctypes-foreign) *)
+                               match Deps.lib_recipe n with
+                               | Some r ->
+                                   Env.log "lib%s.a missing (-l%s), building the %s recipe" n n r;
+                                   Deps.install_recipe r;
+                                   found ()
+                               | None -> None)
+                       in
+                       match built with
+                       | Some l -> l
+                       | None ->
+                           Env.log "note: %s asks for -l%s, no wasm lib%s.a found: ignored" (Filename.basename bc_path) n n;
+                           []))))
 
 (* wasm32 runs 64-bit bytecode with 31-bit ints: report the literals that do
    not fit (the runtime wraps them when it loads the DATA section, see the
@@ -348,25 +372,28 @@ let run o =
         else None)
       (o.libs @ List.filter (Str_util.starts_with ~prefix:"-l") o.emcc_flags)
   in
+  let flags_of_libs = Compat.concat_map (fun (n, _) -> Deps.link_flags n) libs in
+  let lib_dirs = Deps.search_dirs ~extra_dirs:o.lib_dirs ~bc_path:o.bc bc in
+  let flags_of_libs = flags_of_libs @ cclib_flags ~auto_deps:o.auto_deps ~dirs:lib_dirs o.bc in
+  (* the archives of those flags: paths (c_library_flags) and -lX *)
+  let flag_archives =
+    List.filter_map
+      (fun f ->
+        if Str_util.starts_with ~prefix:"-l" f then Deps.find_lib lib_dirs (String.sub f 2 (String.length f - 2))
+        else if Filename.check_suffix f ".a" && Sys.file_exists f then Some f
+        else None)
+      flags_of_libs
+  in
   if o.check then (
-    let user_archives = user_archives () in
-    let syms = defined_symbols (archives @ user_archives) in
+    let syms = defined_symbols (archives @ user_archives () @ flag_archives) in
     let missing = List.filter (fun p -> not (Hashtbl.mem syms p)) prims in
     if missing <> [] then
       Env.log "warning: %d primitive(s) not defined by any linked library:\n  %s\n\
                (add the library providing them with -l/-L, or link will fail)"
         (List.length missing) (String.concat " " missing));
-  let flags_of_libs = Compat.concat_map (fun (n, _) -> Deps.link_flags n) libs in
-  let lib_dirs = Deps.search_dirs ~extra_dirs:o.lib_dirs ~bc_path:o.bc bc in
-  let flags_of_libs = flags_of_libs @ cclib_flags ~dirs:lib_dirs o.bc in
   let foreign =
     if not (List.mem "ctypes_dlsym" prims) then None
     else
-      let flag_archives =
-        List.filter_map
-          (fun f -> if Str_util.starts_with ~prefix:"-l" f then Deps.find_lib lib_dirs (String.sub f 2 (String.length f - 2)) else None)
-          flags_of_libs
-      in
       let names = foreign_exports ~archives:(archives @ user_archives () @ flag_archives) bc in
       Env.log "dlsym (ctypes-foreign): exporting %d C symbol(s) named in the program" (List.length names);
       Some names

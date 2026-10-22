@@ -771,6 +771,21 @@ run_obtain() {
   fi
 }
 
+# lib_recipe <X>: the system recipe that builds libX.a (for a -lX of the
+# program): named X or libX, or whose LINK starts with -lX (zlib: -lz).
+lib_recipe() {
+  local IFS=: d r link
+  for d in $RECIPES_PATH; do
+    for r in "$d"/*/recipe.sh; do
+      [ -f "$r" ] && grep -q '^SOURCE=system:' "$r" || continue
+      case $(basename "$(dirname "$r")") in "$1"|"lib$1") basename "$(dirname "$r")"; return 0 ;; esac
+      link=$(sed -n "s/^LINK=[\"']\{0,1\}\([^ \"']*\).*/\1/p" "$r")
+      [ "$link" = "-l$1" ] && { basename "$(dirname "$r")"; return 0; }
+    done
+  done
+  return 1
+}
+
 cmd=${1:-}; shift || true
 if [ "${1:-}" = --force ]; then FORCE=yes; shift; fi
 case "$cmd" in
@@ -779,5 +794,6 @@ case "$cmd" in
   auto)         run_auto "$1" "$2" ;;
   obtain)       run_obtain "$1" "$2" ;;
   toolchain)    write_toolchain ;;
-  *) die "usage: driver.sh install|install-dune|auto|obtain|toolchain ..." ;;
+  lib-recipe)   lib_recipe "$1" ;;
+  *) die "usage: driver.sh install|install-dune|auto|obtain|toolchain|lib-recipe ..." ;;
 esac

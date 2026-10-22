@@ -140,6 +140,18 @@ let driver_env () =
 let driver args =
   run ~env:(driver_env ()) "bash" (Filename.concat (share ()) "driver.sh" :: args)
 
+(* stdout of a driver command, if it succeeds (stderr shown) *)
+let driver_output args =
+  let tmp = Filename.temp_file "ocaml-emcc" ".out" in
+  let fd = Unix.openfile tmp [ Unix.O_WRONLY; Unix.O_TRUNC ] 0o600 in
+  let argv = Array.of_list ("bash" :: Filename.concat (share ()) "driver.sh" :: args) in
+  let pid = Unix.create_process_env "bash" argv (merged_env (Some (driver_env ()))) Unix.stdin fd Unix.stderr in
+  Unix.close fd;
+  let code = match snd (Unix.waitpid [] pid) with Unix.WEXITED c -> c | _ -> 255 in
+  let out = String.trim (Compat.read_file tmp) in
+  Sys.remove tmp;
+  if code = 0 then Some out else None
+
 let sysroot_file rel = Filename.concat (sysroot ()) rel
 
 let toolchain_ready () = Sys.file_exists (sysroot_file "manifest")

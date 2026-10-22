@@ -101,6 +101,14 @@ let obtain pkg name =
   in
   if code <> 0 then Env.fail "could not build lib%s.a (package %s)" name pkg
 
+(* The recipe of the C library lib<name>.a (-lgmp, -lz...), if any. *)
+let lib_recipe name =
+  match Env.driver_output [ "lib-recipe"; name ] with
+  | Some r when r <> "" -> Some r
+  | _ -> None
+
+let install_recipe r = if Env.driver [ "install"; r ] <> 0 then Env.fail "the %s recipe failed" r
+
 (* Extra link flags recorded by recipes (e.g. zarith -> -lgmp). *)
 let link_flags name =
   let f = Env.sysroot_file (Printf.sprintf "meta/%s.link" name) in
