@@ -1,0 +1,3 @@
+(executable
+ (name mc)
+ (libraries mirage-crypto mirage-crypto-rng mirage-crypto-rng.unix mirage-crypto-ec mirage-crypto-pk digestif.c))
