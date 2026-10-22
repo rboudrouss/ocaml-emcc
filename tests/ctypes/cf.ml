@@ -6,6 +6,8 @@ open Foreign
 let strlen = foreign "strlen" (string @-> returning size_t)
 let labs = foreign "labs" (long @-> returning long)
 let pow = foreign "pow" (double @-> double @-> returning double)
+(* an int returned after an int argument: a return buffer aligned on 4 *)
+let abs = foreign "abs" (int @-> returning int)
 let strtol = foreign "strtol" (string @-> ptr (ptr char) @-> int @-> returning long)
 
 let qsort =
@@ -23,6 +25,7 @@ let () =
   Printf.printf "strlen = %d\n" (Unsigned.Size_t.to_int (strlen "hello, wasm"));
   Printf.printf "labs = %s\n" (Signed.Long.to_string (labs (Signed.Long.of_int (-42))));
   Printf.printf "pow = %g\n" (pow 2. 10.);
+  Printf.printf "abs = %d\n" (abs (-7));
   let endp = allocate (ptr char) (from_voidp char null) in
   let n = strtol "1234xyz" endp 10 in
   Printf.printf "strtol = %s, rest = %s\n" (Signed.Long.to_string n)
