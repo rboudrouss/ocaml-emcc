@@ -1,0 +1,1 @@
+(executable (name lm) (libraries lmdb))
