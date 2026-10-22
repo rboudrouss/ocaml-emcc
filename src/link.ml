@@ -203,6 +203,34 @@ let resolve_libs ~extra_dirs ~auto_deps ~bc_path bc =
          in
          go true)
 
+(* The -l flags of the linked libraries (dune's c_library_flags), recorded
+   by the toolchain's ocamlc in meta/cclibs/<md5 of PROG.bc>: each -lX
+   becomes the wasm libX.a if there is one.  Host flags (-L, -Wl,-rpath...)
+   are dropped, so are the libraries emcc provides (libc, libm...), and
+   -lstdc++ links as C++. *)
+let cclib_flags ~dirs bc_path =
+  let file = Env.sysroot_file (Filename.concat "meta/cclibs" (Digest.to_hex (Digest.file bc_path))) in
+  if not (Sys.file_exists file) then []
+  else
+    let seen = Hashtbl.create 16 in
+    Str_util.words (String.map (fun c -> if c = '\n' || c = '\t' then ' ' else c) (Compat.read_file file))
+    |> List.filter_map (fun f ->
+           if Hashtbl.mem seen f then None
+           else (
+             Hashtbl.add seen f ();
+             if not (Str_util.starts_with ~prefix:"-l" f) then None
+             else
+               let n = String.sub f 2 (String.length f - 2) in
+               match n with
+               | "stdc++" | "c++" -> Some "-sDEFAULT_TO_CXX=1"
+               | "m" | "c" | "dl" | "rt" | "pthread" -> None
+               | _ -> (
+                   match Deps.find_lib dirs n with
+                   | Some a -> Some a
+                   | None ->
+                       Env.log "note: %s asks for -l%s, no wasm lib%s.a found: ignored" (Filename.basename bc_path) n n;
+                       None)))
+
 (* wasm32 runs 64-bit bytecode with 31-bit ints: report the literals that
    cannot be loaded.  Arithmetic overflowing 31 bits cannot be detected. *)
 let literals_report bc =
