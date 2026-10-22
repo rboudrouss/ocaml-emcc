@@ -460,7 +460,7 @@ include_recipe() {
 # Bumped whenever write_toolchain changes: the CLI then regenerates it in
 # existing sysroots (cheap: the runtime is not rebuilt).  Keep in sync with
 # Env.toolchain_version.
-TOOLCHAIN_VERSION=3
+TOOLCHAIN_VERSION=4
 
 write_toolchain() {
   local tool host_conf cc=$SYSROOT/bin/emcc-$TARGET
@@ -496,7 +496,10 @@ EOF
   [ -n "$findlib_path" ] || findlib_path="$PREFIX/lib"
   mkdir -p "$SYSROOT/findlib.conf.d"
   if [ -f "$host_conf" ]; then
-    cp -f "$host_conf" "$SYSROOT/findlib.conf"
+    # destdir and path may be relative to the file (destdir=".", path="./ocaml:."
+    # since ocamlfind 1.9.9): the copy gets absolute ones
+    sed -e "s|^destdir *=.*|destdir=\"$("$HOST_BIN/ocamlfind" printconf destdir 2>/dev/null || echo "$PREFIX/lib")\"|" \
+        -e "s|^path *=.*|path=\"$findlib_path\"|" "$host_conf" > "$SYSROOT/findlib.conf"
   else # switch without ocamlfind
     printf 'destdir="%s"\npath="%s"\n' "$PREFIX/lib" "$findlib_path" > "$SYSROOT/findlib.conf"
   fi
