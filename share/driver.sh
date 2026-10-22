@@ -281,9 +281,12 @@ fetch_system() {
   SOURCE_VERSION=$v
 }
 
-# Flags for users of system recipe <name> (meta/<name>.uselink).
+# Flags for users of system recipe <name> (meta/<name>.uselink), and the C
+# flags their stubs need besides the sysroot's include directory
+# (USE_CFLAGS, meta/<name>.usecflags; sdl2's -I.../include/SDL2).
 record_use_flags() {
   local name=$1 d flags=${LINK:--l$1}
+  echo "${USE_CFLAGS:-}" > "$SYSROOT/meta/$name.usecflags"
   for d in $DEPENDS; do
     if [ -f "$SYSROOT/meta/$d.uselink" ]; then flags="$flags $(cat "$SYSROOT/meta/$d.uselink")"
     else flags="$flags -l$d"; fi
@@ -329,6 +332,12 @@ cma_libs() {
     "$HOST_BIN/ocamlobjinfo" "$PREFIX/$f" 2>/dev/null | sed -n -e '/^Unit name/q' \
       -e 's/^Extra C object files: *//p' -e 's/^Extra C options: *//p'
   done | tr ' ' '\n' | sed -n 's/^-l//p' | sort -u
+}
+
+# The C flags of the system recipes <pkg> uses (once built).
+system_cflags() {
+  local r
+  for r in $(system_recipes_of "$1"); do cat "$SYSROOT/meta/$r.usecflags" 2>/dev/null || true; done | paste -sd' ' -
 }
 
 # Build the system recipes <pkg> needs; prints the link flags they require.
@@ -632,7 +641,7 @@ run_recipe() {
   dir=$(find_recipe "$name") || die "no recipe named '$name'"
   (
     SOURCE=none DEPENDS= SHA256= REF=
-    HEADER= VERSION_MACROS= PKGCONFIG= RELEASES= TARBALL= COMPAT= OPAM_SOURCES= LINK=
+    HEADER= VERSION_MACROS= PKGCONFIG= RELEASES= TARBALL= COMPAT= OPAM_SOURCES= LINK= USE_CFLAGS=
     RECIPE_DIR=$dir RECIPE_NAME=$name BASE_RECIPE_DIR=$dir
     unset -f pre_build fetch releases
     # shellcheck disable=SC1091
@@ -663,7 +672,8 @@ run_recipe() {
     # pre_build: a hook for project recipes refining a builtin one
     if declare -F pre_build >/dev/null; then pre_build; fi
     build
-    case "$SOURCE" in system:*) record_use_flags "$name" ;; esac
+    # a C library: system:, or another source with LINK (sdl2)
+    case "$SOURCE" in system:*) record_use_flags "$name" ;; *) [ -z "$LINK" ] || record_use_flags "$name" ;; esac
     echo "${SOURCE_VERSION:-} emcc-$EMCC_VERSION recipe=$sum" > "$stamp"
     log "installed $name"
   )
@@ -732,12 +742,12 @@ dune_stubs() {
 # Fallback of run_dune_package, for what dune cannot cross-compile: the
 # (ctypes) stanza builds its generators as native executables of the target
 # context.  Each stub archive of the native build ($DUNE_BDIR/default, see
-# dune_stubs; kept by OPAMKEEPBUILDDIR, else built here) is rebuilt with emcc
-# from the C files
-# behind its members: hand-written stubs, vendored C, and the C that ctypes
-# generated (architecture independent).  The stanza's own C flags are not
-# known: only -I flags are given (the file's directory and its source
-# directory, the headers of the opam packages it depends on).  Also for
+# dune_stubs; kept by OPAMKEEPBUILDDIR, else built here) is rebuilt with
+# emcc from the C files behind its members: hand-written stubs, vendored C,
+# and the C that ctypes generated (architecture independent).  The stanza's
+# own C flags are not known: only -I flags are given (the file's directory
+# and its source directory, the headers of the opam packages it depends on,
+# those of the system recipes).  Also for
 # archives of `dune -x` holding host objects (see dune_stubs).
 #   dune_native_stubs <pkg> [<libX.a>...]   (default: every archive)
 # Prints the wasm archives.
@@ -752,6 +762,7 @@ dune_native_stubs() {
   for dep in $(grep -oE '"[a-z0-9_-]+"' "$PREFIX/.opam-switch/packages/$pkg.$ver/opam" 2>/dev/null | tr -d '"' | sort -u); do
     [ "$dep" != ocaml ] && compgen -G "$PREFIX/lib/$dep/*.h" >/dev/null && incs="$incs -I$PREFIX/lib/$dep"
   done
+  incs="$incs $(system_cflags "$pkg")"
   mkdir -p _wasm_stubs
   while IFS= read -r a; do
     [ "$only" = "  " ] || [[ "$only" == *" $(basename "$a") "* ]] || continue
@@ -784,8 +795,9 @@ wasm_archive() {
 run_auto() {
   local pkg=$1 lib=$2 stamp=$SYSROOT/stamps/auto-$1-$2 work=$SYSROOT/build/auto-$1
   if [ -f "$stamp" ] && [ "$FORCE" = no ]; then return 0; fi
-  local sysflags
+  local sysflags syscflags
   sysflags=$(system_deps "$pkg")
+  syscflags=$(system_cflags "$pkg")
   rm -rf "$work"
   fetch_opam_source "$pkg" "$work"
   cd "$work"
@@ -802,7 +814,8 @@ run_auto() {
   [ -n "$files" ] || die "$pkg: no OCaml stub found"
   for f in $files; do
     log "  emcc $f"
-    stub_cc "$f" -I"$(dirname "$f")" -I"$(dirname "${native:-.}")" || die "$pkg: cannot compile $f"
+    # shellcheck disable=SC2086
+    stub_cc "$f" -I"$(dirname "$f")" -I"$(dirname "${native:-.}")" $syscflags || die "$pkg: cannot compile $f"
     objs+=("${f%.c}.o")
   done
   mklib "$lib" "${objs[@]}"
@@ -843,14 +856,15 @@ run_obtain() {
   fi
 }
 
-# lib_recipe <X>: the system recipe that builds libX.a (for a -lX of the
-# program): named X or libX, or whose LINK starts with -lX (zlib: -lz).
+# lib_recipe <X>: the recipe of a C library (system:, or with a LINK) that
+# builds libX.a (for a -lX of the program): named X or libX (whatever the
+# case: sdl2 for -lSDL2), or whose LINK starts with -lX (zlib: -lz).
 lib_recipe() {
-  local IFS=: d r link
+  local IFS=: d r link lower=${1,,}
   for d in $RECIPES_PATH; do
     for r in "$d"/*/recipe.sh; do
-      [ -f "$r" ] && grep -q '^SOURCE=system:' "$r" || continue
-      case $(basename "$(dirname "$r")") in "$1"|"lib$1") basename "$(dirname "$r")"; return 0 ;; esac
+      [ -f "$r" ] && grep -qE '^(SOURCE=system:|LINK=)' "$r" || continue
+      case $(basename "$(dirname "$r")") in "$lower"|"lib$lower") basename "$(dirname "$r")"; return 0 ;; esac
       link=$(sed -n "s/^LINK=[\"']\{0,1\}\([^ \"']*\).*/\1/p" "$r")
       [ "$link" = "-l$1" ] && { basename "$(dirname "$r")"; return 0; }
     done
