@@ -39,6 +39,7 @@ lua       | lu       |            | ocaml-lua                   | wasm32 wasm64 
 stb       | sb       |            | stb_image                   | wasm32 wasm64 |
 extunix   | eu       |            | extunix                     | wasm32 wasm64 |
 lz4       | lz       |            | lz4                         | wasm32 wasm64 |
+snappy    | sn       |            | snappy                      | wasm32 wasm64 |
 '
 # hello is wasm64 only on purpose: 63-bit literals and arithmetic.  yaml too:
 # its ctypes structs were laid out for the host (LP64) when the bytecode was
