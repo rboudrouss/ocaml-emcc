@@ -561,17 +561,57 @@ run_dune_package() {
   fetch_opam_source "$pkg" "$work"
   cd "$work"
   log "building the C stubs of $pkg with dune -x $TARGET"
-  PATH=$SYSROOT/bin/path:$PATH OCAMLFIND_CONF=$SYSROOT/findlib.conf \
-    "$HOST_BIN/dune" build -x "$TARGET" -p "$pkg" @install >&2
-  local a l found=no
+  local a l found=no archives
+  if PATH=$SYSROOT/bin/path:$PATH OCAMLFIND_CONF=$SYSROOT/findlib.conf \
+       "$HOST_BIN/dune" build -x "$TARGET" -p "$pkg" @install >&2; then
+    archives=$(find "_build/default.$TARGET" -name 'lib*.a' ! -path '*/.*')
+  else
+    log "dune -x $TARGET failed: compiling the C files of the native build instead"
+    archives=$(dune_native_stubs "$pkg")
+  fi
   while IFS= read -r a; do
+    [ -n "$a" ] || continue
     l=$(basename "$a" .a | sed 's/^lib//')
     install_lib "$a"; provides "dune-$pkg" "$l"; found=yes
     [ -z "${sysflags// }" ] || link_flags "$l" "${sysflags# }"
     log "  $(basename "$a")"
-  done < <(find "_build/default.$TARGET" -name 'lib*.a' ! -path '*/.*')
+  done <<< "$archives"
   [ $found = yes ] || log "  (no C archive produced)"
   echo "$SOURCE_VERSION emcc-$EMCC_VERSION" > "$stamp"
+}
+
+# Fallback of run_dune_package, for what dune cannot cross-compile: the
+# (ctypes) stanza builds its generators as native executables of the target
+# context.  Each stub archive of the native build (_build/default, kept by
+# OPAMKEEPBUILDDIR, else built here) is rebuilt with emcc from the C files
+# behind its members: hand-written stubs, vendored C, and the C that ctypes
+# generated (architecture independent).  The stanza's own C flags are not
+# known: only -I flags are given (the file's directory and its source
+# directory, the headers of the opam packages it depends on).  Prints the
+# wasm archives.
+dune_native_stubs() {
+  local pkg=$1 nat=_build/default ver a dir m c incs= dep objs
+  if [ ! -d "$nat" ]; then
+    log "no native build kept for $pkg: building it"
+    "$HOST_BIN/dune" build -p "$pkg" @install >&2 || die "$pkg: native build failed"
+  fi
+  ver=$(opam_pkg_version "$pkg")
+  for dep in $(grep -oE '"[a-z0-9_-]+"' "$PREFIX/.opam-switch/packages/$pkg.$ver/opam" 2>/dev/null | tr -d '"' | sort -u); do
+    [ "$dep" != ocaml ] && compgen -G "$PREFIX/lib/$dep/*.h" >/dev/null && incs="$incs -I$PREFIX/lib/$dep"
+  done
+  mkdir -p _wasm_stubs
+  while IFS= read -r a; do
+    dir=$(dirname "$a"); objs=()
+    for m in $(ar t "$a"); do
+      c=$dir/${m%.o}.c
+      [ -f "$c" ] || die "$pkg: no C source for $m (in $a)"
+      # shellcheck disable=SC2086
+      stub_cc "$c" -I"$dir" -I"${dir#"$nat"/}" $incs >&2 || die "$pkg: cannot compile $c"
+      objs+=("$PWD/${c%.c}.o")
+    done
+    ( cd _wasm_stubs && mklib "$(basename "$a" .a | sed 's/^lib//')" "${objs[@]}" )
+    echo "_wasm_stubs/$(basename "$a")"
+  done < <(find "$nat" -name 'lib*.a' ! -path '*/.*')
 }
 
 # Last resort for packages with neither a recipe nor dune: compile every C
