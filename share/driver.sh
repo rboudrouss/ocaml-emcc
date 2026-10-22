@@ -278,7 +278,7 @@ system_deps() {
   local r flags=
   for r in $(system_recipes_of "$1"); do
     log "$1 uses the system library $r (conf-$r): building the $r recipe"
-    run_recipe "$r" >&2
+    run_recipe "$r" >&2 || die "$1: the $r recipe failed"
     flags="$flags $(cat "$SYSROOT/meta/$r.uselink" 2>/dev/null)"
   done
   echo "$flags"
