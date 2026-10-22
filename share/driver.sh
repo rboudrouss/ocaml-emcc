@@ -668,7 +668,7 @@ run_dune_package() {
   if [ -f "$stamp" ] && [ "$FORCE" = no ]; then return 0; fi
   rm -rf "$work"
   fetch_opam_source "$pkg" "$work"
-  ( cd "$work" && dune_stubs "$pkg" "dune-$pkg" )
+  ( cd "$work" && dune_stubs "$pkg" "dune-$pkg" ) || die "$pkg: no C archive built"
   echo "$SOURCE_VERSION emcc-$EMCC_VERSION" > "$stamp"
 }
 
@@ -715,7 +715,7 @@ dune_stubs() {
     [ -z "${sysflags// }" ] || link_flags "$l" "${sysflags# }"
     log "  $(basename "$a")"
   done <<< "$archives"
-  [ $found = yes ] || log "  (no C archive produced)"
+  [ $found = yes ] || { log "  (no C archive produced)"; return 1; }
 }
 
 # Fallback of run_dune_package, for what dune cannot cross-compile: the
