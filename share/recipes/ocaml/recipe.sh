@@ -9,7 +9,7 @@
 #          host C compiler (emconfigure would turn it into a .wasm that make
 #          then fails to execute)
 #   5.x    no POSIX signals (no sigaltstack in emscripten), no -pthread
-#   5.4    patches/5.4 (commit memory with mprotect, no mmap(MAP_FIXED))
+#   >=5.4  patches/5.4+ (commit memory with mprotect, no mmap(MAP_FIXED))
 
 SOURCE=ocaml
 
@@ -22,6 +22,7 @@ build() {
   fi
 
   if [ "$OCAML_MAJOR" -lt 5 ]; then apply_patches "$RECIPE_DIR/patches/4.x"; fi
+  if ocaml_version_ge 5 4; then apply_patches "$RECIPE_DIR/patches/5.4+"; fi
   apply_patches "$RECIPE_DIR/patches/$OCAML_MAJOR.$OCAML_MINOR"
 
   # OCaml 5 sets up an alternate signal stack per domain when POSIX signals
