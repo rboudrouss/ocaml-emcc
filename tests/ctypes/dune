@@ -1,0 +1,3 @@
+(executable
+ (name cf)
+ (libraries ctypes ctypes-foreign))

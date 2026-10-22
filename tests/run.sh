@@ -28,6 +28,7 @@ pcre2     | re       |            | pcre2                       | wasm32 wasm64 
 zstd      | zs       |            | zstd                        | wasm32 wasm64 |
 gsl       | gs       |            | gsl                         | wasm32 wasm64 |
 camlzip   | cz       |            | camlzip                     | wasm32 wasm64 |
+ctypes    | cf       |            | ctypes-foreign              | wasm32 wasm64 |
 '
 # hello is wasm64 only on purpose: 63-bit literals and arithmetic.
 
