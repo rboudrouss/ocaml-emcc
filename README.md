@@ -79,7 +79,7 @@ declares them. For a module you instantiate yourself, add
 `-- -sMODULARIZE=1 -sEXPORT_NAME=createMain`. `--preload` puts the bytecode in
 a separate `main.data` (web; under node it is resolved relative to the current
 directory). `--node-fs` makes a node-only build with access to the real file
-system.
+system and the environment variables of the node process (`Sys.getenv`).
 
 ### Targets: wasm32 (default) or wasm64
 
@@ -143,9 +143,36 @@ build() {                         # runs in a fresh copy of the sources
 }
 ```
 
-`tests/gitrecipe` is this exact example. For Mopsa this would be an
-`emcc-recipes/clang9` that clones llvm-project at `llvmorg-9.0.1`, builds
-tblgen for the host and the clang libraries with emcc, then installs them.
+`tests/gitrecipe` is this exact example.
+
+A project recipe can also **refine a builtin one**: `include_recipe NAME`
+reads the next recipe of that name down the recipe path, after the project
+has set its variables, and an optional `pre_build` function runs before its
+`build` (to patch the sources). Mopsa pins clang 9 and patches apron this way:
+
+```sh
+# emcc-recipes/clang/recipe.sh
+LLVM_VERSION=9.0.1
+include_recipe clang
+
+# emcc-recipes/apron/recipe.sh
+include_recipe apron
+pre_build() { sed -i '...' apron/ap_manager.c; }
+```
+
+A recipe is not rebuilt when it changes. ocaml-emcc
+says so, and `ocaml-emcc install --force NAME` rebuilds it.
+
+#### Libraries of your C stubs: `c_library_flags`
+
+The flags dune records in a library for its stubs (`(c_library_flags
+(-lfoo))`, `-cclib`) are only used by a custom link, which the bytecode build
+does not do. The toolchain's `ocamlc` records those of every linked `.cma`
+(in the sysroot, under the MD5 of the bytecode), and `link` adds each `-lX`
+for which a wasm `libX.a` exists (in the sysroot, `-L` dirs, the dune
+build). Host flags (`-L/usr/lib`,
+`-Wl,-rpath`) are dropped, so are the libraries emcc provides (`-lm`,
+`-lpthread`...), and `-lstdc++` links the program as C++ (libc++).
 
 #### System libraries (`conf-*` packages)
 
@@ -187,7 +214,35 @@ build() {
 ```
 
 Builtin system recipes: `gmp`, `mpfr`, `zlib`. Other recipes pin no version
-either: `zarith` uses the sources of the installed package.
+either:
+- `zarith`, `camlidl`, `mlgmpidl`, `apron` use the sources of the installed
+  package (for the camlidl bindings, the C files camlidl generated in its
+  build directory, else regenerated with the host camlidl). `apron` builds
+  the C libraries and the stubs of every domain (box, oct, polka, t1p, avo;
+  each numeric variant). wasm cannot set the FPU rounding mode, so the box
+  and octagon managers warn when allocated (the MPQ domains are exact);
+- `clang`: clang's C++ libraries for programs embedding the frontend, see
+  below.
+
+#### clang
+
+The `clang` recipe builds the libraries of clang's frontend
+(`libclang*.a`, the `libLLVM*.a` they need, `libclang-cpp.a` with all of
+them) with their headers and clang's resource headers
+(`lib/clang/<ver>/include`). It also writes into `$SYSROOT/bin`:
+- `llvm-config`, which describes this installation (`--cxxflags`,
+  `--ldflags`, `--libs`...): give it to a configure script or dune rule;
+- `clang`, which compiles nothing but answers `-print-resource-dir` with
+  where the program will find the resource headers at run time
+  (`CLANG_RESOURCE_DIR`, default `/usr/lib/clang/<ver>`: preload them there;
+  `$OCAML_EMCC_CLANG_RESOURCE_DIR` overrides it).
+
+The version is `LLVM_VERSION` when a project recipe sets it (`9.0.1`, or a
+major `9`), else the major version of the host's `llvm-config`, else the
+newest release. It takes a while: cmake builds tablegen for the host (kept
+in the sysroot's `shared/`, for both targets) and then the libraries with
+emcc. It needs cmake and a host C++ compiler, and ninja if available. LLVM
+9.0.1 on 4 cores: about 15 minutes.
 
 #### Recipe reference
 
@@ -199,13 +254,17 @@ either: `zarith` uses the sources of the installed package.
 - helpers: `stub_cc file.c [flags]` (emcc with the OCaml runtime headers),
   `mklib`, `install_lib`, `install_headers`, `link_flags LIB "-lfoo"`
   (flags needed whenever `libLIB.a` is linked), `apply_patches DIR`, `log`,
-  `die`; for `fetch`: `fetch_opam_version PKG VER DEST`,
+  `die`, `make_var DIR VAR` (value of a Makefile variable),
+  `include_recipe NAME`; for `fetch`: `fetch_opam_version PKG VER DEST`,
   `host_version PCNAME HEADER MACRO...` (version of a host C library);
+- `pre_build`: optional function run before `build`;
 - variables: `$EMCC`, `$CFLAGS`, `$LDFLAGS`, `$SYSROOT`, `$OCAML_INC`,
-  `$OCAML_VERSION`, `$TARGET`, `$RECIPE_DIR`, `$NPROC`.
+  `$OCAML_VERSION`, `$TARGET`, `$RECIPE_DIR`, `$NPROC`, `$SHARED`
+  (target-independent: host tools, big source archives).
 
 Project recipes take precedence over the builtin ones (`share/recipes/`:
-`ocaml`, `gmp`, `mpfr`, `zlib`, `zarith`). More directories: `--recipes DIR`,
+`ocaml`, `gmp`, `mpfr`, `zlib`, `zarith`, `camlidl`, `mlgmpidl`, `apron`,
+`clang`). More directories: `--recipes DIR`,
 `$OCAML_EMCC_RECIPES_PATH`. A recipe is built once per switch and target;
 `ocaml-emcc install --force NAME` rebuilds it.
 
@@ -351,11 +410,18 @@ the native executable (or `expected.txt`). All pass:
 | `gitrecipe` | project recipe cloning cJSON from GitHub | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `nodune`    | Makefile, ocamlfind, hand-compiled stub + `ocaml-emcc link` | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `syslibs`   | mlmpfr + zlib bindings: `conf-mpfr`/`conf-zlib` → system recipes, no project configuration | – | – | – | ✅ | – |
+| `apron`     | apron (box, octagons, polyhedra) + mlgmpidl + camlidl recipes | – | – | – | ✅ | – |
 
 Each test passes for both wasm32 and wasm64 (`hello`: wasm64 only). "–"
 means the packages were not installed in that switch, or the test does not
 apply (mlmpfr 4.2.1 does not build natively with OCaml 5.4, an upstream
 issue). The zarith test also ran unmodified in Chrome 154, for both targets.
+
+Beyond the tests: Mopsa (the whole analyzer, its C parser linked with clang
+9's libraries) builds with the `clang` and `apron` recipes and runs under
+node with the same results as the native build on its C, Python and
+universal unit tests (wasm32, OCaml 4.14.2; see the `ocaml-emcc` branch of
+mopsa-analyzer-32-bit, `emcc/README.md`).
 Tested with emsdk 6.0.11.
 
 ## Limitations / next steps
@@ -365,11 +431,11 @@ Tested with emsdk 6.0.11.
   (COOP/COEP headers on the web).
 - OCaml 5.0–5.3 are untested and probably need a `patches/5.x` of their own:
   the memory code moved around.
-- More recipes. For Mopsa: apron (its C libraries ship inside the opam
-  package, so it needs a package recipe rather than a system one),
-  mlgmpidl/camlidl bindings, clang. Other system libraries worth a recipe:
-  ppl (C++, used by apron), flint, sqlite3, pcre2, libffi (ctypes-foreign;
-  hard on wasm). `system:` expects `RELEASES` to be a plain directory
+- More recipes. Other system libraries worth a recipe: ppl (C++, apron's
+  `ppl` and `polkaGrid` domains), flint, sqlite3, pcre2, libffi
+  (ctypes-foreign; hard on wasm). The `clang` recipe is only tested with
+  LLVM 9.0.1; newer versions follow the same steps but may need other cmake
+  options. `system:` expects `RELEASES` to be a plain directory
   listing; sqlite (its tarball names encode the version as `3460100`) and
   GitHub releases would need a smarter lister.
 - Distribution: prebuilt runtimes and C libraries could be published (npm,
@@ -382,7 +448,8 @@ Tested with emsdk 6.0.11.
 bin/main.ml           CLI
 src/                  bytecode reading, linking, dependency resolution, project config
 share/driver.sh       recipe driver
-share/recipes/        ocaml (runtime + patches), gmp, zarith
+share/recipes/        ocaml (runtime + patches), gmp, mpfr, zlib, zarith, camlidl,
+                      mlgmpidl, apron, clang
 share/tools/          ocamlc / ocamlmklib wrappers for dune -x
 share/runtime/        main.c, compat.c
 tests/run.sh          test suite (SWITCH=<opam switch> tests/run.sh --target wasm64)
