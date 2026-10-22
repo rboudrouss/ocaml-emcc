@@ -119,6 +119,11 @@ build() {
   for h in otherlibs/unix/unixsupport.h otherlibs/unix/socketaddr.h; do
     [ -f "$h" ] && cp "$h" "$OCAML_INC/caml/"
   done
+  # and the other headers the host installs (threads.h, which ctypes stubs
+  # include...): not generated, so the host's are the same
+  for h in "$("$HOST_BIN/ocamlc" -where)"/caml/*.h; do
+    [ -f "$OCAML_INC/caml/${h##*/}" ] || cp "$h" "$OCAML_INC/caml/"
+  done
 
   write_toolchain
 }
