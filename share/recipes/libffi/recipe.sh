@@ -21,6 +21,15 @@ build() {
   # (sizeof(long double) = 0, hence long double = double and wrong doubles).
   # libffi is C, it needs none.
   sed -i 's/CFLAGS="$CFLAGS -fexceptions"/:/' configure
+  # wasm64: an integral return narrower than 64 bits is widened to ffi_arg
+  # with HEAPU64[rvalue >> 3], which rounds the address down to 8 bytes.
+  # ctypes gives a return buffer aligned for the return type (an int after
+  # an int argument: offset 4), and then reads 0 (abs (-7) = 0).  Written
+  # as two 32-bit halves instead.
+  perl -0pi -e 's/#define STORE_ARG_WIDENED_UNSIGNED\(rvalue, x\) \\\n  \(DEREF_U64\(rvalue, 0\) = BigInt\(x\) & BigInt\(4294967295\)\)\n#define STORE_ARG_WIDENED_SIGNED\(rvalue, x\) \(DEREF_U64\(rvalue, 0\) = BigInt\(x\)\)/#define STORE_ARG_WIDENED_UNSIGNED(rvalue, x) \\\n  (DEREF_U32(rvalue, 0) = (x), DEREF_U32(rvalue, 1) = 0)\n#define STORE_ARG_WIDENED_SIGNED(rvalue, x) \\\n  (DEREF_U32(rvalue, 0) = (x), DEREF_U32(rvalue, 1) = ((x) < 0 ? -1 : 0))/' src/wasm/ffi.c
+  if [ "$TARGET" = wasm64 ] && grep -q 'DEREF_U64(rvalue, 0) = BigInt(x))' src/wasm/ffi.c; then
+    die "src/wasm/ffi.c: cannot fix the widened returns"
+  fi
   log "configure (emconfigure)"
   emconfigure ./configure --host="$TARGET-unknown-linux" --prefix="$SYSROOT" \
     --enable-static --disable-shared --disable-dependency-tracking --disable-builddir \
