@@ -26,6 +26,7 @@ sqlite    | sq       |            | sqlite3                     | wasm32 wasm64 
 bz2       | bz       |            | bz2                         | wasm32 wasm64 |
 pcre2     | re       |            | pcre2                       | wasm32 wasm64 |
 zstd      | zs       |            | zstd                        | wasm32 wasm64 |
+gsl       | gs       |            | gsl                         | wasm32 wasm64 |
 '
 # hello is wasm64 only on purpose: 63-bit literals and arithmetic.
 
