@@ -157,6 +157,7 @@ host_version() {
     echo "$v"; return
   fi
   v=
+  [ -n "$header" ] || return 1
   defs=$(printf '#include <%s>\n' "$header" | cc -E -dM - 2>/dev/null) || return 1
   for m in "$@"; do
     m=$(printf '%s\n' "$defs" | awk -v m="$m" '$1 == "#define" && $2 == m { print $3 }' | tr -d '"')
@@ -232,7 +233,8 @@ fetch_system() {
     unpack_vendored "$dest.opam" "$prefix" "$dest"; return
   fi
   # shellcheck disable=SC2086
-  if [ -n "$HEADER" ] && hv=$(host_version "${PKGCONFIG:-$name}" "$HEADER" $VERSION_MACROS); then
+  if { [ -n "$HEADER" ] || [ -n "$PKGCONFIG" ]; } \
+     && hv=$(host_version "${PKGCONFIG:-$name}" "$HEADER" $VERSION_MACROS) && [ -n "$hv" ]; then
     case ${COMPAT:-major} in
       major)  want=${hv%%.*} ;;
       minor)  want=$(echo "$hv" | cut -d. -f1-2) ;;
