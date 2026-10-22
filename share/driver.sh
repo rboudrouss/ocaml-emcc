@@ -471,7 +471,7 @@ include_recipe() {
 # Bumped whenever write_toolchain changes: the CLI then regenerates it in
 # existing sysroots (cheap: the runtime is not rebuilt).  Keep in sync with
 # Env.toolchain_version.
-TOOLCHAIN_VERSION=4
+TOOLCHAIN_VERSION=5
 
 write_toolchain() {
   local tool host_conf cc=$SYSROOT/bin/emcc-$TARGET
@@ -497,6 +497,12 @@ export OCAML_EMCC_HOST_BIN OCAML_EMCC_SYSROOT OCAML_EMCC_CFLAGS OCAML_EMCC_EMCC 
 exec sh '$OCAML_EMCC_SHARE/tools/$tool' "\$@"
 EOF
     chmod +x "$SYSROOT/bin/$tool"
+  done
+  # The other tools dune looks for next to the toolchain's ocamlc (rules
+  # using %{ocaml}, %{bin:ocamllex}...) are the host's.  Not ocamlopt: see
+  # below.
+  for tool in ocaml ocamllex ocamlyacc ocamlobjinfo ocamlcp ocamlmktop ocamlprof; do
+    if [ -x "$HOST_BIN/$tool" ]; then ln -sf "$HOST_BIN/$tool" "$SYSROOT/bin/$tool"; fi
   done
   # put first in dune's PATH: rules running `ocamlmklib` directly
   mkdir -p "$SYSROOT/bin/path"
