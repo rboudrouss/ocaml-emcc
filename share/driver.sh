@@ -479,8 +479,12 @@ write_toolchain() {
   # flags built in.  Some packages replace dune's :standard C flags with
   # their own (mlmpfr's (flags (:include c_flags.sexp))), which would drop
   # -m64 and friends.
+  # -pthread (lwt's configuration adds it) is dropped: the program is
+  # single-threaded, and with it emcc compiles `caml_state` as a real
+  # thread-local variable, which the runtime's is not (see the ocaml recipe).
   cat > "$cc" <<EOF
 #!/bin/sh
+for a; do shift; [ "\$a" = -pthread ] || set -- "\$@" "\$a"; done
 exec '$EMCC' $TARGET_FLAGS $STUB_STD "\$@"
 EOF
   chmod +x "$cc"
