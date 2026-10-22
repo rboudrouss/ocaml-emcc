@@ -138,6 +138,11 @@ build() {
   # wasm headers: these, not the host's, must be seen by stub code.
   rm -rf "$OCAML_INC/caml"; mkdir -p "$OCAML_INC/caml"
   cp runtime/caml/*.h "$OCAML_INC/caml/"
+  # for stubs only (the runtime is built): the dimensions of
+  # caml_ba_alloc_dims converted to intnat, see ba_alloc_dims.h
+  OCAML_EMCC_BA="$(cat "$RECIPE_DIR/ba_alloc_dims.h")" perl -0pi -e \
+    's{(#endif /\* CAML_BIGARRAY_H \*/\s*)$}{$ENV{OCAML_EMCC_BA}\n$1}' "$OCAML_INC/caml/bigarray.h"
+  grep -q OCAML_EMCC_BA_COUNT "$OCAML_INC/caml/bigarray.h" || die "bigarray.h: cannot add the caml_ba_alloc_dims macro"
   cp runtime/caml/*.tbl "$OCAML_INC/caml/" 2>/dev/null || true
   # Headers installed by otherlibs (unixsupport.h, socketaddr.h...).
   for h in otherlibs/unix/unixsupport.h otherlibs/unix/socketaddr.h; do
