@@ -180,6 +180,29 @@ let defined_symbols files =
     files;
   tbl
 
+(* ctypes-foreign binds C functions by name at run time (dlsym).  The C
+   symbols that string literals of the program name, and that the linked
+   libraries or emscripten's libc define, are exported: share/runtime/dlsym.c
+   finds them there.  A literal naming a libc function by chance only costs
+   that function. *)
+let is_c_ident s =
+  let n = String.length s in
+  let rec ok i = i >= n || ((match s.[i] with 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '_' -> true | _ -> false) && ok (i + 1)) in
+  n > 0 && n <= 128 && (match s.[0] with 'a' .. 'z' | 'A' .. 'Z' | '_' -> true | _ -> false) && ok 1
+
+let emscripten_system_libs () =
+  let dir =
+    List.fold_left Filename.concat (Filename.dirname (Env.emcc ()))
+      [ "cache"; "sysroot"; "lib"; !Env.target ^ "-emscripten" ]
+  in
+  List.filter Sys.file_exists (List.map (Filename.concat dir) [ "libc.a"; "libdlmalloc.a"; "libcompiler_rt.a" ])
+
+let foreign_exports ~archives bc =
+  let syms = defined_symbols (archives @ emscripten_system_libs ()) in
+  Bytecode.strings bc
+  |> List.filter (fun s -> is_c_ident s && Hashtbl.mem syms s)
+  |> List.sort_uniq compare
+
 (* Resolve every stub DLL to an archive, building missing ones if asked. *)
 let resolve_libs ~extra_dirs ~auto_deps ~bc_path bc =
   Bytecode.dlls bc
@@ -267,6 +290,21 @@ let check_magic ~bc_path (bc : Bytecode.t) =
         (Option.value (Env.manifest "ocaml_version") ~default:"?")
   | _ -> ()
 
+(* wasm32 programs that may address more than 2GB get their exports returning
+   pointers wrapped in JS (unsigned conversion): dlsym needs the wasm
+   functions themselves for the function table. *)
+let keep_raw_exports js =
+  if Filename.check_suffix js ".js" && Sys.file_exists js then
+    let s = Compat.read_file js in
+    let pat = "wasmExports=applySignatureConversions(wasmExports)" in
+    match Str_util.find s pat with
+    | None -> ()
+    | Some i ->
+        let s =
+          String.sub s 0 i ^ "Module[\"ocamlEmccRawExports\"]=wasmExports," ^ String.sub s i (String.length s - i)
+        in
+        write_file js s
+
 let run o =
   if not (Env.toolchain_ready ()) then
     Env.fail "no wasm runtime in %s, run `ocaml-emcc setup` first" (Env.sysroot ());
@@ -298,17 +336,18 @@ let run o =
   let libs = resolve_libs ~extra_dirs:o.lib_dirs ~auto_deps:o.auto_deps ~bc_path:o.bc bc in
   let camlrun = Env.sysroot_file "lib/libcamlrun.a" in
   let archives = List.map snd libs @ [ camlrun ] in
+  (* the archives given with -l (paths, or -lX found in the lib dirs) *)
+  let user_archives () =
+    List.filter_map
+      (fun l ->
+        if Sys.file_exists l then Some l
+        else if Str_util.starts_with ~prefix:"-l" l then
+          Deps.find_lib (o.lib_dirs @ [ Env.sysroot_file "lib" ]) (String.sub l 2 (String.length l - 2))
+        else None)
+      (o.libs @ List.filter (Str_util.starts_with ~prefix:"-l") o.emcc_flags)
+  in
   if o.check then (
-    (* also the archives given with -l (paths, or -lX found in the lib dirs) *)
-    let user_archives =
-      List.filter_map
-        (fun l ->
-          if Sys.file_exists l then Some l
-          else if Str_util.starts_with ~prefix:"-l" l then
-            Deps.find_lib (o.lib_dirs @ [ Env.sysroot_file "lib" ]) (String.sub l 2 (String.length l - 2))
-          else None)
-        (o.libs @ List.filter (Str_util.starts_with ~prefix:"-l") o.emcc_flags)
-    in
+    let user_archives = user_archives () in
     let syms = defined_symbols (archives @ user_archives) in
     let missing = List.filter (fun p -> not (Hashtbl.mem syms p)) prims in
     if missing <> [] then
@@ -316,7 +355,20 @@ let run o =
                (add the library providing them with -l/-L, or link will fail)"
         (List.length missing) (String.concat " " missing));
   let flags_of_libs = Compat.concat_map (fun (n, _) -> Deps.link_flags n) libs in
-  let flags_of_libs = flags_of_libs @ cclib_flags ~dirs:(Deps.search_dirs ~extra_dirs:o.lib_dirs ~bc_path:o.bc bc) o.bc in
+  let lib_dirs = Deps.search_dirs ~extra_dirs:o.lib_dirs ~bc_path:o.bc bc in
+  let flags_of_libs = flags_of_libs @ cclib_flags ~dirs:lib_dirs o.bc in
+  let foreign =
+    if not (List.mem "ctypes_dlsym" prims) then None
+    else
+      let flag_archives =
+        List.filter_map
+          (fun f -> if Str_util.starts_with ~prefix:"-l" f then Deps.find_lib lib_dirs (String.sub f 2 (String.length f - 2)) else None)
+          flags_of_libs
+      in
+      let names = foreign_exports ~archives:(archives @ user_archives () @ flag_archives) bc in
+      Env.log "dlsym (ctypes-foreign): exporting %d C symbol(s) named in the program" (List.length names);
+      Some names
+  in
   (* 4. emcc *)
   let inc = [ "-I" ^ Env.sysroot_file "lib/ocaml"; "-I" ^ Env.sysroot_file "include" ] in
   let vfs_path = "/ocaml/" ^ bc_name in
@@ -331,6 +383,14 @@ let run o =
   Env.run_exn emcc (cflags @ [ o.opt; main_def ] @ inc @ [ "-c"; Filename.concat (Env.share ()) "runtime/main.c"; "-o"; main_o ]);
   let compat_o = Filename.concat work "compat.o" in
   Env.run_exn emcc (cflags @ [ o.opt; "-c"; Filename.concat (Env.share ()) "runtime/compat.c"; "-o"; compat_o ]);
+  let foreign_objs, foreign_flags =
+    match foreign with
+    | None -> ([], [])
+    | Some names ->
+        let dlsym_o = Filename.concat work "dlsym.o" in
+        Env.run_exn emcc (cflags @ [ o.opt; "-c"; Filename.concat (Env.share ()) "runtime/dlsym.c"; "-o"; dlsym_o ]);
+        ([ dlsym_o ], "-sALLOW_TABLE_GROWTH=1" :: List.map (fun n -> "-Wl,--export=" ^ n) names)
+  in
   let cc_prims () =
     Env.run_exn emcc
       (cflags @ [ o.opt; "-std=gnu11"; "-Wno-incompatible-function-pointer-types"; "-Wno-deprecated-non-prototype"; "-c"; prims_src; "-o"; prims_o ])
@@ -365,9 +425,9 @@ let run o =
   in
   let defaults = List.filter (( <> ) "") defaults in
   let args ?(extra = []) ~output () =
-    defaults @ fs_flags @ [ main_o; prims_o; compat_o ] @ extra @ archives @ o.libs
+    defaults @ fs_flags @ [ main_o; prims_o; compat_o ] @ foreign_objs @ extra @ archives @ o.libs
     @ [ "-L" ^ Env.sysroot_file "lib" ]
-    @ flags_of_libs @ [ "-lm" ] @ o.emcc_flags @ [ "-o"; output ]
+    @ flags_of_libs @ [ "-lm" ] @ foreign_flags @ o.emcc_flags @ [ "-o"; output ]
   in
   Env.log "linking %s (%d primitives, %d stub libraries)" o.output (List.length prims) (List.length libs);
   (* First link: find the stubs whose C signature differs from the call site. *)
@@ -390,4 +450,5 @@ let run o =
     Env.run_exn emcc (cflags @ [ o.opt; "-w"; "-c"; adapters_src; "-o"; adapters_o ]);
     let code, err = Env.run_capture_stderr emcc (args ~extra:[ adapters_o ] ~output:o.output ()) in
     prerr_string err;
-    if code <> 0 then Env.fail "emcc failed (exit %d)" code)
+    if code <> 0 then Env.fail "emcc failed (exit %d)" code);
+  if foreign <> None then keep_raw_exports o.output
