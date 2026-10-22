@@ -20,3 +20,31 @@ __attribute__((weak)) void *shmat(int shmid, const void *shmaddr, int shmflg)
   errno = ENOSYS;
   return (void *)-1;
 }
+
+/* wasm32: stubs compiled against the headers of an older ocaml-emcc runtime,
+   built with ARCH_ALIGN_DOUBLE / ARCH_ALIGN_INT64, read floats and int64s
+   through these functions, which the runtime no longer defines.  (A value is
+   a pointer-sized integer; the int64 of a custom block follows its ops.) */
+#if defined(__wasm32__)
+#include <stdint.h>
+#include <string.h>
+
+__attribute__((weak)) double caml_Double_val(intptr_t v)
+{
+  double d;
+  memcpy(&d, (void *)v, sizeof d);
+  return d;
+}
+
+__attribute__((weak)) void caml_Store_double_val(intptr_t v, double d)
+{
+  memcpy((void *)v, &d, sizeof d);
+}
+
+__attribute__((weak)) int64_t caml_Int64_val(intptr_t v)
+{
+  int64_t i;
+  memcpy(&i, (char *)v + sizeof(intptr_t), sizeof i);
+  return i;
+}
+#endif

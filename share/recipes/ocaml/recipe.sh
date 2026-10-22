@@ -52,6 +52,15 @@ build() {
     sed -i -e '/^CFLAGS=/s/ -pthread//g' -e '/^LDFLAGS=/s/ -pthread//g' Makefile.config
   fi
 
+  # wasm loads doubles and 64-bit ints at any alignment, like i686, the only
+  # 32-bit target configure exempts.  With ARCH_ALIGN_DOUBLE every float field
+  # access is a copy, and stubs with views on float arrays refuse to build
+  # (gsl: "double-word alignment for doubles is not supported").
+  if [ "$TARGET" = wasm32 ]; then
+    sed -i -e 's|^#define ARCH_ALIGN_DOUBLE 1|/* #undef ARCH_ALIGN_DOUBLE */|' \
+           -e 's|^#define ARCH_ALIGN_INT64 1|/* #undef ARCH_ALIGN_INT64 */|' runtime/caml/m.h
+  fi
+
   local cc; cc=$(host_cc)
   # sak (OCaml >= 4.14): build it for the host.  SAK_CC/SAK_LINK exist in
   # every version that has sak; pre-building it as well keeps make from
