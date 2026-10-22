@@ -79,3 +79,4 @@ jobs:
           path: |
             tests/*/out.log
             tests/*/out/
+            _opam/emcc-sysroot/*/build/*/*.log
