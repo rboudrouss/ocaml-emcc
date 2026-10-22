@@ -46,10 +46,11 @@ lmdb      | lm       |            | lmdb                        | wasm32 wasm64 
 glpk      | gl       |            | glpk                        | wasm32 wasm64 |
 fftw3     | ff       |            | fftw3                       | wasm32 wasm64 |
 secp      | sc       |            | secp256k1-internal          | wasm32 wasm64 |
+sdl       | sd       |            | tsdl                        | wasm64        |
 '
-# hello is wasm64 only on purpose: 63-bit literals and arithmetic.  yaml too:
-# its ctypes structs were laid out for the host (LP64) when the bytecode was
-# built, which only wasm64 matches.
+# hello is wasm64 only on purpose: 63-bit literals and arithmetic.  yaml and
+# sdl too: their ctypes structs are laid out with the sizes of the host
+# (LP64) when the bytecode was built, which only wasm64 matches.
 
 has_pkg() {
   case $1 in
