@@ -315,6 +315,7 @@ let run o =
                (add the library providing them with -l/-L, or link will fail)"
         (List.length missing) (String.concat " " missing));
   let flags_of_libs = Compat.concat_map (fun (n, _) -> Deps.link_flags n) libs in
+  let flags_of_libs = flags_of_libs @ cclib_flags ~dirs:(Deps.search_dirs ~extra_dirs:o.lib_dirs ~bc_path:o.bc bc) o.bc in
   (* 4. emcc *)
   let inc = [ "-I" ^ Env.sysroot_file "lib/ocaml"; "-I" ^ Env.sysroot_file "include" ] in
   let vfs_path = "/ocaml/" ^ bc_name in
@@ -343,7 +344,9 @@ let run o =
         write_file pre
           (Printf.sprintf
              "if (typeof __dirname !== 'undefined')\n\
-             \  Module['thisProgram'] = require('path').join(__dirname, %S);\n"
+             \  Module['thisProgram'] = require('path').join(__dirname, %S);\n\
+              // the environment of the node process, as for a native program\n\
+              Module['preRun'] = [].concat(Module['preRun'] || [], function () { Object.assign(ENV, process.env); });\n"
              bc_name);
         [ "-sNODERAWFS=1"; "-sENVIRONMENT=node"; "--pre-js"; pre ]
   in
