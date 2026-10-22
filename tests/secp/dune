@@ -1,0 +1,1 @@
+(executable (name sc) (libraries secp256k1-internal))
