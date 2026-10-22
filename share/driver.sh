@@ -74,8 +74,19 @@ BASE_CFLAGS="$OPT -fno-strict-aliasing -fwrapv $TARGET_FLAGS"
 export CFLAGS="$BASE_CFLAGS ${OCAML_EMCC_EXTRA_CFLAGS:-}"
 export CXXFLAGS="$CFLAGS"
 export LDFLAGS="$TARGET_FLAGS"
+# The C standard of the host compiler, when newer than emcc's default
+# (gnu17): stub sources generated at build time follow it (ctypes writes
+# `bool`, a keyword only since C23, the default of gcc >= 15).
+host_c_std() {
+  local cc v
+  cc=$("$HOST_BIN/ocamlc" -config-var c_compiler 2>/dev/null) || cc=cc
+  # shellcheck disable=SC2086
+  v=$(printf '__STDC_VERSION__\n' | $cc -x c -E -P - 2>/dev/null | tr -dc 0-9)
+  if [ "${v:-0}" -ge 202311 ]; then echo -std=gnu23; fi
+}
+STUB_STD=$(host_c_std)
 # Flags to compile OCaml stubs against the wasm32 runtime headers.
-STUB_CFLAGS="$CFLAGS -I$OCAML_INC -I$SYSROOT/include -D_FILE_OFFSET_BITS=64"
+STUB_CFLAGS="$CFLAGS $STUB_STD -I$OCAML_INC -I$SYSROOT/include -D_FILE_OFFSET_BITS=64"
 
 EMCC=$(command -v emcc) || { echo "ocaml-emcc: emcc not found in PATH (source emsdk_env.sh)" >&2; exit 1; }
 EMSDK_BIN=$(dirname "$EMCC")
@@ -464,12 +475,13 @@ TOOLCHAIN_VERSION=4
 
 write_toolchain() {
   local tool host_conf cc=$SYSROOT/bin/emcc-$TARGET
-  # The C compiler dune is given: emcc with the target flags built in.  Some
-  # packages replace dune's :standard C flags with their own (mlmpfr's
-  # (flags (:include c_flags.sexp))), which would drop -m64 and friends.
+  # The C compiler dune is given: emcc with the target (and stub standard)
+  # flags built in.  Some packages replace dune's :standard C flags with
+  # their own (mlmpfr's (flags (:include c_flags.sexp))), which would drop
+  # -m64 and friends.
   cat > "$cc" <<EOF
 #!/bin/sh
-exec '$EMCC' $TARGET_FLAGS "\$@"
+exec '$EMCC' $TARGET_FLAGS $STUB_STD "\$@"
 EOF
   chmod +x "$cc"
   for tool in ocamlc ocamlmklib; do
