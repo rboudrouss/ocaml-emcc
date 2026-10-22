@@ -649,6 +649,23 @@ dune_stubs() {
   if PATH=$SYSROOT/bin/path:$PATH OCAMLFIND_CONF=$SYSROOT/findlib.conf \
        "$HOST_BIN/dune" build -x "$TARGET" -p "$pkg" @install >&2; then
     archives=$(find "_build/default.$TARGET" -name 'lib*.a' ! -path '*/.*')
+    # Archives made by a rule of the package with its own build system
+    # (ocaml-lua: `make` in the vendored Lua) hold host objects.  Those of
+    # stubs (with their dllX.so) are rebuilt, the others were intermediate.
+    local host= wasm= b
+    while IFS= read -r a; do
+      [ -n "$a" ] || continue
+      if wasm_archive "$a"; then wasm="$wasm$a"$'\n'; continue; fi
+      b=$(basename "$a" .a)
+      if [ -f "$(dirname "$a")/dll${b#lib}.so" ]; then host="$host $b.a"
+      else log "  $b.a: host objects, not a stub archive: ignored"; fi
+    done <<< "$archives"
+    archives=$wasm
+    if [ -n "$host" ]; then
+      log "host objects in${host}: compiling the C files of the native build instead"
+      # shellcheck disable=SC2086
+      archives="$archives$(dune_native_stubs "$pkg" $host)"
+    fi
   else
     log "dune -x $TARGET failed: compiling the C files of the native build instead"
     archives=$(dune_native_stubs "$pkg")
@@ -670,10 +687,13 @@ dune_stubs() {
 # behind its members: hand-written stubs, vendored C, and the C that ctypes
 # generated (architecture independent).  The stanza's own C flags are not
 # known: only -I flags are given (the file's directory and its source
-# directory, the headers of the opam packages it depends on).  Prints the
-# wasm archives.
+# directory, the headers of the opam packages it depends on).  Also for
+# archives of `dune -x` holding host objects (see dune_stubs).
+#   dune_native_stubs <pkg> [<libX.a>...]   (default: every archive)
+# Prints the wasm archives.
 dune_native_stubs() {
-  local pkg=$1 nat=_build/default ver a dir m c incs= dep objs
+  local pkg=$1 nat=_build/default ver a dir m c incs= dep objs only
+  shift; only=" $* "
   if [ ! -d "$nat" ]; then
     log "no native build kept for $pkg: building it"
     "$HOST_BIN/dune" build -p "$pkg" @install >&2 || die "$pkg: native build failed"
@@ -684,6 +704,7 @@ dune_native_stubs() {
   done
   mkdir -p _wasm_stubs
   while IFS= read -r a; do
+    [ "$only" = "  " ] || [[ "$only" == *" $(basename "$a") "* ]] || continue
     dir=$(dirname "$a"); objs=()
     for m in $(ar t "$a"); do
       c=$dir/${m%.o}.c
@@ -697,6 +718,13 @@ dune_native_stubs() {
     ( cd _wasm_stubs && mklib "$(basename "$a" .a | sed 's/^lib//')" "${objs[@]}" )
     echo "_wasm_stubs/$(basename "$a")"
   done < <(find "$nat" -name 'lib*.a' ! -path '*/.*')
+}
+
+# wasm_archive <lib.a>: whether its (first) object is a wasm one.
+wasm_archive() {
+  local m
+  m=$(ar t "$1" 2>/dev/null | grep -m1 '\.o$') || return 0
+  [ "$(ar p "$1" "$m" | head -c 4 | od -An -tx1 | tr -d ' \n')" = 0061736d ]
 }
 
 # Last resort for packages with neither a recipe nor dune: compile every C
