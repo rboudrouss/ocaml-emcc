@@ -55,6 +55,45 @@ for a in "$@"; do
   esac
 done
 
+# The C libraries the linked .cma files ask for (-cclib/-ccopt: dune's
+# c_library_flags, `-lclangFrontend...`) only matter for a custom link, which
+# ocamlc does not do here.  They are recorded for `ocaml-emcc link` in
+# $SYSROOT/meta/cclibs/<md5 of OUT>: dune deletes files it does not know
+# about from _build, and may move the output.
+out= incs= cclibs= prev=
+for a in "$@"; do
+  case "$prev" in
+    -o) out=$a ;;
+    -I) incs="$incs $a" ;;
+    -cclib|-ccopt) cclibs="$cclibs $a" ;;
+  esac
+  prev=$a
+done
+if [ -n "$out" ]; then
+  stdlib=$("$host" -where)
+  for a in "$@"; do
+    case "$a" in *.cma) ;; *) continue ;; esac
+    f=$a
+    if [ ! -f "$f" ]; then
+      for d in $incs "$stdlib"; do [ -f "$d/$a" ] && { f=$d/$a; break; }; done
+    fi
+    [ -f "$f" ] || continue
+    info=$("$OCAML_EMCC_HOST_BIN/ocamlobjinfo" "$f" 2>/dev/null | sed -e '/^Unit name/q')
+    cclibs="$cclibs $(printf '%s\n' "$info" \
+      | sed -n -e 's/^Extra C object files: *//p' -e 's/^Extra C options: *//p' | tr '\n' ' ')"
+    # A (modes exe) link is byte_complete: dune built lib<x>.a, not the
+    # dll<x>.so ocamlc reads once -output-complete-exe is gone.  Same
+    # placeholder as ocamlmklib's.
+    d=$(dirname "$f")
+    for l in $(printf '%s\n' "$info" | sed -n 's/^Extra dynamically-loaded libraries: *//p'); do
+      l=${l#-l}
+      if [ ! -f "$d/dll$l.so" ] && [ -f "$d/lib$l.a" ]; then
+        printf '' | ${OCAML_EMCC_HOST_CC:-cc} -shared -x c -o "$d/dll$l.so" - 2>/dev/null || : > "$d/dll$l.so"
+      fi
+    done
+  done
+fi
+
 # Executables.  Without a native compiler dune builds (modes exe) as
 # byte_complete, i.e. `ocamlc -output-complete-exe`, which would link the
 # host runtime with the host C compiler.  Produce plain bytecode instead
@@ -67,4 +106,10 @@ for a in "$@"; do
   esac
 done
 eval "set -- $args"
-exec "$host" -no-check-prims "$@"
+if [ -z "$out" ]; then exec "$host" -no-check-prims "$@"; fi
+"$host" -no-check-prims "$@" || exit
+if [ -n "${cclibs# }" ] && [ -f "$out" ]; then
+  mkdir -p "$OCAML_EMCC_SYSROOT/meta/cclibs"
+  sum=$(md5sum "$out" | cut -d' ' -f1)
+  printf '%s\n' $cclibs > "$OCAML_EMCC_SYSROOT/meta/cclibs/$sum"
+fi
