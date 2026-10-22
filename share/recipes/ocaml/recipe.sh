@@ -94,14 +94,21 @@ build() {
   # suffix in 5.0.
   local sfx=; [ "$OCAML_MAJOR" -ge 5 ] && sfx=byt
   local dir clib
-  for dir in unix str runtime_events; do
+  # systhreads (configured out) builds as well: without -pthread, emscripten's
+  # pthread functions are single-threaded stubs, so Mutex, Condition and
+  # Thread.self work and Thread.create fails.  Libraries that merely depend on
+  # threads (ctypes-foreign...) then link.
+  for dir in unix str runtime_events systhreads; do
     [ -d "otherlibs/$dir" ] || continue
-    case $dir in unix) clib=unix ;; str) clib=camlstr ;; runtime_events) clib=camlruntime_events ;; esac
-    log "make otherlibs/$dir (lib$clib$sfx.a)"
-    make -C "otherlibs/$dir" -j"$NPROC" MKLIB="$mk" MKLIB_CMD="$mk" "lib$clib$sfx.a" >> make.log 2>&1 \
+    case $dir in
+      unix) clib=unix$sfx ;; str) clib=camlstr$sfx ;;
+      runtime_events) clib=camlruntime_events$sfx ;; systhreads) clib=threads ;;
+    esac
+    log "make otherlibs/$dir (lib$clib.a)"
+    make -C "otherlibs/$dir" -j"$NPROC" MKLIB="$mk" MKLIB_CMD="$mk" "lib$clib.a" >> make.log 2>&1 \
       || { tail -30 make.log; die "otherlibs/$dir failed"; }
-    install_lib "otherlibs/$dir/lib$clib$sfx.a"
-    provides ocaml "$clib$sfx"
+    install_lib "otherlibs/$dir/lib$clib.a"
+    provides ocaml "$clib"
   done
 
   # wasm headers: these, not the host's, must be seen by stub code.
