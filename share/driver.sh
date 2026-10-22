@@ -393,6 +393,24 @@ install_headers() { # install_headers <subdir|.> <files...>
 # linked (e.g. zarith needs -lgmp).  Read back by `ocaml-emcc link`.
 link_flags() { echo "$2" > "$SYSROOT/meta/$1.link"; }
 
+# install_pc <name> <version> <libs> [<cflags>]: write lib/pkgconfig/<name>.pc,
+# for libraries built without their own build system (pkg-config users, such
+# as dune-configurator scripts, then find the wasm library).
+install_pc() {
+  mkdir -p "$SYSROOT/lib/pkgconfig"
+  cat > "$SYSROOT/lib/pkgconfig/$1.pc" <<PC
+prefix=$SYSROOT
+libdir=\${prefix}/lib
+includedir=\${prefix}/include
+
+Name: $1
+Description: $1 (ocaml-emcc, $TARGET)
+Version: $2
+Libs: -L\${libdir} $3
+Cflags: -I\${includedir} ${4:-}
+PC
+}
+
 # provides <recipe> <libname>...: record which recipe builds which library,
 # so that `ocaml-emcc deps` knows how to obtain a missing lib<name>.a.
 provides() { local r=$1 l; shift; for l in "$@"; do echo "$r" > "$SYSROOT/meta/$l.provider"; done; }
