@@ -43,6 +43,7 @@ snappy    | sn       |            | snappy                      | wasm32 wasm64 
 argon2    | ar       |            | argon2                      | wasm32 wasm64 |
 expat     | ex       |            | expat                       | wasm32 wasm64 |
 lmdb      | lm       |            | lmdb                        | wasm32 wasm64 |
+glpk      | gl       |            | glpk                        | wasm32 wasm64 |
 '
 # hello is wasm64 only on purpose: 63-bit literals and arithmetic.  yaml too:
 # its ctypes structs were laid out for the host (LP64) when the bytecode was
