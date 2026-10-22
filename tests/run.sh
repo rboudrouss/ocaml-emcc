@@ -32,6 +32,7 @@ ctypes    | cf       |            | ctypes-foreign              | wasm32 wasm64 
 yaml      | ym       |            | yaml                        | wasm64        |
 clibs     | sm       |            | sha checkseum bigstringaf mtime ptime eqaf | wasm32 wasm64 |
 mcrypto   | mc       |            | mirage-crypto-ec mirage-crypto-pk mirage-crypto-rng | wasm32 wasm64 |
+lwt       | lw       |            | lwt                         | wasm32 wasm64 |
 '
 # hello is wasm64 only on purpose: 63-bit literals and arithmetic.  yaml too:
 # its ctypes structs were laid out for the host (LP64) when the bytecode was
