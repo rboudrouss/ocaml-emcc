@@ -205,6 +205,10 @@ VERSION_MACROS="MPFR_VERSION_MAJOR MPFR_VERSION_MINOR MPFR_VERSION_PATCHLEVEL"
 RELEASES=https://ftp.gnu.org/gnu/mpfr/   # directory listing mpfr-X.Y.Z.tar.*
 # optional: PKGCONFIG=, TARBALL= (prefix), COMPAT=, OPAM_SOURCES= (vendoring
 # opam package), LINK= (default -lmpfr; DEPENDS' flags are appended)
+# or, for releases not in a directory listing, a releases function printing
+# "<version> <tarball url>" lines, oldest first (git_tag_releases helps):
+#   releases() { git_tag_releases https://github.com/libffi/libffi.git v \
+#     'https://github.com/libffi/libffi/releases/download/v{v}/libffi-{v}.tar.gz'; }
 
 build() {
   emconfigure ./configure --host=none --enable-static --disable-shared \
@@ -213,8 +217,21 @@ build() {
 }
 ```
 
-Builtin system recipes: `gmp`, `mpfr`, `zlib`. Other recipes pin no version
-either:
+Builtin system recipes, named after their `conf-*` package:
+
+| recipe | for (opam) | notes |
+|--------|------------|-------|
+| `gmp`, `mpfr` | zarith, mlmpfr, mlgmpidl, apron... | |
+| `zlib` | camlzip, zlib | |
+| `sqlite3` | sqlite3 | the amalgamation, single-threaded, FTS3/4/5, R-tree, math functions (`SQLITE_CFLAGS`); the version from sqlite.org's release history |
+| `libffi` | ctypes-foreign | see "ctypes" below |
+| `libbz2` | bz2 (camlbz2) | |
+| `libpcre2-8` | pcre2 | no JIT |
+| `zstd` | zstd | single-threaded |
+| `gsl` | gsl | with its CBLAS (`-lgsl -lgslcblas`) |
+
+Each writes a pkg-config file in `$SYSROOT/lib/pkgconfig` when its build
+system does not. Other recipes pin no version either:
 - `zarith`, `camlidl`, `mlgmpidl`, `apron` use the sources of the installed
   package (for the camlidl bindings, the C files camlidl generated in its
   build directory, else regenerated with the host camlidl). `apron` builds
@@ -244,6 +261,35 @@ in the sysroot's `shared/`, for both targets) and then the libraries with
 emcc. It needs cmake and a host C++ compiler, and ninja if available. LLVM
 9.0.1 on 4 cores: about 15 minutes.
 
+#### ctypes
+
+Bindings with ctypes' **stub generation** (`Cstubs`, dune's `(ctypes)`
+stanza: zstd, yaml...) need nothing: their generated C stubs are compiled
+like hand-written ones. dune cannot cross-compile the `(ctypes)` stanza (its
+generators would be native executables of the wasm context); ocaml-emcc
+then compiles the C files of the package's native build instead (they do
+not depend on the architecture).
+
+On **wasm32**, the layouts of the C structs a binding describes
+(`Ctypes.structure` in a type description, sizes of `size_t`, `long`...) are
+those of the host: they were computed when the package's bytecode was
+built, and wasm32 is ILP32. Constants, enums and functions are fine (zstd
+passes on both targets), but yaml, which reads libyaml's event structs, only
+works on wasm64 (LP64, as the host).
+
+**ctypes-foreign** (`Foreign.foreign "strlen"`, bound at run time through
+libffi) works on both targets, callbacks (C calling OCaml closures) and
+structs by value included:
+- the `libffi` recipe is built automatically (`conf-libffi`);
+- symbols are found with `dlsym`, which a static wasm program does not have.
+  `link` exports the C functions and variables named by string literals of
+  the program (and defined by the linked libraries or emscripten's libc), and
+  links an implementation of `dlopen`/`dlsym` that looks them up among the
+  module's exports. A name computed at run time is not found; `dlopen`
+  accepts any file name, since everything is linked in;
+- ctypes-foreign depends on the `threads` library, built by the `ocaml`
+  recipe: Mutex and Condition work, `Thread.create` fails (no pthreads).
+
 #### Recipe reference
 
 - `SOURCE=` `git:URL` (+ `REF=`), `url:TARBALL` (+ `SHA256=`), `dir:PATH`
@@ -255,15 +301,18 @@ emcc. It needs cmake and a host C++ compiler, and ninja if available. LLVM
   `mklib`, `install_lib`, `install_headers`, `link_flags LIB "-lfoo"`
   (flags needed whenever `libLIB.a` is linked), `apply_patches DIR`, `log`,
   `die`, `make_var DIR VAR` (value of a Makefile variable),
-  `include_recipe NAME`; for `fetch`: `fetch_opam_version PKG VER DEST`,
+  `include_recipe NAME`, `install_pc NAME VERSION LIBS [CFLAGS]` (a
+  pkg-config file); for `fetch`: `fetch_opam_version PKG VER DEST`,
   `host_version PCNAME HEADER MACRO...` (version of a host C library);
-- `pre_build`: optional function run before `build`;
+- `pre_build`: optional function run before `build`; `releases`: see
+  system libraries (`git_tag_releases REPO TAG_PREFIX URL_TEMPLATE`);
 - variables: `$EMCC`, `$CFLAGS`, `$LDFLAGS`, `$SYSROOT`, `$OCAML_INC`,
   `$OCAML_VERSION`, `$TARGET`, `$RECIPE_DIR`, `$NPROC`, `$SHARED`
   (target-independent: host tools, big source archives).
 
 Project recipes take precedence over the builtin ones (`share/recipes/`:
-`ocaml`, `gmp`, `mpfr`, `zlib`, `zarith`, `camlidl`, `mlgmpidl`, `apron`,
+`ocaml`, `gmp`, `mpfr`, `zlib`, `sqlite3`, `libffi`, `libbz2`,
+`libpcre2-8`, `zstd`, `gsl`, `zarith`, `camlidl`, `mlgmpidl`, `apron`,
 `clang`). More directories: `--recipes DIR`,
 `$OCAML_EMCC_RECIPES_PATH`. A recipe is built once per switch and target;
 `ocaml-emcc install --force NAME` rebuilds it.
@@ -356,8 +405,14 @@ link options: -L DIR, -l LIB, --preload, --node-fs, -O FLAG, --stack-size S,
    is built from the opam package that installed `dll<x>.so`, trying in
    order:
    1. a recipe with the package's name;
-   2. the package's own dune rules (`dune -x`), as for digestif;
+   2. the package's own dune rules (`dune -x`), as for digestif. If dune
+      fails (ctypes' `(ctypes)` stanza), the C files behind each stub archive
+      of the package's native build, with `-I` flags only;
    3. the compilation of every `.c` file that includes `<caml/...>`.
+
+   Rules that run `ocamlmklib` themselves (yaml's vendored libyaml) get the
+   wasm one: it comes first in dune's `PATH`, and hands host objects to the
+   host tool.
 5. **Link**: a primitive table is generated with only the primitives the
    bytecode uses, so wasm-ld drops the rest. Stubs whose C signature does
    not match the OCaml call are adapted (see below). The bytecode, without
@@ -390,6 +445,8 @@ definitions that differ. An adapter is generated for each of them.
 | 5.x     | configure adds `-pthread`: runtime and stubs disagree on `caml_state` ("no domain lock held") | `-pthread` removed |
 | 5.4     | minor heap committed with `mmap(MAP_FIXED)` ("Failed to create main domain") | `patches/5.4/` |
 | all     | `sigsuspend` missing (unix) | weak stub |
+| all, wasm32 | `ARCH_ALIGN_DOUBLE` (`alignof(double)` is 8): float accesses through memcpy, some stubs refuse to build (gsl) | undefined, as for i686: wasm loads doubles at any alignment |
+| all     | systhreads disabled (no pthreads) | `libthreads.a` built anyway, single-threaded |
 
 Version-specific patches go in `share/recipes/ocaml/patches/4.x/` or
 `patches/<major>.<minor>/`.
@@ -411,8 +468,17 @@ the native executable (or `expected.txt`). All pass:
 | `nodune`    | Makefile, ocamlfind, hand-compiled stub + `ocaml-emcc link` | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `syslibs`   | mlmpfr + zlib bindings: `conf-mpfr`/`conf-zlib` → system recipes, no project configuration | – | – | – | ✅ | – |
 | `apron`     | apron (box, octagons, polyhedra) + mlgmpidl + camlidl recipes | – | – | – | ✅ | – |
+| `sqlite`    | sqlite3 bindings + recipe: SQL, JSON, math functions, a database file | – | – | – | ✅ | – |
+| `bz2`       | bz2 bindings + libbz2 recipe | – | – | – | ✅ | – |
+| `pcre2`     | pcre2 bindings + libpcre2-8 recipe (named groups, UTF-8) | – | – | – | ✅ | – |
+| `zstd`      | zstd (ctypes stub generation: native-build fallback) + zstd recipe | – | – | – | ✅ | – |
+| `gsl`       | gsl bindings + recipe: special functions, integration, LU, RNG, stats | – | – | – | ✅ | – |
+| `camlzip`   | camlzip (no dune) + zlib recipe: gzip, zip archives | – | – | – | ✅ | – |
+| `ctypes`    | ctypes-foreign + libffi recipe: libc functions, callbacks (qsort), structs by value | – | – | – | ✅ | – |
+| `yaml`      | yaml (ctypes stubs, vendored libyaml; wasm64 only, see "ctypes") | – | – | – | ✅ | – |
 
-Each test passes for both wasm32 and wasm64 (`hello`: wasm64 only). "–"
+Each test passes for both wasm32 and wasm64 (`hello` and `yaml`: wasm64
+only). "–"
 means the packages were not installed in that switch, or the test does not
 apply (mlmpfr 4.2.1 does not build natively with OCaml 5.4, an upstream
 issue). The zarith test also ran unmodified in Chrome 154, for both targets.
@@ -432,12 +498,13 @@ Tested with emsdk 6.0.11.
 - OCaml 5.0–5.3 are untested and probably need a `patches/5.x` of their own:
   the memory code moved around.
 - More recipes. Other system libraries worth a recipe: ppl (C++, apron's
-  `ppl` and `polkaGrid` domains), flint, sqlite3, pcre2, libffi
-  (ctypes-foreign; hard on wasm). The `clang` recipe is only tested with
-  LLVM 9.0.1; newer versions follow the same steps but may need other cmake
-  options. `system:` expects `RELEASES` to be a plain directory
-  listing; sqlite (its tarball names encode the version as `3460100`) and
-  GitHub releases would need a smarter lister.
+  `ppl` and `polkaGrid` domains), flint, expat, lz4, openssl; SDL2 could map
+  to emscripten's port (`-sUSE_SDL=2`) for tsdl. The `clang` recipe is only
+  tested with LLVM 9.0.1; newer versions follow the same steps but may need
+  other cmake options.
+- ctypes on wasm32: struct layouts computed for the host (see "ctypes").
+  Running the type generators for the target would need the package's OCaml
+  code rebuilt from source in the wasm context.
 - Distribution: prebuilt runtimes and C libraries could be published (npm,
   GitHub releases), keyed by OCaml version, emsdk version and target. There
   is no `conf-emscripten` opam package yet to express the emsdk requirement.
