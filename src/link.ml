@@ -255,8 +255,9 @@ let cclib_flags ~dirs bc_path =
                        Env.log "note: %s asks for -l%s, no wasm lib%s.a found: ignored" (Filename.basename bc_path) n n;
                        [])))
 
-(* wasm32 runs 64-bit bytecode with 31-bit ints: report the literals that
-   cannot be loaded.  Arithmetic overflowing 31 bits cannot be detected. *)
+(* wasm32 runs 64-bit bytecode with 31-bit ints: report the literals that do
+   not fit (the runtime wraps them when it loads the DATA section, see the
+   `ocaml` recipe).  Arithmetic overflowing 31 bits cannot be detected. *)
 let literals_report bc =
   match Bytecode.large_literals bc with
   | Bytecode.Unknown why -> `Unknown why
@@ -276,8 +277,9 @@ let warn_literals bc =
   | `Large l ->
       Env.log
         "warning: %d integer literal(s) do not fit in 31 bits (%s).\n\
-        \  On wasm32 the program aborts at startup with \"input_value: integer too large\".\n\
-        \  Use --target wasm64, or 32-bit bytecode."
+        \  On wasm32 they are wrapped to 31 bits when the program starts, as 32-bit OCaml\n\
+        \  would: fine for code only used on 32-bit platforms (Sys.word_size = 32), wrong\n\
+        \  otherwise.  Use --target wasm64 if the program needs them."
         (List.length l) (show_literals l)
 
 (* The bytecode must come from the compiler the runtime was built from. *)

@@ -15,6 +15,19 @@ SOURCE=ocaml
 
 host_cc() { command -v cc || command -v gcc || command -v clang; }
 
+# intern.c: a CODE_INT64 read while caml_emcc_wrap_ints is set keeps its low
+# 32 bits (the stream is big-endian), which Val_long truncates to 31;
+# startup_byt.c sets it while reading the DATA section.
+wrap_data_literals() {
+  local args=; [ "$OCAML_MAJOR" -ge 5 ] && args=s
+  perl -0pi -e 's/(#else\n(\s*))((?:intern_cleanup\(\);\s*caml_failwith\("input_value: integer too large"\)|intern_cleanup_failwith2\(s, fun_name, "integer too large"\));)/$1if (caml_emcc_wrap_ints) { (void) read32u('"$args"'); v = Val_long((intnat) (int32_t) read32u('"$args"')); break; }\n$2$3/' runtime/intern.c
+  grep -q caml_emcc_wrap_ints runtime/intern.c || die "intern.c: cannot patch the CODE_INT64 case"
+  perl -0pi -e 's/(\n#include "caml\/intext.h"\n)/$1int caml_emcc_wrap_ints = 0;\n/' runtime/intern.c
+  grep -q '^int caml_emcc_wrap_ints' runtime/intern.c || die "intern.c: cannot define caml_emcc_wrap_ints"
+  perl -0pi -e 's/^(\s*)((?:caml_global_data|value global_data) = caml_input_val\(chan\);)/$1caml_emcc_wrap_ints = 1;\n$1$2\n$1caml_emcc_wrap_ints = 0;/m; s/(\n#include "caml\/intext.h"\n)/$1extern int caml_emcc_wrap_ints;\n/' runtime/startup_byt.c
+  [ "$(grep -c caml_emcc_wrap_ints runtime/startup_byt.c)" = 3 ] || die "startup_byt.c: cannot patch the DATA section reading"
+}
+
 build() {
   # The build dir kept by opam has been built for the host: start clean.
   if [ -f Makefile.config ] || [ -f Makefile.build_config ]; then
@@ -61,6 +74,16 @@ build() {
     sed -i -e 's|^#define ARCH_ALIGN_DOUBLE 1|/* #undef ARCH_ALIGN_DOUBLE */|' \
            -e 's|^#define ARCH_ALIGN_INT64 1|/* #undef ARCH_ALIGN_INT64 */|' runtime/caml/m.h
   fi
+
+  # wasm32 runs 64-bit bytecode: the literals that do not fit in 31 bits
+  # are in the DATA section, as 64-bit integers, which intern refuses
+  # ("input_value: integer too large").  A 32-bit ocamlc would have wrapped
+  # those it accepts (0x40000000 is min_int there), and they are mostly in
+  # code meant for 32-bit platforms, selected at run time by Sys.word_size
+  # (optint).  The DATA section is read with them wrapped to 31 bits, like
+  # the arithmetic; `ocaml-emcc link` warns about each one.  Marshalled data
+  # read by the program still fails on them.
+  if [ "$TARGET" = wasm32 ]; then wrap_data_literals; fi
 
   local cc; cc=$(host_cc)
   # sak (OCaml >= 4.14): build it for the host.  SAK_CC/SAK_LINK exist in

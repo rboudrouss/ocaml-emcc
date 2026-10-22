@@ -175,8 +175,9 @@ let call_arities t =
    The bytecode compiler only emits 31-bit immediates (CONSTINT & co,
    Instruct.immed_min/max), every other integer constant goes to the DATA
    section, which the 64-bit marshaller writes with CODE_INT64 (extern.c).
-   A 32-bit runtime refuses those at startup ("input_value: integer too
-   large"), so scanning DATA finds exactly the literals that break wasm32.
+   A 32-bit runtime refuses those ("input_value: integer too large"; the
+   wasm32 one wraps them instead), so scanning DATA finds exactly the
+   literals that wasm32 cannot represent.
 
    The marshalled stream is walked item by item: blocks only have a header,
    their fields are the following items, so no structure has to be kept. *)

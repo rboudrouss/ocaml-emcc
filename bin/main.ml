@@ -37,7 +37,7 @@ step by step (scripts, Makefiles, projects without dune):
 
 global options:
   --target wasm32|wasm64  wasm32 (default): 31-bit ints at run time, integer
-                          literals >= 2^30 abort at startup (link/doctor warn),
+                          literals >= 2^30 are wrapped (link/doctor warn),
                           arithmetic beyond 31 bits wraps silently.
                           wasm64: memory64, the semantics of the 64-bit host
   --switch SW             opam switch (default: the current one)
@@ -295,8 +295,8 @@ let cmd_doctor args =
   | `Large l ->
       Printf.printf
         "WARNING: %d integer literal(s) do not fit in 31 bits: %s\n\
-        \  -> on wasm32 the program aborts at startup (input_value: integer too large);\n\
-        \     fine on wasm64.\n"
+        \  -> on wasm32 they are wrapped to 31 bits when the program starts, as\n\
+        \     32-bit OCaml would; fine on wasm64.\n"
         (List.length l) (Link.show_literals l));
   let found = ref [ Env.sysroot_file "lib/libcamlrun.a" ] in
   List.iter
