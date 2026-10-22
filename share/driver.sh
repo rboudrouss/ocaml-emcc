@@ -765,8 +765,10 @@ wasm_archive() {
   [ "$(ar p "$1" "$m" | head -c 4 | od -An -tx1 | tr -d ' \n')" = 0061736d ]
 }
 
-# Last resort for packages with neither a recipe nor dune: compile every C
-# file that includes the OCaml headers into lib<libname>.a.
+# Last resort for packages with neither a recipe nor dune.  If the kept
+# native build has lib<libname>.a, the C files behind its members are
+# compiled (glpk: with oldapi/lpx.c, which does not include the OCaml
+# headers); otherwise every C file that includes the OCaml headers.
 run_auto() {
   local pkg=$1 lib=$2 stamp=$SYSROOT/stamps/auto-$1-$2 work=$SYSROOT/build/auto-$1
   if [ -f "$stamp" ] && [ "$FORCE" = no ]; then return 0; fi
@@ -775,12 +777,20 @@ run_auto() {
   rm -rf "$work"
   fetch_opam_source "$pkg" "$work"
   cd "$work"
-  local files objs=() f
-  files=$(grep -rlE '#include *[<"]caml/' --include='*.c' . || true)
+  local files= objs=() f native
+  native=$(find . -name "lib$lib.a" | head -1)
+  if [ -n "$native" ] && files=$(archive_sources "$native"); then
+    log "  the C files of the native lib$lib.a"
+  else
+    # _build: the copies of the sources in the kept native build (ocamlbuild,
+    # topkg), only used when the stubs are nowhere else (generated)
+    files=$(grep -rlE '#include *[<"]caml/' --include='*.c' --exclude-dir=_build . || true)
+    [ -n "$files" ] || files=$(grep -rlE '#include *[<"]caml/' --include='*.c' . || true)
+  fi
   [ -n "$files" ] || die "$pkg: no OCaml stub found"
   for f in $files; do
     log "  emcc $f"
-    stub_cc "$f" -I"$(dirname "$f")"
+    stub_cc "$f" -I"$(dirname "$f")" -I"$(dirname "${native:-.}")" || die "$pkg: cannot compile $f"
     objs+=("${f%.c}.o")
   done
   mklib "$lib" "${objs[@]}"
@@ -788,6 +798,18 @@ run_auto() {
   provides "auto-$pkg" "$lib"
   [ -z "${sysflags// }" ] || link_flags "$lib" "${sysflags# }"
   echo "$SOURCE_VERSION emcc-$EMCC_VERSION" > "$stamp"
+}
+
+# archive_sources <lib.a>: the C file of each member of a host archive, the
+# one outside _build first; fails if one has none.
+archive_sources() {
+  local m c
+  for m in $(ar t "$1" 2>/dev/null | grep '\.o$'); do
+    c=$(find . -name "${m%.o}.c" ! -path '*/_build/*' | head -1)
+    [ -n "$c" ] || c=$(find . -name "${m%.o}.c" | head -1)
+    [ -n "$c" ] || return 1
+    echo "$c"
+  done
 }
 
 # obtain <opam-package> <lib-name>: get lib<lib-name>.a by the best available
