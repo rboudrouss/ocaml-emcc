@@ -13,7 +13,7 @@ rewritten in JavaScript, so FFI-heavy code works as is.
 ```sh
 opam switch create myswitch 5.4.1 --keep-build-dir
 opam install . --deps-only --keep-build-dir   # or install your dependencies with --keep-build-dir
-opam install ocaml-emcc                       # not published yet: opam pin add ocaml-emcc <this repo>
+opam install ocaml-emcc                       # or: opam pin add ocaml-emcc https://github.com/rboudrouss/ocaml-emcc.git
 source /path/to/emsdk/emsdk_env.sh            # emcc in PATH
 
 ocaml-emcc build main.js                      # in your dune project
