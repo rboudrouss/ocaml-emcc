@@ -275,6 +275,16 @@ record_use_flags() {
     else flags="$flags -l$d"; fi
   done
   echo "$flags" > "$SYSROOT/meta/$name.uselink"
+  # and, for each library of the recipe, what it needs besides itself (for
+  # programs naming it in their c_library_flags: -lffi)
+  local p l
+  for p in "$SYSROOT"/meta/*.provider; do
+    [ "$(cat "$p")" = "$name" ] || continue
+    l=$(basename "$p" .provider)
+    [ -f "$SYSROOT/meta/$l.link" ] && continue
+    # shellcheck disable=SC2086
+    printf '%s\n' $flags | grep -vx -- "-l$l" | paste -sd' ' - > "$SYSROOT/meta/$l.link"
+  done
 }
 
 # opam packages of <pkg> that stand for system libraries (installed conf-X

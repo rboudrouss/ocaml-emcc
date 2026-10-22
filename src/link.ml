@@ -214,22 +214,23 @@ let cclib_flags ~dirs bc_path =
   else
     let seen = Hashtbl.create 16 in
     Str_util.words (String.map (fun c -> if c = '\n' || c = '\t' then ' ' else c) (Compat.read_file file))
-    |> List.filter_map (fun f ->
-           if Hashtbl.mem seen f then None
+    |> Compat.concat_map (fun f ->
+           if Hashtbl.mem seen f then []
            else (
              Hashtbl.add seen f ();
-             if not (Str_util.starts_with ~prefix:"-l" f) then None
+             if not (Str_util.starts_with ~prefix:"-l" f) then []
              else
                let n = String.sub f 2 (String.length f - 2) in
                match n with
-               | "stdc++" | "c++" -> Some "-sDEFAULT_TO_CXX=1"
-               | "m" | "c" | "dl" | "rt" | "pthread" -> None
+               | "stdc++" | "c++" -> [ "-sDEFAULT_TO_CXX=1" ]
+               | "m" | "c" | "dl" | "rt" | "pthread" -> []
                | _ -> (
+                   (* with the flags the library itself needs (libffi: -sALLOW_TABLE_GROWTH) *)
                    match Deps.find_lib dirs n with
-                   | Some a -> Some a
+                   | Some a -> a :: Deps.link_flags n
                    | None ->
                        Env.log "note: %s asks for -l%s, no wasm lib%s.a found: ignored" (Filename.basename bc_path) n n;
-                       None)))
+                       [])))
 
 (* wasm32 runs 64-bit bytecode with 31-bit ints: report the literals that
    cannot be loaded.  Arithmetic overflowing 31 bits cannot be detected. *)
