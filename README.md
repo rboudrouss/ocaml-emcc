@@ -443,13 +443,15 @@ definitions that differ. An adapter is generated for each of them.
 | ≤ 4.11  | otherlibs ignore the configure `CFLAGS` | target flags passed in `CC` |
 | 5.x     | no `sigaltstack` in emscripten ("Failed to allocate signal stack") | `ac_cv_func_sigaction=no` |
 | 5.x     | configure adds `-pthread`: runtime and stubs disagree on `caml_state` ("no domain lock held") | `-pthread` removed |
-| 5.4     | minor heap committed with `mmap(MAP_FIXED)` ("Failed to create main domain") | `patches/5.4/` |
+| ≥ 5.4   | minor heap committed with `mmap(MAP_FIXED)` ("Failed to create main domain") | `patches/5.4+/` |
+| ≥ 5.5   | `caml_byte_program_mode` and `caml_runtime_standard_library_default` come from the file ocamlc generates | weak definitions (`compat.c`) |
+| ≥ 5.5   | DLL names in the bytecode start with `-` or `:` | prefix removed (`Bytecode.dlls`) |
 | all     | `sigsuspend` missing (unix) | weak stub |
 | all, wasm32 | `ARCH_ALIGN_DOUBLE` (`alignof(double)` is 8): float accesses through memcpy, some stubs refuse to build (gsl) | undefined, as for i686: wasm loads doubles at any alignment |
 | all     | systhreads disabled (no pthreads) | `libthreads.a` built anyway, single-threaded |
 
-Version-specific patches go in `share/recipes/ocaml/patches/4.x/` or
-`patches/<major>.<minor>/`.
+Version-specific patches go in `share/recipes/ocaml/patches/4.x/`,
+`patches/5.4+/` or `patches/<major>.<minor>/`.
 
 ## Status
 
@@ -457,30 +459,30 @@ Prototype. `tests/run.sh [--target wasm32|wasm64]` builds each test with
 `ocaml-emcc build` (or make), runs it with node and compares the output with
 the native executable (or `expected.txt`). All pass:
 
-| test        | what it covers | 4.08.1 | 4.11.2 | 4.12.1 | 4.14.2 | 5.4.1 |
-|-------------|----------------|--------|--------|--------|--------|-------|
-| `hello`     | stdlib, 63-bit ints and literals, Marshal, GC, files, exit code (wasm64 only, on purpose) | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `stubs`     | dune `foreign_stubs` (int64, floats, callbacks, C exceptions, custom blocks), unix, str | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `zarith`    | zarith + gmp | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `mixed`     | digestif (dune stubs rebuilt automatically), yojson, re, cmdliner | ✅ | – | ✅ | ✅ | ✅ |
-| `ocaml5`    | effects, Atomic, Mutex, Dynarray (`Domain.spawn` raises) | – | – | – | – | ✅ |
-| `gitrecipe` | project recipe cloning cJSON from GitHub | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `nodune`    | Makefile, ocamlfind, hand-compiled stub + `ocaml-emcc link` | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `syslibs`   | mlmpfr + zlib bindings: `conf-mpfr`/`conf-zlib` → system recipes, no project configuration | – | – | – | ✅ | – |
-| `apron`     | apron (box, octagons, polyhedra) + mlgmpidl + camlidl recipes | – | – | – | ✅ | – |
-| `sqlite`    | sqlite3 bindings + recipe: SQL, JSON, math functions, a database file | – | – | – | ✅ | – |
-| `bz2`       | bz2 bindings + libbz2 recipe | – | – | – | ✅ | – |
-| `pcre2`     | pcre2 bindings + libpcre2-8 recipe (named groups, UTF-8) | – | – | – | ✅ | – |
-| `zstd`      | zstd (ctypes stub generation: native-build fallback) + zstd recipe | – | – | – | ✅ | – |
-| `gsl`       | gsl bindings + recipe: special functions, integration, LU, RNG, stats | – | – | – | ✅ | – |
-| `camlzip`   | camlzip (no dune) + zlib recipe: gzip, zip archives | – | – | – | ✅ | – |
-| `ctypes`    | ctypes-foreign + libffi recipe: libc functions, callbacks (qsort), structs by value | – | – | – | ✅ | – |
-| `yaml`      | yaml (ctypes stubs, vendored libyaml; wasm64 only, see "ctypes") | – | – | – | ✅ | – |
+| test        | what it covers | 4.08.1 | 4.11.2 | 4.12.1 | 4.14.2 | 5.4.1 | 5.5.1 |
+|-------------|----------------|--------|--------|--------|--------|-------|-------|
+| `hello`     | stdlib, 63-bit ints and literals, Marshal, GC, files, exit code (wasm64 only, on purpose) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `stubs`     | dune `foreign_stubs` (int64, floats, callbacks, C exceptions, custom blocks), unix, str | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `zarith`    | zarith + gmp | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `mixed`     | digestif (dune stubs rebuilt automatically), yojson, re, cmdliner | ✅ | – | ✅ | ✅ | ✅ | ✅ |
+| `ocaml5`    | effects, Atomic, Mutex, Dynarray (`Domain.spawn` raises) | – | – | – | – | ✅ | ✅ |
+| `gitrecipe` | project recipe cloning cJSON from GitHub | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `nodune`    | Makefile, ocamlfind, hand-compiled stub + `ocaml-emcc link` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `syslibs`   | mlmpfr + zlib bindings: `conf-mpfr`/`conf-zlib` → system recipes, no project configuration | – | – | – | ✅ | – | – |
+| `apron`     | apron (box, octagons, polyhedra) + mlgmpidl + camlidl recipes | – | – | – | ✅ | – | ✅ |
+| `sqlite`    | sqlite3 bindings + recipe: SQL, JSON, math functions, a database file | – | – | – | ✅ | – | ✅ |
+| `bz2`       | bz2 bindings + libbz2 recipe | – | – | – | ✅ | – | ✅ |
+| `pcre2`     | pcre2 bindings + libpcre2-8 recipe (named groups, UTF-8) | – | – | – | ✅ | – | ✅ |
+| `zstd`      | zstd (ctypes stub generation: native-build fallback) + zstd recipe | – | – | – | ✅ | – | ✅ |
+| `gsl`       | gsl bindings + recipe: special functions, integration, LU, RNG, stats | – | – | – | ✅ | – | ✅ |
+| `camlzip`   | camlzip (no dune) + zlib recipe: gzip, zip archives | – | – | – | ✅ | – | ✅ |
+| `ctypes`    | ctypes-foreign + libffi recipe: libc functions, callbacks (qsort), structs by value | – | – | – | ✅ | – | ✅ |
+| `yaml`      | yaml (ctypes stubs, vendored libyaml; wasm64 only, see "ctypes") | – | – | – | ✅ | – | ✅ |
 
 Each test passes for both wasm32 and wasm64 (`hello` and `yaml`: wasm64
 only). "–"
 means the packages were not installed in that switch, or the test does not
-apply (mlmpfr 4.2.1 does not build natively with OCaml 5.4, an upstream
+apply (mlmpfr 4.2.1 does not build natively with OCaml 5, an upstream
 issue). The zarith test also ran unmodified in Chrome 154, for both targets.
 
 Beyond the tests: Mopsa (the whole analyzer, its C parser linked with clang
@@ -488,7 +490,8 @@ Beyond the tests: Mopsa (the whole analyzer, its C parser linked with clang
 node with the same results as the native build on its C, Python and
 universal unit tests (wasm32, OCaml 4.14.2; see the `ocaml-emcc` branch of
 mopsa-analyzer-32-bit, `emcc/README.md`).
-Tested with emsdk 6.0.11.
+Tested with emsdk 6.0.11. CI (`.github/workflows/ci.yml`) runs the suite on
+OCaml 4.14 and 5.5, both targets.
 
 ## Limitations / next steps
 
