@@ -487,10 +487,25 @@ EOF
 
 FORCE=no
 
+# Checksum of every recipe.sh named <name> along the recipe path (a recipe
+# may include the next one).
+recipe_sum() {
+  local IFS=: d
+  for d in $RECIPES_PATH; do if [ -f "$d/$1/recipe.sh" ]; then cat "$d/$1/recipe.sh"; fi; done \
+    | sha256sum | cut -c1-16
+}
+
 run_recipe() {
-  local name=$1 dir stamp work
+  local name=$1 dir stamp work sum
   stamp=$SYSROOT/stamps/$name
-  if [ -f "$stamp" ] && [ "$FORCE" = no ]; then return 0; fi
+  sum=$(recipe_sum "$name")
+  if [ -f "$stamp" ] && [ "$FORCE" = no ]; then
+    # not rebuilt automatically: some recipes take a while (clang)
+    # (stamps written before this check have no checksum)
+    grep -q "recipe=" "$stamp" && ! grep -q "recipe=$sum" "$stamp" \
+      && log "note: the $name recipe changed since it was built; rebuild with: ocaml-emcc install --force $name"
+    return 0
+  fi
   dir=$(find_recipe "$name") || die "no recipe named '$name'"
   (
     SOURCE=none DEPENDS= SHA256= REF=
@@ -526,7 +541,7 @@ run_recipe() {
     if declare -F pre_build >/dev/null; then pre_build; fi
     build
     case "$SOURCE" in system:*) record_use_flags "$name" ;; esac
-    echo "${SOURCE_VERSION:-} emcc-$EMCC_VERSION" > "$stamp"
+    echo "${SOURCE_VERSION:-} emcc-$EMCC_VERSION recipe=$sum" > "$stamp"
     log "installed $name"
   )
 }

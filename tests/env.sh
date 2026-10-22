@@ -7,6 +7,8 @@ export PATH=$OPAM_SWITCH_PREFIX/bin:$PATH
 export CAML_LD_LIBRARY_PATH=$OPAM_SWITCH_PREFIX/lib/stublibs:$OPAM_SWITCH_PREFIX/lib/ocaml/stublibs
 # host gmp/mpfr/zlib built locally (this machine has no -dev packages), for the native runs
 [ -d "$HOME/.local/gmp-host/lib" ] && export LIBRARY_PATH=$HOME/.local/gmp-host/lib CPATH=$HOME/.local/gmp-host/include LD_LIBRARY_PATH=$HOME/.local/gmp-host/lib
+# cmake/ninja for the clang recipe, if installed by hand in ~/tools
+for d in "$HOME"/tools/cmake-*/bin "$HOME/tools/ninja"; do [ -d "$d" ] && PATH=$d:$PATH; done
 ocaml-emcc() { "$OE_ROOT/_build/default/bin/main.exe" "$@"; }
 # memory64 needs node >= 24 (emsdk ships one)
 NODE=$(ls -d "${EMSDK:-$HOME/tools/emsdk}"/node/*/bin 2>/dev/null | tail -1)/node
