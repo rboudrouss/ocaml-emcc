@@ -283,7 +283,7 @@ record_use_flags() {
     l=$(basename "$p" .provider)
     [ -f "$SYSROOT/meta/$l.link" ] && continue
     # shellcheck disable=SC2086
-    printf '%s\n' $flags | grep -vx -- "-l$l" | paste -sd' ' - > "$SYSROOT/meta/$l.link"
+    printf '%s\n' $flags | { grep -vx -- "-l$l" || true; } | paste -sd' ' - > "$SYSROOT/meta/$l.link"
   done
 }
 
