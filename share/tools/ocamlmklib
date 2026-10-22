@@ -17,6 +17,17 @@ set -e
 : "${OCAML_EMCC_HOST_BIN:?OCAML_EMCC_HOST_BIN not set}"
 EMAR=${EMAR:-emar}
 
+# Also first in dune's PATH, for rules running `ocamlmklib` themselves (yaml's
+# vendored libyaml): host objects (dune's host context) go to the host tool.
+for a in "$@"; do
+  case "$a" in
+    *.o)
+      if [ -f "$a" ] && [ "$(head -c 4 "$a" | od -An -tx1 | tr -d ' \n')" != 0061736d ]; then
+        exec "$OCAML_EMCC_HOST_BIN/ocamlmklib" "$@"
+      fi ;;
+  esac
+done
+
 name=a
 cname=
 custom=no

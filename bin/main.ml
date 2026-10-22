@@ -95,7 +95,13 @@ let dune_bin () =
   let d = Filename.concat (Env.host_bin ()) "dune" in
   if Sys.file_exists d then d else "dune"
 
-let dune_env () = ("OCAMLFIND_CONF=" ^ Env.sysroot_file "findlib.conf") :: Env.driver_env ()
+(* bin/path first in PATH: rules running `ocamlmklib` themselves get the wasm one *)
+let dune_env () =
+  let bin_path = Env.sysroot_file "bin/path" in
+  ("OCAMLFIND_CONF=" ^ Env.sysroot_file "findlib.conf")
+  :: List.map
+       (fun kv -> if Str_util.starts_with ~prefix:"PATH=" kv then "PATH=" ^ bin_path ^ ":" ^ String.sub kv 5 (String.length kv - 5) else kv)
+       (Env.driver_env ())
 
 let ctx_dir () = "_build/default." ^ !Env.target
 

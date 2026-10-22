@@ -414,7 +414,7 @@ include_recipe() {
 # Bumped whenever write_toolchain changes: the CLI then regenerates it in
 # existing sysroots (cheap: the runtime is not rebuilt).  Keep in sync with
 # Env.toolchain_version.
-TOOLCHAIN_VERSION=2
+TOOLCHAIN_VERSION=3
 
 write_toolchain() {
   local tool host_conf cc=$SYSROOT/bin/emcc-$TARGET
@@ -440,6 +440,10 @@ exec sh '$OCAML_EMCC_SHARE/tools/$tool' "\$@"
 EOF
     chmod +x "$SYSROOT/bin/$tool"
   done
+  # put first in dune's PATH: rules running `ocamlmklib` directly
+  mkdir -p "$SYSROOT/bin/path"
+  ln -sf ../ocamlmklib "$SYSROOT/bin/path/ocamlmklib"
+  ln -sf ../ocamlmklib "$SYSROOT/bin/path/ocamlmklib.opt"
   local findlib_path
   host_conf=$("$HOST_BIN/ocamlfind" printconf conf 2>/dev/null || echo "$PREFIX/lib/findlib.conf")
   findlib_path=$("$HOST_BIN/ocamlfind" printconf path 2>/dev/null | paste -sd: - || true)
@@ -557,7 +561,8 @@ run_dune_package() {
   fetch_opam_source "$pkg" "$work"
   cd "$work"
   log "building the C stubs of $pkg with dune -x $TARGET"
-  OCAMLFIND_CONF=$SYSROOT/findlib.conf "$HOST_BIN/dune" build -x "$TARGET" -p "$pkg" @install >&2
+  PATH=$SYSROOT/bin/path:$PATH OCAMLFIND_CONF=$SYSROOT/findlib.conf \
+    "$HOST_BIN/dune" build -x "$TARGET" -p "$pkg" @install >&2
   local a l found=no
   while IFS= read -r a; do
     l=$(basename "$a" .a | sed 's/^lib//')
