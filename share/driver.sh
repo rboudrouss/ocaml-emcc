@@ -515,6 +515,28 @@ EOF
   mkdir -p "$SYSROOT/bin/path"
   ln -sf ../ocamlmklib "$SYSROOT/bin/path/ocamlmklib"
   ln -sf ../ocamlmklib "$SYSROOT/bin/path/ocamlmklib.opt"
+  # and pkg-config (dune-configurator): the rules of the wasm context only
+  # see the wasm libraries of the sysroot, not the host's (lmdb would take
+  # the host's liblmdb instead of its own copy).  Those of the host context
+  # get the host's pkg-config.
+  local pc
+  for pc in pkg-config pkgconf; do
+    cat > "$SYSROOT/bin/path/$pc" <<EOF
+#!/bin/sh
+case \$PWD/ in
+  */default.$TARGET/*) # also in dune's sandboxes (_build/.sandbox/<hash>/)
+    PKG_CONFIG_LIBDIR='$SYSROOT/lib/pkgconfig' PKG_CONFIG_PATH=
+    export PKG_CONFIG_LIBDIR PKG_CONFIG_PATH ;;
+esac
+self='$SYSROOT/bin/path' IFS=:
+for d in \$PATH; do
+  [ "\$d" = "\$self" ] && continue
+  [ -x "\$d/$pc" ] && exec "\$d/$pc" "\$@"
+done
+echo "$pc: not found" >&2; exit 127
+EOF
+    chmod +x "$SYSROOT/bin/path/$pc"
+  done
   local findlib_path
   host_conf=$("$HOST_BIN/ocamlfind" printconf conf 2>/dev/null || echo "$PREFIX/lib/findlib.conf")
   findlib_path=$("$HOST_BIN/ocamlfind" printconf path 2>/dev/null | paste -sd: - || true)
