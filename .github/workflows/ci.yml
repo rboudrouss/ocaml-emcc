@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['*']
+  pull_request:
+  workflow_dispatch:
+
+env:
+  EMSDK_VERSION: 6.0.11
+
+jobs:
+  # what opam-repository's CI does: lint, build, install from the opam file
+  opam:
+    strategy:
+      fail-fast: false
+      matrix:
+        ocaml: ['4.14', '5.5']
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: ${{ matrix.ocaml }}
+      - run: opam install . --deps-only --with-test
+      - run: opam exec -- dune build @install
+      - name: ocaml-emcc.opam is up to date with dune-project
+        run: git diff --exit-code ocaml-emcc.opam
+      - run: opam lint ocaml-emcc.opam
+      - run: opam install . --with-test
+      - name: the installed CLI finds its share directory
+        run: opam exec -- ocaml-emcc env | grep -q "share.*/share/ocaml-emcc$"
+
+  # tests/run.sh: each test built natively and with ocaml-emcc, outputs compared
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        ocaml: ['4.14', '5.5']
+        target: [wasm32, wasm64]
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      # the ocaml recipe rebuilds the runtime from the compiler's sources
+      OPAMKEEPBUILDDIR: true
+      EMSDK: ${{ github.workspace }}/../emsdk
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: ${{ matrix.ocaml }}
+      # memory64 needs node >= 24, used when emsdk ships none
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - uses: actions/cache@v6
+        with:
+          path: ${{ env.EMSDK }}
+          key: emsdk-${{ runner.os }}-${{ env.EMSDK_VERSION }}
+      - name: Install emsdk
+        run: |
+          [ -d "$EMSDK" ] || git clone --depth 1 https://github.com/emscripten-core/emsdk.git "$EMSDK"
+          "$EMSDK/emsdk" install "$EMSDK_VERSION"
+          "$EMSDK/emsdk" activate "$EMSDK_VERSION"
+      - name: Install the packages of the tests
+        run: |
+          pkgs="ocamlfind zarith digestif yojson re cmdliner zlib apron sqlite3 bz2 pcre2 zstd gsl camlzip ctypes-foreign yaml"
+          # mlmpfr does not build with OCaml 5 (upstream issue)
+          case ${{ matrix.ocaml }} in 4.*) pkgs="$pkgs mlmpfr" ;; esac
+          opam install $pkgs
+      - run: opam exec -- dune build
+      - name: tests/run.sh --target ${{ matrix.target }}
+        run: opam exec -- bash -c 'SWITCH=$(opam var prefix) tests/run.sh --target ${{ matrix.target }}'
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: tests-${{ matrix.ocaml }}-${{ matrix.target }}
+          path: |
+            tests/*/out.log
+            tests/*/out/
