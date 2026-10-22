@@ -4,7 +4,6 @@
 (license MIT)
 (authors "rboudrouss <r.boudrouss@gmail.com>")
 (maintainers "rboudrouss <r.boudrouss@gmail.com>")
-; placeholder: adjust to the real repository before publishing
 (source (github rboudrouss/ocaml-emcc))
 
 (package
