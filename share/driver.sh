@@ -690,10 +690,14 @@ dune_stubs() {
   local sysflags
   sysflags=$(system_deps "$pkg")
   log "building the C stubs of $pkg with dune -x $TARGET"
+  # The kept _build may be another tool's (lmdb is built with ocamlbuild,
+  # whose _build/install is a file): dune gets its own then.
+  DUNE_BDIR=_build
+  if [ -e _build ] && ! [ -d _build/default ] && ! [ -e _build/.lock ]; then DUNE_BDIR=_build.dune; fi
   local a l found=no archives
   if PATH=$SYSROOT/bin/path:$PATH OCAMLFIND_CONF=$SYSROOT/findlib.conf \
-       "$HOST_BIN/dune" build -x "$TARGET" -p "$pkg" @install >&2; then
-    archives=$(find "_build/default.$TARGET" -name 'lib*.a' ! -path '*/.*')
+       "$HOST_BIN/dune" build --build-dir "$DUNE_BDIR" -x "$TARGET" -p "$pkg" @install >&2; then
+    archives=$(find "$DUNE_BDIR/default.$TARGET" -name 'lib*.a' ! -path '*/.*')
     # Archives made by a rule of the package with its own build system
     # (ocaml-lua: `make` in the vendored Lua) hold host objects.  Those of
     # stubs (with their dllX.so) are rebuilt, the others were intermediate.
@@ -727,8 +731,9 @@ dune_stubs() {
 
 # Fallback of run_dune_package, for what dune cannot cross-compile: the
 # (ctypes) stanza builds its generators as native executables of the target
-# context.  Each stub archive of the native build (_build/default, kept by
-# OPAMKEEPBUILDDIR, else built here) is rebuilt with emcc from the C files
+# context.  Each stub archive of the native build ($DUNE_BDIR/default, see
+# dune_stubs; kept by OPAMKEEPBUILDDIR, else built here) is rebuilt with emcc
+# from the C files
 # behind its members: hand-written stubs, vendored C, and the C that ctypes
 # generated (architecture independent).  The stanza's own C flags are not
 # known: only -I flags are given (the file's directory and its source
@@ -737,11 +742,11 @@ dune_stubs() {
 #   dune_native_stubs <pkg> [<libX.a>...]   (default: every archive)
 # Prints the wasm archives.
 dune_native_stubs() {
-  local pkg=$1 nat=_build/default ver a dir m c incs= dep objs only
+  local pkg=$1 nat=${DUNE_BDIR:-_build}/default ver a dir m c incs= dep objs only
   shift; only=" $* "
   if [ ! -d "$nat" ]; then
     log "no native build kept for $pkg: building it"
-    "$HOST_BIN/dune" build -p "$pkg" @install >&2 || die "$pkg: native build failed"
+    "$HOST_BIN/dune" build --build-dir "${DUNE_BDIR:-_build}" -p "$pkg" @install >&2 || die "$pkg: native build failed"
   fi
   ver=$(opam_pkg_version "$pkg")
   for dep in $(grep -oE '"[a-z0-9_-]+"' "$PREFIX/.opam-switch/packages/$pkg.$ver/opam" 2>/dev/null | tr -d '"' | sort -u); do
