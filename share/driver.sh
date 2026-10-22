@@ -680,9 +680,11 @@ dune_native_stubs() {
     dir=$(dirname "$a"); objs=()
     for m in $(ar t "$a"); do
       c=$dir/${m%.o}.c
+      # (include_subdirs): the sources are in subdirectories
+      [ -f "$c" ] || c=$(find "$dir" -name "${m%.o}.c" ! -path '*/.*' | head -1)
       [ -f "$c" ] || die "$pkg: no C source for $m (in $a)"
       # shellcheck disable=SC2086
-      stub_cc "$c" -I"$dir" -I"${dir#"$nat"/}" $incs >&2 || die "$pkg: cannot compile $c"
+      stub_cc "$c" -I"$(dirname "$c")" -I"$dir" -I"${dir#"$nat"/}" $incs >&2 || die "$pkg: cannot compile $c"
       objs+=("$PWD/${c%.c}.o")
     done
     ( cd _wasm_stubs && mklib "$(basename "$a" .a | sed 's/^lib//')" "${objs[@]}" )
