@@ -66,7 +66,10 @@ esac
 #  -sSUPPORT_LONGJMP=wasm  OCaml raises exceptions from C with longjmp; the
 #                        wasm EH implementation avoids routing every call made
 #                        by the interpreter through JS invoke_* trampolines.
-TARGET_FLAGS="$TARGET_FLAGS -fno-strict-overflow -sSUPPORT_LONGJMP=wasm"
+#  -fwasm-exceptions     C++ exceptions with the same wasm EH instructions
+#                        (minisat); emscripten's JS ones cannot be thrown
+#                        with SUPPORT_LONGJMP=wasm.  No effect on C code.
+TARGET_FLAGS="$TARGET_FLAGS -fno-strict-overflow -sSUPPORT_LONGJMP=wasm -fwasm-exceptions"
 OPT=${OCAML_EMCC_OPT:--O2}
 # BASE_CFLAGS is what the toolchain wrappers and the link step record; extra
 # flags are added on top at each use (recipes here, stubs in tools/ocamlc).

@@ -423,6 +423,8 @@ let run o =
       (* not allowed (implied) for a standalone .wasm *)
       (if Filename.check_suffix o.output ".wasm" then "" else "-sEXIT_RUNTIME=1");
       "-sERROR_ON_UNDEFINED_SYMBOLS=1";
+      (* C++ exceptions (sysroots set up before it was a target flag) *)
+      "-fwasm-exceptions";
     ]
   in
   let defaults = List.filter (( <> ) "") defaults in
