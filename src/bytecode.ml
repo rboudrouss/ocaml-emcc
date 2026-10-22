@@ -52,7 +52,13 @@ let section t name =
 let split_nul data = String.split_on_char '\000' data |> List.filter (( <> ) "")
 
 let primitives t = Option.fold ~none:[] ~some:split_nul (section t "PRIM")
-let dlls t = Option.fold ~none:[] ~some:split_nul (section t "DLLS")
+(* Since 5.5 (exec magic X037), each DLL name starts with '-' (the runtime
+   appends -<host>-<runtime id> to it) or ':' (used as is). *)
+let dlls t =
+  let names = Option.fold ~none:[] ~some:split_nul (section t "DLLS") in
+  match int_of_string_opt (String.sub t.magic 9 3) with
+  | Some n when n >= 37 -> List.map (fun d -> String.sub d 1 (String.length d - 1)) names
+  | _ -> names
 let dll_paths t = Option.fold ~none:[] ~some:split_nul (section t "DLPT")
 
 (* Write a copy without the given sections.  Used to drop DLLS/DLPT: the
