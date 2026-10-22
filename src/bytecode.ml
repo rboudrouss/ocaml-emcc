@@ -176,9 +176,11 @@ let call_arities t =
    their fields are the following items, so no structure has to be kept. *)
 type scan = Found of int64 list | Unknown of string
 
-let large_literals t =
+(* Walk the marshalled DATA section, calling [int64] and [string] on those
+   items.  Error: what stopped the walk. *)
+let walk_data t ~int64 ~string =
   match section t "DATA" with
-  | None -> Found []
+  | None -> Ok ()
   | Some s ->
       let len = String.length s in
       let u8 i = Char.code s.[i] in
@@ -190,24 +192,24 @@ let large_literals t =
         else if magic = 0x8495A6BFl then (32, 32 + be64 8)
         else (-1, 0)
       in
-      if start < 0 then Unknown "unknown marshal format in DATA"
+      if start < 0 then Error "unknown marshal format in DATA"
       else
-        let found = ref [] in
         let rec cstring i = if s.[i] = '\000' then i + 1 else cstring (i + 1) in
+        let str i n = string (String.sub s i n); i + n in
         let rec go i =
-          if i >= stop || i >= len then Found (List.rev !found)
+          if i >= stop || i >= len then Ok ()
           else
             let c = u8 i in
             if c >= 0x80 then go (i + 1) (* small block *)
             else if c >= 0x40 then go (i + 1) (* small int *)
-            else if c >= 0x20 then go (i + 1 + (c land 0x1F)) (* small string *)
+            else if c >= 0x20 then go (str (i + 1) (c land 0x1F)) (* small string *)
             else
               match c with
               | 0x00 -> go (i + 2) (* INT8 *)
               | 0x01 -> go (i + 3) (* INT16 *)
               | 0x02 -> go (i + 5) (* INT32 *)
               | 0x03 ->
-                  found := Compat.get_int64_be s (i + 1) :: !found;
+                  int64 (Compat.get_int64_be s (i + 1));
                   go (i + 9) (* INT64 *)
               | 0x04 -> go (i + 2) (* SHARED8 *)
               | 0x05 -> go (i + 3) (* SHARED16 *)
@@ -215,9 +217,9 @@ let large_literals t =
               | 0x14 -> go (i + 9) (* SHARED64 *)
               | 0x08 -> go (i + 5) (* BLOCK32 *)
               | 0x13 -> go (i + 9) (* BLOCK64 *)
-              | 0x09 -> go (i + 2 + u8 (i + 1)) (* STRING8 *)
-              | 0x0A -> go (i + 5 + be32 (i + 1)) (* STRING32 *)
-              | 0x15 -> go (i + 9 + be64 (i + 1)) (* STRING64 *)
+              | 0x09 -> go (str (i + 2) (u8 (i + 1))) (* STRING8 *)
+              | 0x0A -> go (str (i + 5) (be32 (i + 1))) (* STRING32 *)
+              | 0x15 -> go (str (i + 9) (be64 (i + 1))) (* STRING64 *)
               | 0x0B | 0x0C -> go (i + 9) (* DOUBLE *)
               | 0x0D | 0x0E -> go (i + 2 + (8 * u8 (i + 1))) (* DOUBLE_ARRAY8 *)
               | 0x0F | 0x07 -> go (i + 5 + (8 * be32 (i + 1))) (* DOUBLE_ARRAY32 *)
@@ -235,9 +237,22 @@ let large_literals t =
                   | "_i" -> go (j + 4)
                   | "_j" -> go (j + 8)
                   | "_n" -> go (j + 9)
-                  | id -> Unknown ("custom block " ^ id ^ " in DATA"))
-              | c -> Unknown (Printf.sprintf "marshal code 0x%02x in DATA" c)
+                  | id -> Error ("custom block " ^ id ^ " in DATA"))
+              | c -> Error (Printf.sprintf "marshal code 0x%02x in DATA" c)
         in
-        (try go start with Invalid_argument _ -> Unknown "truncated DATA section")
+        (try go start with Invalid_argument _ -> Error "truncated DATA section")
+
+let large_literals t =
+  let found = ref [] in
+  match walk_data t ~int64:(fun n -> found := n :: !found) ~string:ignore with
+  | Ok () -> Found (List.rev !found)
+  | Error why -> Unknown why
+
+(* The string literals of the program (those read before an unknown item, if
+   any). *)
+let strings t =
+  let l = ref [] in
+  ignore (walk_data t ~int64:ignore ~string:(fun s -> l := s :: !l));
+  List.rev !l
 
 let fits_31 n = Int64.compare n (-0x40000000L) >= 0 && Int64.compare n 0x3FFFFFFFL <= 0
