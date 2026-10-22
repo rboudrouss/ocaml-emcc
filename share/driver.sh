@@ -179,6 +179,9 @@ host_version() {
 #   OPAM_SOURCES   opam package vendoring the upstream sources (optional)
 #   LINK           flags a user of the library needs (default: -l<name>);
 #                  those of the DEPENDS recipes are appended
+#   releases()     optional function replacing RELEASES: prints a
+#                  "<version> <tarball url>" line per release, oldest first
+#                  (git_tag_releases helps for releases named after git tags)
 # Choice: the sources of OPAM_SOURCES if the switch has it installed (that is
 # what the project links natively).  Otherwise the newest upstream release
 # compatible with the host's version (any version without a host library),
@@ -192,6 +195,16 @@ release_files() {
     | sed -E "s/^$prefix-([0-9.]*[0-9])\.tar\.(xz|bz2|gz)$/\1 \2 &/" \
     | sed -e 's/ xz / 1 /' -e 's/ bz2 / 2 /' -e 's/ gz / 3 /' \
     | sort -k1,1V -k2,2n -u | awk '$1 != last { print $1, $3; last = $1 }'
+}
+
+# git_tag_releases <repo> <tag prefix> <url template>: "<version> <url>" for
+# each tag <prefix><version> of <repo> (final versions only), {v} in the
+# template standing for the version.
+git_tag_releases() {
+  local repo=$1 prefix=$2 template=$3 v
+  git ls-remote --tags --refs "$repo" 2>/dev/null | sed -n "s|.*refs/tags/$prefix||p" \
+    | grep -E '^[0-9]+(\.[0-9]+)+$' | sort -V \
+    | while read -r v; do echo "$v ${template//\{v\}/$v}"; done
 }
 
 # Keep the versions (first word of each line) compatible with <want>.
@@ -229,9 +242,11 @@ fetch_system() {
     esac
     log "host $name is $hv: using the newest ${want:+$want.x }release"
   else
-    log "no host $name found (pkg-config, $HEADER): using the newest release"
+    log "no host $name found (pkg-config${HEADER:+, $HEADER}): using the newest release"
   fi
-  if [ -n "$RELEASES" ]; then
+  if declare -F releases >/dev/null; then
+    read -r v file < <(releases | version_match "$want" | tail -1) || true
+  elif [ -n "$RELEASES" ]; then
     read -r v file < <(release_files "$prefix" "$RELEASES" | version_match "$want" | tail -1) || true
   fi
   if [ -n "$OPAM_SOURCES" ]; then
@@ -245,7 +260,8 @@ fetch_system() {
   fi
   [ -n "$v" ] || die "$name: no release found${want:+ for version $want} (${RELEASES:-no RELEASES})"
   log "$prefix $v: not in the opam repository, downloading it (no checksum to verify)"
-  SHA256= fetch_url "${RELEASES%/}/$file" "$dest"
+  case $file in *://*) ;; *) file=${RELEASES%/}/$file ;; esac
+  SHA256= fetch_url "$file" "$dest"
   SOURCE_VERSION=$v
 }
 
@@ -515,7 +531,7 @@ run_recipe() {
     SOURCE=none DEPENDS= SHA256= REF=
     HEADER= VERSION_MACROS= PKGCONFIG= RELEASES= TARBALL= COMPAT= OPAM_SOURCES= LINK=
     RECIPE_DIR=$dir RECIPE_NAME=$name BASE_RECIPE_DIR=$dir
-    unset -f pre_build fetch
+    unset -f pre_build fetch releases
     # shellcheck disable=SC1091
     . "$dir/recipe.sh"
     local d
