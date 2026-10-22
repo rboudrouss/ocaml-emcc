@@ -36,6 +36,7 @@ lwt       | lw       |            | lwt                         | wasm32 wasm64 
 cryptokit | ck       |            | cryptokit                   | wasm32 wasm64 |
 minisat   | ms       |            | minisat                     | wasm32 wasm64 |
 lua       | lu       |            | ocaml-lua                   | wasm32 wasm64 |
+stb       | sb       |            | stb_image                   | wasm32 wasm64 |
 '
 # hello is wasm64 only on purpose: 63-bit literals and arithmetic.  yaml too:
 # its ctypes structs were laid out for the host (LP64) when the bytecode was
