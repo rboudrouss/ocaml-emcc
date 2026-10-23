@@ -190,6 +190,12 @@ Most programs need no configuration:
   `libX.a` exists or can be built. Host flags (`-L/usr/lib`, `-Wl,-rpath`)
   and the libraries emcc provides (`-lm`, `-lpthread`...) are dropped.
   `-lstdc++` links the program as C++.
+- **Packages configured on the host**: dune rules that run `pkg-config`
+  or `llvm-config` get the sysroot's answers in the wasm context, and the
+  recipes of the libraries a package names (its `conf-*` dependencies, the
+  `-lX` of its `.cma` files) are built before its stubs. A C parser
+  installed with opam against the host's LLVM gets its stubs rebuilt
+  against the `clang` recipe this way.
 
 A recipe is built once per switch and target. It is not rebuilt when it
 changes (ocaml-emcc says so): `ocaml-emcc install --force NAME` rebuilds
@@ -252,6 +258,15 @@ resource headers. It also installs in `$SYSROOT/bin`:
   where the program will find the resource headers at run time
   (`CLANG_RESOURCE_DIR`, default `/usr/lib/clang/<ver>`, overridden by
   `$OCAML_EMCC_CLANG_RESOURCE_DIR`): preload them there.
+
+A `-lclang-cpp`, `-lclangFrontend`... or `-lLLVM-<major>` in a `.cma`
+builds the recipe, and `-lclang-cpp` links the LLVM libraries as well (the
+host's `-lLLVM-<major>` is a shared library the recipe does not make). In
+the wasm context of `dune -x`, `llvm-config` is the recipe's, so packages
+whose dune rules run it compile their stubs against the wasm LLVM. Values
+a package's `./configure` wrote into its sources stay the host's, such as
+the output of the host's `clang -print-resource-dir`: preload the resource
+headers there.
 
 The LLVM version is `LLVM_VERSION` if a project recipe sets it (`9.0.1`, or
 a major `9`), else the major version of the host's `llvm-config`, else the
@@ -349,6 +364,8 @@ libraries.
 - `DEPENDS=`: other recipes to build first
 - `LINK=`: makes the recipe a C library, built for the `-lX` it provides
   (implied by `SOURCE=system:`)
+- `LIB_PATTERNS=`: globs of more library names the recipe is built for
+  (`clang`: `'clang* LLVM*'`)
 - `USE_CFLAGS=`: C flags its users' stubs need besides the sysroot's
   include directory (`sdl2`: `-I$SYSROOT/include/SDL2`)
 - functions: `build` (required), `pre_build`, `releases` (see system
@@ -454,9 +471,9 @@ link options: -L DIR, -l LIB, --preload, --node-fs, -O FLAG, --stack-size S,
    An `ocamlmklib` replacement builds the `lib*.a` with `emar`, and
    `(modes exe)` executables come out as plain bytecode
    (`-output-complete-exe` is intercepted). Package rules that call
-   `ocamlmklib` or `pkg-config` themselves get the wasm versions, which come
-   first in dune's `PATH`. The wasm `ocamlmklib` hands host objects to the
-   host tool.
+   `ocamlmklib`, `pkg-config` or `llvm-config` themselves get the wasm
+   versions, which come first in dune's `PATH`. The wasm `ocamlmklib`
+   hands host objects to the host tool.
 4. **Dependencies**: the bytecode's `DLLS` section names the stub libraries
    (`dllzarith`...), and each `dll<x>` maps to a wasm `lib<x>.a`. A missing
    one is built from the opam package that installed `dll<x>.so`, by the

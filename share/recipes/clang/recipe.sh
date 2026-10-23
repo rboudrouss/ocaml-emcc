@@ -25,6 +25,10 @@
 # libraries take a while (LLVM 9: about 15 minutes on 4 cores).
 
 SOURCE=fetch
+# a -lclang-cpp, -lclangFrontend, -lLLVM-19... of a package or program
+# builds this recipe; -lclang-cpp brings the LLVM libraries along (the host
+# names them -lLLVM-<major>, a shared library)
+LIB_PATTERNS='clang* LLVM*'
 LLVM_VERSION=${LLVM_VERSION:-}
 CLANG_LIBS=${CLANG_LIBS:-"clangTooling clangFrontend clangSerialization clangDriver clangParse clangSema clangAnalysis clangEdit clangAST clangLex clangBasic"}
 LLVM_RELEASES=${LLVM_RELEASES:-https://github.com/llvm/llvm-project/releases/download}
@@ -171,6 +175,9 @@ build() {
 
   # libraries for `llvm-config --libs`: the LLVM ones that were built
   for a in build/lib/libLLVM*.a; do a=$(basename "$a" .a); libs="$libs -l${a#lib}"; done
+  link_flags clang-cpp "${libs# }"
+  # what a package using the recipe links (see system_deps)
+  LINK="-lclang-cpp$libs"
   cat > "$SYSROOT/bin/llvm-config" <<EOF
 #!/bin/sh
 # llvm-config of LLVM $v built for $triple (ocaml-emcc clang recipe)

@@ -499,7 +499,7 @@ include_recipe() {
 # Bumped whenever write_toolchain changes: the CLI then regenerates it in
 # existing sysroots (cheap: the runtime is not rebuilt).  Keep in sync with
 # Env.toolchain_version.
-TOOLCHAIN_VERSION=6
+TOOLCHAIN_VERSION=7
 
 write_toolchain() {
   local tool host_conf cc=$SYSROOT/bin/emcc-$TARGET
@@ -573,6 +573,31 @@ echo "$pc: not found" >&2; exit 127
 EOF
     chmod +x "$SYSROOT/bin/path/$pc"
   done
+  # and llvm-config, for the same reason: dune rules running it (a package
+  # configured on the host) get the wasm LLVM of the clang recipe in the
+  # wasm context.  clang too, but only for what the recipe's clang
+  # answers (-print-resource-dir, --version): it compiles nothing.
+  local tool_name
+  for tool_name in llvm-config clang; do
+    cat > "$SYSROOT/bin/path/$tool_name" <<EOF
+#!/bin/sh
+case \$PWD/ in
+  */default.$TARGET/*)
+    if [ -x '$SYSROOT/bin/$tool_name' ]; then
+      case $tool_name:\$1 in llvm-config:*|clang:-print-resource-dir|clang:--version) exec '$SYSROOT/bin/$tool_name' "\$@" ;; esac
+    elif [ $tool_name = llvm-config ]; then
+      echo "llvm-config: no wasm LLVM for $TARGET yet, build it with: ocaml-emcc install clang" >&2; exit 1
+    fi ;;
+esac
+self='$SYSROOT/bin/path' IFS=:
+for d in \$PATH; do
+  [ "\$d" = "\$self" ] && continue
+  [ -x "\$d/$tool_name" ] && exec "\$d/$tool_name" "\$@"
+done
+echo "$tool_name: not found" >&2; exit 127
+EOF
+    chmod +x "$SYSROOT/bin/path/$tool_name"
+  done
   local findlib_path
   host_conf=$("$HOST_BIN/ocamlfind" printconf conf 2>/dev/null || echo "$PREFIX/lib/findlib.conf")
   findlib_path=$("$HOST_BIN/ocamlfind" printconf path 2>/dev/null | paste -sd: - || true)
@@ -645,7 +670,7 @@ run_recipe() {
   dir=$(find_recipe "$name") || die "no recipe named '$name'"
   (
     SOURCE=none DEPENDS= SHA256= REF=
-    HEADER= VERSION_MACROS= PKGCONFIG= RELEASES= TARBALL= COMPAT= OPAM_SOURCES= LINK= USE_CFLAGS=
+    HEADER= VERSION_MACROS= PKGCONFIG= RELEASES= TARBALL= COMPAT= OPAM_SOURCES= LINK= LIB_PATTERNS= USE_CFLAGS=
     RECIPE_DIR=$dir RECIPE_NAME=$name BASE_RECIPE_DIR=$dir
     unset -f pre_build fetch releases
     # shellcheck disable=SC1091
@@ -860,17 +885,24 @@ run_obtain() {
   fi
 }
 
-# lib_recipe <X>: the recipe of a C library (system:, or with a LINK) that
-# builds libX.a (for a -lX of the program): named X or libX (whatever the
-# case: sdl2 for -lSDL2), or whose LINK starts with -lX (zlib: -lz).
+# lib_recipe <X>: the recipe of a C library (system:, or with a LINK or
+# LIB_PATTERNS) that builds libX.a (for a -lX of the program): named X or
+# libX (whatever the case: sdl2 for -lSDL2), whose LINK starts with -lX
+# (zlib: -lz), or with a LIB_PATTERNS glob matching X (clang: -lclang-cpp,
+# -lLLVM-19).
 lib_recipe() {
-  local IFS=: d r link lower=${1,,}
+  local IFS=: d r link pat pats lower=${1,,}
   for d in $RECIPES_PATH; do
     for r in "$d"/*/recipe.sh; do
-      [ -f "$r" ] && grep -qE '^(SOURCE=system:|LINK=)' "$r" || continue
+      [ -f "$r" ] && grep -qE '^(SOURCE=system:|LINK=|LIB_PATTERNS=)' "$r" || continue
       case $(basename "$(dirname "$r")") in "$lower"|"lib$lower") basename "$(dirname "$r")"; return 0 ;; esac
       link=$(sed -n "s/^LINK=[\"']\{0,1\}\([^ \"']*\).*/\1/p" "$r")
       [ "$link" = "-l$1" ] && { basename "$(dirname "$r")"; return 0; }
+      IFS=' ' read -ra pats <<< "$(sed -n "s/^LIB_PATTERNS=[\"']\{0,1\}\([^\"']*\).*/\1/p" "$r")"
+      for pat in "${pats[@]}"; do
+        # shellcheck disable=SC2254
+        case $1 in $pat) basename "$(dirname "$r")"; return 0 ;; esac
+      done
     done
   done
   return 1

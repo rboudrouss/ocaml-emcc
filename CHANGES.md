@@ -1,5 +1,13 @@
 ## unreleased
 
+- Installed packages configured against a host library: in the wasm context
+  of `dune -x`, `llvm-config` is the `clang` recipe's (as `pkg-config`
+  already was the sysroot's), and `-lclang-cpp`, `-lclangX`,
+  `-lLLVM-<major>` build the `clang` recipe, which links the LLVM libraries
+  with `-lclang-cpp`. A package binding clang's C++ API, installed with
+  opam against the host's LLVM, builds without configuration; its stubs
+  used to be compiled against the host's LLVM headers. Recipes declare such names with `LIB_PATTERNS=`. A `clang`
+  recipe built before needs `ocaml-emcc install --force clang`.
 - The `mpfr` recipe installs `mpfr.pc`: `pkg-config mpfr` failed in the
   wasm context, and packages asking it fell back to compiling their C files
   without their own flags.
