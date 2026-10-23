@@ -170,6 +170,6 @@ let manifest key =
 
 (* Version of the wrappers/findlib files written by `driver.sh toolchain`
    (TOOLCHAIN_VERSION there). *)
-let toolchain_version = "5"
+let toolchain_version = "6"
 
 let manifest_flags key = Option.fold ~none:[] ~some:Str_util.words (manifest key)

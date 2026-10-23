@@ -499,7 +499,7 @@ include_recipe() {
 # Bumped whenever write_toolchain changes: the CLI then regenerates it in
 # existing sysroots (cheap: the runtime is not rebuilt).  Keep in sync with
 # Env.toolchain_version.
-TOOLCHAIN_VERSION=5
+TOOLCHAIN_VERSION=6
 
 write_toolchain() {
   local tool host_conf cc=$SYSROOT/bin/emcc-$TARGET
@@ -512,15 +512,19 @@ write_toolchain() {
   # thread-local variable, which the runtime's is not (see the ocaml recipe).
   # The headers and libraries of the sysroot come last (after the package's
   # own): dune-configurator's C tests only get the C flags, not -I.
+  # The C standard is left out for C++ (snappy's stubs: -x c++), which
+  # clang refuses with -std=gnu23.
   cat > "$cc" <<EOF
 #!/bin/sh
-link=-L'$SYSROOT/lib'
+link=-L'$SYSROOT/lib' std='$STUB_STD' prev=
 for a; do
   shift
-  case \$a in -c|-E|-S|-M|-MM) link= ;; esac
+  case \$a in -c|-E|-S|-M|-MM) link= ;; -xc++*|*.cc|*.cpp|*.cxx|*.C) std= ;; esac
+  case \$prev\$a in -xc++*) std= ;; esac
+  prev=\$a
   [ "\$a" = -pthread ] || set -- "\$@" "\$a"
 done
-exec '$EMCC' $TARGET_FLAGS $STUB_STD -idirafter '$SYSROOT/include' \$link "\$@"
+exec '$EMCC' $TARGET_FLAGS \$std -idirafter '$SYSROOT/include' \$link "\$@"
 EOF
   chmod +x "$cc"
   for tool in ocamlc ocamlmklib; do
