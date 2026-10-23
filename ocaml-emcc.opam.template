@@ -1,3 +1,4 @@
 post-messages: [
   "ocaml-emcc needs the emscripten SDK, with emcc in PATH: https://emscripten.org/docs/getting_started/downloads.html. It rebuilds C code from the sources opam used: install packages with --keep-build-dir (or OPAMKEEPBUILDDIR=true), else they are fetched again with opam source."
 ]
+x-maintenance-intent: ["(latest)"]
