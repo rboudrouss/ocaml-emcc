@@ -16,7 +16,7 @@ let () =
   Bigstringaf.blit b ~src_off:0 b2 ~dst_off:0 ~len:11;
   Bigstringaf.blit_from_string "HELLO" ~src_off:0 b2 ~dst_off:0 ~len:5;
   Printf.printf "bigstringaf: %s %d %d %d\n" (Bigstringaf.to_string b2)
-    (Bigstringaf.memcmp b 0 b2 0 11) (Bigstringaf.memcmp_string b 6 "world" 0 5)
+    (compare (Bigstringaf.memcmp b 0 b2 0 11) 0) (compare (Bigstringaf.memcmp_string b 6 "world" 0 5) 0)
     (Bigstringaf.memchr b 0 'w' 11);
   Printf.printf "bigstringaf get: %x %x %lx %Lx\n" (Bigstringaf.get_int16_le b 0) (Bigstringaf.get_int16_be b 0)
     (Bigstringaf.get_int32_be b 0) (Bigstringaf.get_int64_le b 0);
