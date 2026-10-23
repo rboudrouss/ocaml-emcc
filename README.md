@@ -578,12 +578,6 @@ apply (mlmpfr 4.2.1 does not build with OCaml 5). The 5.4.1 tests from
 bindings need. The zarith test also ran unmodified in Chrome 154, on both
 targets.
 
-Beyond the tests, Mopsa (the whole analyzer, its C parser linked with
-clang 9's libraries) builds with the `clang` and `apron` recipes and runs
-under node with the same results as the native build on its C, Python and
-universal unit tests (wasm32, OCaml 4.14.2, see the `ocaml-emcc` branch of
-mopsa-analyzer-32-bit, `emcc/README.md`).
-
 ## Next steps
 
 - Domains: a `--threads` variant (runtime, stubs and link with `-pthread`)
