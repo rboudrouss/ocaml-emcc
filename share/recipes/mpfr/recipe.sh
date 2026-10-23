@@ -14,5 +14,7 @@ build() {
   log "make"
   emmake make -j"$NPROC" -C src > make.log 2>&1 || { tail -30 make.log; die "make failed"; }
   make -C src install > install.log 2>&1
+  # mpfr.pc is installed from the top directory, which is not built
+  install_pc mpfr "$SOURCE_VERSION" "-lmpfr -lgmp"
   provides mpfr mpfr
 }

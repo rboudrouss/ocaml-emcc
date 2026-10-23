@@ -1,3 +1,9 @@
+## unreleased
+
+- The `mpfr` recipe installs `mpfr.pc`: `pkg-config mpfr` failed in the
+  wasm context, and packages asking it fell back to compiling their C files
+  without their own flags.
+
 ## 0.2.0
 
 Tried on FFI-heavy packages (mirage-crypto, lwt, cryptokit, minisat,
