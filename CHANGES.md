@@ -1,4 +1,4 @@
-## unreleased
+## 0.2.1
 
 - Installed packages configured against a host library: in the wasm context
   of `dune -x`, `llvm-config` is the `clang` recipe's (as `pkg-config`
