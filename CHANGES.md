@@ -11,6 +11,8 @@
 - The `mpfr` recipe installs `mpfr.pc`: `pkg-config mpfr` failed in the
   wasm context, and packages asking it fell back to compiling their C files
   without their own flags.
+- `tests/depgraph`: an installed package (mpfr through `pkg-config`, zarith)
+  whose whole dependency graph is built from the program.
 
 ## 0.2.0
 

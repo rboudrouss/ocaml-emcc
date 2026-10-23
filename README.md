@@ -195,7 +195,9 @@ Most programs need no configuration:
   recipes of the libraries a package names (its `conf-*` dependencies, the
   `-lX` of its `.cma` files) are built before its stubs. A C parser
   installed with opam against the host's LLVM gets its stubs rebuilt
-  against the `clang` recipe this way.
+  against the `clang` recipe this way. `tests/depgraph` is a smaller case:
+  an installed package with mpfr stubs (flags from `pkg-config`) and
+  zarith, built from a program that only names that package.
 
 A recipe is built once per switch and target. It is not rebuilt when it
 changes (ocaml-emcc says so): `ocaml-emcc install --force NAME` rebuilds
@@ -586,6 +588,7 @@ targets.
 | `secp`      | secp256k1-internal (vendored libsecp256k1, gmp) | – | – | – | – | ✅ | – |
 | `sdl`       | tsdl + sdl2: timer, events, surfaces, RWops | – | – | – | – | ✅ | – |
 | `binio`     | binary data on stdout and stderr under node | – | – | – | – | ✅ | – |
+| `depgraph`  | an installed package (`opam install ./tests/depgraph/pkg`): stubs on mpfr with flags from `pkg-config`, zarith; gmp, mpfr and both stub libraries built from the program | – | – | – | ✅ | – | – |
 
 Each test passes on both targets, except `hello` (on purpose: it checks
 63-bit ints), `yaml` and `sdl` (ctypes structs), which are wasm64 only. "–"

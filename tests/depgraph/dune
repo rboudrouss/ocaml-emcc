@@ -1,0 +1,2 @@
+; pkg/ is the opam package depgraph, installed in the switch
+(dirs bin)

@@ -1,0 +1,7 @@
+# A test package of ocaml-emcc (tests/depgraph): opam install ./tests/depgraph/pkg
+opam-version: "2.0"
+synopsis: "Square roots with mpfr (ocaml-emcc test)"
+maintainer: "rboudrouss <r.boudrouss@gmail.com>"
+depends: ["ocaml" "dune" {>= "3.0"} "zarith"]
+depexts: [["libmpfr-dev" "pkg-config"] {os-family = "debian"}]
+build: ["dune" "build" "-p" name "-j" jobs]

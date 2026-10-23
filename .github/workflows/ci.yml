@@ -73,7 +73,8 @@ jobs:
           sudo apt-get install -y libargon2-dev
           # mlmpfr does not build with OCaml 5 (upstream issue)
           case ${{ matrix.ocaml }} in 4.*) pkgs="$pkgs mlmpfr" ;; esac
-          opam install $pkgs
+          # the package of tests/depgraph (mpfr through pkg-config, zarith)
+          opam install $pkgs ./tests/depgraph/pkg
       - run: opam exec -- dune build
       - name: tests/run.sh --target ${{ matrix.target }}
         run: opam exec -- bash -c 'SWITCH=$(opam var prefix) tests/run.sh --target ${{ matrix.target }}'

@@ -1,0 +1,25 @@
+; No conf-mpfr: mpfr is only known from the flags pkg-config gives (-lmpfr
+; -lgmp), recorded in the .cma, as a C parser gets clang's from
+; llvm-config.  In ocaml-emcc's wasm context, pkg-config answers for the
+; sysroot, so the mpfr recipe must be built before these rules run.
+; -DDEPGRAPH_DUNE: the stubs do not compile without these flags, as when
+; ocaml-emcc falls back to the C files of the native build.
+(library
+ (name depgraph)
+ (public_name depgraph)
+ (libraries zarith)
+ (foreign_stubs
+  (language c)
+  (names depgraph_stubs)
+  (flags :standard -DDEPGRAPH_DUNE (:include cflags)))
+ (c_library_flags (:include libs)))
+
+(rule
+ (targets cflags)
+ (action (with-stdout-to %{targets}
+          (progn (echo "(") (run pkg-config --cflags mpfr) (echo ")")))))
+
+(rule
+ (targets libs)
+ (action (with-stdout-to %{targets}
+          (progn (echo "(") (run pkg-config --libs mpfr) (echo ")")))))

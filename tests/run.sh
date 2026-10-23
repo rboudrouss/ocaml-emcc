@@ -48,10 +48,12 @@ fftw3     | ff       |            | fftw3                       | wasm32 wasm64 
 secp      | sc       |            | secp256k1-internal          | wasm32 wasm64 |
 sdl       | sd       |            | tsdl                        | wasm64        |
 binio     | bi       |            |                             | wasm32 wasm64 |
+depgraph  | bin/main |            | depgraph                    | wasm32 wasm64 |
 '
 # hello is wasm64 only on purpose: 63-bit literals and arithmetic.  yaml and
 # sdl too: their ctypes structs are laid out with the sizes of the host
 # (LP64) when the bytecode was built, which only wasm64 matches.
+# depgraph needs its package installed: opam install ./tests/depgraph/pkg
 
 has_pkg() {
   case $1 in
