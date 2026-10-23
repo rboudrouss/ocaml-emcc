@@ -1,4 +1,4 @@
-## unreleased
+## 0.2.0
 
 Tried on FFI-heavy packages (mirage-crypto, lwt, cryptokit, minisat,
 ocaml-lua, stb_image, extunix, lz4, snappy, argon2, ocaml-expat, lmdb, glpk,
