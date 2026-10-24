@@ -438,8 +438,9 @@ libraries.
   `fetch_opam_version PKG VER DEST`, `host_version PCNAME HEADER MACRO...`,
   `git_tag_releases REPO TAG_PREFIX URL_TEMPLATE`, `log`, `die`
 - variables: `$EMCC`, `$CFLAGS`, `$LDFLAGS`, `$SYSROOT`, `$OCAML_INC`,
-  `$OCAML_VERSION`, `$TARGET`, `$RECIPE_DIR`, `$NPROC`, `$SHARED`
-  (target-independent: host tools, big source archives).
+  `$OCAML_VERSION`, `$TARGET`, `$RECIPE_DIR`, `$BASE_RECIPE_DIR` (that of
+  the recipe read by `include_recipe`, where its patches are), `$NPROC`,
+  `$SHARED` (target-independent: host tools, big source archives).
 
 ## Differences from native
 
