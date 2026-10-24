@@ -1,0 +1,18 @@
+No -fexceptions.
+
+configure appends -fexceptions (JS exceptions for emcc), which emcc refuses
+next to -sSUPPORT_LONGJMP=wasm: every later check would fail (sizeof(long
+double) = 0, hence long double = double and wrong doubles).  libffi is C,
+it needs none.
+
+--- a/configure
++++ b/configure
+@@ -18699,7 +18699,7 @@
+ fi
+ 
+ if test "x$GCC" = "xyes"; then
+-  CFLAGS="$CFLAGS -fexceptions"
++  : # ocaml-emcc: no -fexceptions
+ fi
+ 
+ cat > local.exp <<EOF

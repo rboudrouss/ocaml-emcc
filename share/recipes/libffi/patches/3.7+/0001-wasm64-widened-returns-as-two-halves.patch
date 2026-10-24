@@ -1,0 +1,24 @@
+wasm64: store the widened integral returns as two 32-bit halves.
+
+An integral return narrower than 64 bits is widened to ffi_arg with
+HEAPU64[rvalue >> 3], which rounds the address down to 8 bytes.  ctypes
+gives a return buffer aligned for the return type (an int after an int
+argument: offset 4), and then reads 0 (abs (-7) = 0).
+
+--- a/src/wasm/ffi.c
++++ b/src/wasm/ffi.c
+@@ -123,9 +123,12 @@
+ // the unsigned variant zero-extends a possibly-negative i32 Number, while
+ // the BigUint64Array store wraps the signed variant modulo 2^64, which is
+ // sign extension.
++// ocaml-emcc: DEREF_U64 rounds rvalue down to 8 bytes, which it may not be
++// aligned to: written as two 32-bit halves.
+ #define STORE_ARG_WIDENED_UNSIGNED(rvalue, x) \
+-  (DEREF_U64(rvalue, 0) = BigInt(x) & BigInt(4294967295))
+-#define STORE_ARG_WIDENED_SIGNED(rvalue, x) (DEREF_U64(rvalue, 0) = BigInt(x))
++  (DEREF_U32(rvalue, 0) = (x), DEREF_U32(rvalue, 1) = 0)
++#define STORE_ARG_WIDENED_SIGNED(rvalue, x) \
++  (DEREF_U32(rvalue, 0) = (x), DEREF_U32(rvalue, 1) = ((x) < 0 ? -1 : 0))
+ 
+ CHECK_FIELD_OFFSET(ffi_cif, abi, 0);
+ CHECK_FIELD_OFFSET(ffi_cif, nargs, 4);
