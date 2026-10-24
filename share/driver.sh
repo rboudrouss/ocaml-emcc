@@ -731,7 +731,7 @@ run_recipe() {
 # Rebuild a dune package's foreign stubs with `dune build -x wasm32`.
 run_dune_package() {
   local pkg=$1 stamp=$SYSROOT/stamps/dune-$1 work=$SYSROOT/build/dune-$1
-  if [ -f "$stamp" ] && [ "$FORCE" = no ]; then return 0; fi
+  if [ "$FORCE" = no ] && [ -f "$stamp" ] && [ "$(cut -d' ' -f1 "$stamp")" = "$(opam_pkg_version "$pkg")" ]; then return 0; fi
   rm -rf "$work"
   fetch_opam_source "$pkg" "$work"
   ( cd "$work" && dune_stubs "$pkg" "dune-$pkg" ) || die "$pkg: no C archive built"
@@ -935,7 +935,7 @@ wasm_archive() {
 # headers); otherwise every C file that includes the OCaml headers.
 run_auto() {
   local pkg=$1 lib=$2 stamp=$SYSROOT/stamps/auto-$1-$2 work=$SYSROOT/build/auto-$1
-  if [ -f "$stamp" ] && [ "$FORCE" = no ]; then return 0; fi
+  if [ "$FORCE" = no ] && [ -f "$stamp" ] && [ "$(cut -d' ' -f1 "$stamp")" = "$(opam_pkg_version "$pkg")" ]; then return 0; fi
   local sysflags syscflags
   sysflags=$(system_deps "$pkg")
   syscflags=$(system_cflags "$pkg")

@@ -92,6 +92,21 @@ let resolve ~extra_dirs ?bc_path bc name =
             (* Not installed through opam: most likely the project's own stubs. *)
             Local name)
 
+(* The opam package of a stub library of the sysroot built from it (by
+   dune or blindly: meta/<name>.provider, and a stamp starting with the
+   version) for another version than the installed one (opam upgrade). *)
+let stale name f =
+  let read rel = let p = Env.sysroot_file rel in if Sys.file_exists p then Some (String.trim (Bytecode.read_file p)) else None in
+  if f <> lib_file (Env.sysroot_file "lib") name then None
+  else
+    match owner_of_dll name, read ("meta/" ^ name ^ ".provider") with
+    | Some pkg, Some p when p = "dune-" ^ pkg || p = "auto-" ^ pkg -> (
+        let stamp = if p = "dune-" ^ pkg then p else p ^ "-" ^ name in
+        match Option.map Str_util.words (read ("stamps/" ^ stamp)), Layouts.version pkg with
+        | Some (v :: _), Some installed when v <> installed -> Some pkg
+        | _ -> None)
+    | _ -> None
+
 (* Build what can be built: a recipe named after the package, the package's
    dune rules (dune -x <target>), or a blind compilation of its stubs. *)
 let obtain pkg name =

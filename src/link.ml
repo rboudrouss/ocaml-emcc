@@ -221,7 +221,13 @@ let resolve_libs ~extra_dirs ~auto_deps ~bc_path bc =
   |> List.map (fun name ->
          let rec go first =
            match Deps.resolve ~extra_dirs ~bc_path bc name with
-           | Deps.Found f -> (name, f)
+           | Deps.Found f -> (
+               match Deps.stale name f with
+               | Some pkg when auto_deps && first ->
+                   Env.log "lib%s.a was built for another version of opam package %s, rebuilding it" name pkg;
+                   Deps.obtain pkg name;
+                   go false
+               | _ -> (name, f))
            | Deps.Missing (Some pkg) when auto_deps && first ->
                Env.log "lib%s.a missing, building it from opam package %s" name pkg;
                Deps.obtain pkg name;
