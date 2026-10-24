@@ -207,8 +207,7 @@ Besides 31-bit integers on wasm32:
   for wasm32 (dune's `(ctypes)` stanza with structs, packages built without
   dune): struct fields, `sizeof`, and arrays of `long`, `size_t` or
   pointers are those of the 64-bit host. `build`, `link` and `doctor`
-  **warn**. Such bindings only work on wasm64, or with the experimental
-  [`--docker`](#experimental---docker).
+  **warn**. Such bindings only work on wasm64.
 - **ctypes-foreign** only finds the C symbols named by string literals of
   the program, not names computed at run time. `dlopen` accepts any file
   name, since everything is linked in.
@@ -504,7 +503,7 @@ packages rebuilt for wasm32 (`link` warns otherwise):
 
 ```
 ocaml-emcc [--target wasm32|wasm64] [--switch SW] [--sysroot DIR] [--recipes DIR] [-v] COMMAND
-  build OUT.js [--exe DIR/NAME] [--docker] [--docker-platform P] [LINK OPTIONS] [-- EMCC-ARGS]
+  build OUT.js [--exe DIR/NAME] [LINK OPTIONS] [-- EMCC-ARGS]
                                    everything (dune projects)
   setup [--force]                  wasm runtime of the switch's compiler
   install [--force] RECIPE...      build recipes
@@ -527,34 +526,6 @@ link options (build and link):
 ```
 
 `ocaml-emcc help` prints the same with more detail.
-
-## Experimental: `--docker`
-
-On wasm32, some packages compute C layouts when they are built: ctypes'
-sizes and struct offsets, dune-configurator's answers. ocaml-emcc rebuilds
-most of them for wasm32 itself, but not the bindings using dune's
-`(ctypes)` stanza with structs. `build OUT.js --docker` (wasm32 only)
-compiles the bytecode with a 32-bit OCaml in a container instead, so that
-these values are those of a 32-bit platform. The C stubs are still the
-host's, rebuilt for wasm32.
-
-The image (`ocaml-emcc-docker:<arch>-<version>-emcc<version>`, based on
-Debian) gets an opam switch with the OCaml version of the host's switch,
-and the host's version of each package the program uses, installed on
-demand. Pins and local packages are not reproduced. Two platforms are
-available:
-
-- `--docker-platform linux/386` (default): no emulation. The struct
-  layouts are those of wasm32, except for the alignment of `long double`
-  (16 bytes, 8 on wasm32).
-- `--docker-platform linux/arm/v7`: the struct layouts of wasm32, except
-  for the size of `long double` (8 bytes, 16 on wasm32). On an x86 machine
-  it needs qemu-user in binfmt_misc
-  (`docker run --privileged --rm tonistiigi/binfmt --install arm`), and is
-  slow.
-
-Tried on OCaml 5.5.1 with linux/386: ctypes (ctypes-foreign), zstd, yaml
-and zarith pass. See [How it works](#--docker) for the details.
 
 ## How it works
 
@@ -680,28 +651,6 @@ a `dlopen`/`dlsym` that looks them up among the module's exports.
 ctypes-foreign also needs the `threads` library, which the `ocaml` recipe
 builds single-threaded.
 
-### `--docker`
-
-The container's OCaml is built with glibc. Once it is, the container's C
-compiler uses the headers of emscripten and of the sysroot instead of
-glibc's, so that the constants a build reads from C headers are the
-target's: errno values (`ENOENT` is 44 there, 2 on Linux), libffi's ABI
-(ctypes-foreign). Its programs are still linked with glibc: right for the
-generators that print constants, sizes and offsets, not for C code calling
-the system through the structs of these headers. On i386, it compiles with
-`-malign-double -m128bit-long-double`, for the struct layouts of wasm32.
-
-OCaml 5 has no 32-bit native compiler, so the container's switch is
-bytecode only. dune links the generators of its `(ctypes)` stanza natively
-only ([ocaml/dune#13650](https://github.com/ocaml/dune/issues/13650)): an
-opam repository ranked first in the container patches dune to link them as
-custom bytecode when there is no `ocamlopt`, the linkage dune already uses
-for ppx drivers (proposed upstream in
-[ocaml/dune#7431](https://github.com/ocaml/dune/pull/7431), closed for
-lack of a test). The same repository drops the conflict with
-`ocaml-option-bytecode-only` of the packages that declare it for that
-reason (zstd).
-
 ### Flags used for all C code
 
 - `-fno-strict-overflow`: works around an LLVM bug on wasm64, which folds
@@ -809,9 +758,10 @@ tried.
   headers on the web).
 - OCaml 5.0 to 5.3 are untested and probably need patches of their own:
   the memory code moved around.
-- ctypes structs on wasm32 for dune's `(ctypes)` stanza ([#13650 in dune](https://github.com/ocaml/dune/issues/13650)): propose the patch
-  that `--docker` applies to dune upstream, then use it in the wasm32
-  context.
+- ctypes structs on wasm32 for dune's `(ctypes)` stanza ([#13650 in dune](https://github.com/ocaml/dune/issues/13650)): link its
+  generators as custom bytecode without `ocamlopt`
+  (`Exe.Linkage.native_or_custom`, as for ppx drivers), proposed in
+  [ocaml/dune#7431](https://github.com/ocaml/dune/pull/7431).
 - More recipes: ppl (C++, apron's `ppl` and `polkaGrid` domains), flint,
   openssl, libtidy, and newer LLVM versions for `clang`.
 - WASI: sockets the host preopens (preview1's `sock_accept`, `sock_recv`,

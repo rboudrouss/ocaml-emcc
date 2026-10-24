@@ -6,17 +6,13 @@ let usage =
 usage: ocaml-emcc [GLOBAL OPTIONS] COMMAND ...
 
 main command (dune projects):
-  build OUT.js [--exe DIR/NAME] [--docker] [LINK OPTIONS] [-- EMCC-ARGS...]
+  build OUT.js [--exe DIR/NAME] [LINK OPTIONS] [-- EMCC-ARGS...]
       Does everything: wasm runtime (first time), recipes required by
       ocaml-emcc.conf, the bytecode of the dune executable named like OUT
       (or --exe), its C stubs and those of its dependencies, the final link.
       OUT.js (+ OUT.wasm) runs in node and in browsers.  OUT.html adds an
       emscripten HTML page; OUT.wasm alone is a standalone module without the
       JavaScript glue (it imports emscripten functions, see --wasi).
-      --docker (wasm32, prototype): the bytecode is compiled by a 32-bit
-      OCaml in a container (--docker-platform linux/386, the default, or
-      linux/arm/v7), its C compiled with emscripten's headers, for the C
-      layouts and constants of wasm32.
 
 link options (build and link):
   -L DIR          search lib<x>.a in DIR
@@ -147,7 +143,6 @@ let default_link_opts : Link.opts =
   {
     bc = ""; output = ""; lib_dirs = []; libs = []; emcc_flags = []; mode = Link.Embed;
     opt = "-O2"; stack_size = "8MB"; auto_deps = true; check = true; wasi = false;
-    host_bytecode = true;
   }
 
 (* Options shared by `link` and `build`; [extra] handles command-specific
@@ -242,13 +237,8 @@ let find_exe ~root ~exe out =
             (String.concat ", " (List.map path l)))
 
 let cmd_build args =
-  let exe = ref None and docker = ref false in
-  let extra = function
-    | "--exe" :: e :: rest -> exe := Some e; Some (Fun.id, rest)
-    | "--docker" :: rest -> docker := true; Some (Fun.id, rest)
-    | "--docker-platform" :: p :: rest -> docker := true; Docker.platform := p; Some (Fun.id, rest)
-    | _ -> None
-  in
+  let exe = ref None in
+  let extra = function "--exe" :: e :: rest -> exe := Some e; Some (Fun.id, rest) | _ -> None in
   let o, out = match parse_link_opts ~extra args with o, [ out ] -> (o, out) | _ -> die_usage () in
   let root =
     match Project.find_up (Sys.getcwd ()) [ "dune-project" ] with
@@ -264,9 +254,7 @@ let cmd_build args =
      plain bytecode there (the ocamlc wrapper turns byte_complete into it). *)
   let dune = dune_bin () and env = dune_env () in
   let target ext = Filename.concat (ctx_dir ()) (exe ^ ext) in
-  (* --docker: the bytecode comes from the container, built with 32-bit
-     layouts *)
-  let layouts = !Env.target = "wasm32" && o.auto_deps && not !docker in
+  let layouts = !Env.target = "wasm32" && o.auto_deps in
   let rec build_bc tries =
     let errs = Buffer.create 256 in
     let try_build ext =
@@ -300,12 +288,7 @@ let cmd_build args =
       else built
   in
   if build_stub_archives ~root <> 0 then Env.fail "dune could not build the stub archives";
-  if !docker then
-    let bc = Docker.build ~root ~exe ~host_bc:(Filename.concat root built) in
-    (* the project's stub archives, of the wasm context *)
-    let dirs = Deps.archive_dirs (Filename.concat root (ctx_dir ())) in
-    Link.run (with_config_flags { o with bc; output = out; lib_dirs = o.lib_dirs @ dirs; host_bytecode = false })
-  else Link.run (with_config_flags { o with bc = Filename.concat root built; output = out })
+  Link.run (with_config_flags { o with bc = Filename.concat root built; output = out })
 
 (* ------------------------------------------------------- deps / doctor *)
 
