@@ -25,6 +25,7 @@ type opts = {
   stack_size : string;
   auto_deps : bool;
   check : bool;
+  wasi : bool;  (** OUT.wasm for a WASI host (share/runtime/wasi.c) *)
 }
 
 (* C prototype of a primitive as the interpreter calls it. *)
@@ -362,8 +363,8 @@ let runtime_object ~emcc ~flags ~lib_syms ~work name =
   obj
 
 (* The host of a standalone module provides its imports: the WASI ones,
-   and emscripten's JavaScript functions (env). *)
-let report_imports output =
+   and with emscripten's glue, emscripten's JavaScript functions (env). *)
+let report_imports ~wasi output =
   match Wasm.imports output with
   | exception Failure e -> Env.log "note: could not read the imports of %s (%s)" output e
   | imports -> (
@@ -373,9 +374,17 @@ let report_imports output =
         String.concat " " (List.map (fun (m, f) -> m ^ "." ^ f) shown) ^ if List.length l > 12 then " ..." else ""
       in
       match others with
-      | [] -> ()
+      | [] -> if wasi then Env.log "%s: WASI module (%d WASI imports)" output (List.length imports)
+      | l when wasi ->
+          Env.log
+            "warning: %s imports %d function(s) besides WASI: %s\n\
+            \  A C library calls functions emscripten implements in JavaScript, which a WASI host\n\
+            \  does not have (wasmtime: -W unknown-imports-trap=y runs it until one is called)."
+            output (List.length l) (names l)
       | l ->
-          Env.log "note: %s imports %d emscripten function(s) (%s): it needs a host providing them."
+          Env.log
+            "note: %s imports %d emscripten function(s) (%s): it needs a host providing them.\n\
+            \  --wasi replaces them with WASI calls (a module for wasmtime, node:wasi...)."
             output (List.length l) (names l))
 
 let run o =
@@ -386,6 +395,9 @@ let run o =
   check_magic ~bc_path:o.bc bc;
   (* OUT.wasm alone: emcc's standalone mode, no JavaScript glue *)
   let standalone = Filename.check_suffix o.output ".wasm" in
+  if o.wasi && not standalone then Env.fail "--wasi makes a WASI module: the output must be OUT.wasm (not %s)" o.output;
+  if o.wasi && !Env.target = "wasm64" then
+    Env.fail "--wasi: WASI (preview1) is 32-bit, no WASI host runs a wasm64 module.  Use --target wasm32.";
   if standalone && o.mode <> Embed then
     Env.fail "--preload and --node-fs need the JavaScript glue: not available for a standalone %s" o.output;
   if !Env.target = "wasm32" then warn_literals bc;
@@ -481,7 +493,7 @@ let run o =
           "note: the wasm runtime of this switch predates standalone modules: backtraces have no\n\
           \  locations%s.  Rebuild it with `ocaml-emcc setup --force`."
           (if !Env.target = "wasm32" then ", and integer literals beyond 31 bits fail at startup" else "");
-      [ bytecode_o ])
+      bytecode_o :: (if o.wasi then [ runtime_object "wasi" ] else []))
   in
   let cc_prims () =
     Env.run_exn emcc
@@ -522,6 +534,15 @@ let run o =
   (* the standard streams of node, as bytes (not for a standalone .wasm) *)
   let defaults =
     if standalone then defaults else defaults @ [ "--pre-js"; Filename.concat (Env.share ()) "runtime/node_stdio.js" ]
+  in
+  (* WASI: no emscripten imports at all (PURE_WASI: memory growth without
+     telling JS), and the standard exception handling instructions
+     (exnref), the only ones WASI hosts such as wasmtime implement:
+     setjmp/longjmp (OCaml exceptions raised from C) use them, compiled in
+     the legacy encoding emscripten defaults to. *)
+  let defaults =
+    if o.wasi then defaults @ [ "-sPURE_WASI=1"; "-sBINARYEN_EXTRA_PASSES=--translate-to-exnref,--emit-exnref" ]
+    else defaults
   in
   let args ?(extra = []) ~output () =
     defaults @ fs_flags @ [ main_o; prims_o; compat_o ] @ standalone_objs @ foreign_objs @ extra @ archives @ o.libs
@@ -577,4 +598,4 @@ let run o =
     report err;
     if code <> 0 then Env.fail "emcc failed (exit %d)" code);
   if foreign <> None then keep_raw_exports o.output;
-  if standalone then report_imports o.output
+  if standalone then report_imports ~wasi:o.wasi o.output

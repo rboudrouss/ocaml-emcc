@@ -12,7 +12,7 @@ main command (dune projects):
       (or --exe), its C stubs and those of its dependencies, the final link.
       OUT.js (+ OUT.wasm) runs in node and in browsers.  OUT.html adds an
       emscripten HTML page; OUT.wasm alone is a standalone module without the
-      JavaScript glue (it imports emscripten functions).
+      JavaScript glue (it imports emscripten functions, see --wasi).
 
 link options (build and link):
   -L DIR          search lib<x>.a in DIR
@@ -22,6 +22,8 @@ link options (build and link):
   -O FLAG         emcc optimisation flag (default -O2)
   --stack-size S  C stack size (default 8MB)
   --no-deps       do not build missing stub libraries automatically
+  --wasi          OUT.wasm for a WASI host (wasmtime, node:wasi...): files,
+                  clocks, sleep... on WASI instead of emscripten's JS (wasm32)
   --emcc-flag F   extra emcc link flag (repeatable); also everything after
                   `--`, $OCAML_EMCC_LDFLAGS and `link-flags:` in ocaml-emcc.conf
 
@@ -140,7 +142,7 @@ let cmd_dune args =
 let default_link_opts : Link.opts =
   {
     bc = ""; output = ""; lib_dirs = []; libs = []; emcc_flags = []; mode = Link.Embed;
-    opt = "-O2"; stack_size = "8MB"; auto_deps = true; check = true;
+    opt = "-O2"; stack_size = "8MB"; auto_deps = true; check = true; wasi = false;
   }
 
 (* Options shared by `link` and `build`; [extra] handles command-specific
@@ -156,6 +158,7 @@ let parse_link_opts ?(extra = fun _ -> None) args =
     | "-O" :: f :: rest -> go { o with opt = f } pos rest
     | "--stack-size" :: s :: rest -> go { o with stack_size = s } pos rest
     | "--no-deps" :: rest -> go { o with auto_deps = false } pos rest
+    | "--wasi" :: rest -> go { o with wasi = true } pos rest
     | "--emcc-flag" :: f :: rest -> go { o with emcc_flags = o.emcc_flags @ [ f ] } pos rest
     | "--" :: rest -> ({ o with emcc_flags = o.emcc_flags @ rest }, List.rev pos)
     | l -> (

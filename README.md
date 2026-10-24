@@ -81,11 +81,14 @@ The extension of the output selects what is written:
   in). The module still imports emscripten functions (file operations
   other than read/write, `getcwd`, sockets...), which its host must
   provide: emscripten's JavaScript does, a plain WASI host does not.
+- `.wasm` with `--wasi`: a WASI module, which only imports WASI functions
+  and runs in wasmtime, node's WASI, and other WASI hosts (see
+  [WASI](#wasi)). wasm32 only.
 
 Common options: `--target wasm32|wasm64` (see below), `-O -Oz` (default
-`-O2`), `--stack-size 16MB`, `--preload`, `--node-fs`, `-l LIB`, `-L DIR`,
-`--emcc-flag F`. Anything after `--` goes to emcc. The full list is in the
-[command reference](#command-reference).
+`-O2`), `--stack-size 16MB`, `--preload`, `--node-fs`, `--wasi`, `-l LIB`,
+`-L DIR`, `--emcc-flag F`. Anything after `--` goes to emcc. The full list
+is in the [command reference](#command-reference).
 
 ### Running
 
@@ -124,6 +127,56 @@ goes:
   the page (under node, relative to the current directory).
 - `--node-fs` makes a node-only build with access to the real file system
   and to the environment variables (`Sys.getenv`).
+
+### WASI
+
+```sh
+ocaml-emcc build main.wasm --wasi
+wasmtime run -W exceptions=y --dir . main.wasm arg1 arg2
+```
+
+`--wasi` writes a module whose only imports are WASI (preview1) functions:
+no JavaScript is involved, and the program sees the arguments, environment,
+standard streams, clocks and the directories its host grants it.
+
+- **Hosts**: wasmtime needs `-W exceptions=y` (OCaml raises exceptions from
+  C with longjmp, which uses wasm exception handling) and `--dir DIR` for
+  each directory the program may use. With node, `node:wasi` with
+  `version: 'preview1'` and `preopens` (`tests/wasi-run.mjs`). The host
+  must implement the standard exception handling instructions (exnref):
+  wasmtime 50 and node 22 do.
+- **Files**: paths are resolved against the preopened directories, as
+  wasi-libc does: `/tmp/x` is `x` in the directory preopened as `/tmp`, and
+  a directory preopened as `.` holds every other path. `Sys.chdir` and
+  `Sys.getcwd` work on a current directory kept by the program (`/`
+  first). Opening, reading, writing, `stat`, directories, renaming,
+  removing, truncating, links and times are WASI calls.
+- **Waiting**: `Unix.sleep` and `Unix.select` wait for the host
+  (`poll_oneoff`) instead of spinning, `Sys.time` is the process's CPU
+  time (or the time since it started, when the host has no CPU clock).
+- **wasm32 only**: WASI is 32-bit, no host runs a wasm64 WASI module. Ints
+  are 31-bit (see [targets](#targets-wasm32-or-wasm64)).
+- **Descriptors**: WASI cannot duplicate one. `Unix.dup` and `dup2` of a
+  file the program opened open it again at the same position, a copy with a
+  position of its own (enough for a C library doing `fdopen(dup(fd))`, or
+  to redirect `stdout` to a file); the standard streams cannot be
+  duplicated. Locks (`fcntl`, `lockf`) always succeed: there is a single
+  process.
+- **What WASI does not have** fails as it would without the system
+  support: sockets, `getaddrinfo`, pipes, processes and `Sys.command`
+  (`ENOSYS`). There are no users: everything is owned by root, `chmod` and
+  `chown` do nothing. `Unix.localtime` is UTC.
+- C libraries that call functions emscripten implements in JavaScript
+  (SDL, ctypes-foreign's `dlsym`) keep importing them: `link` lists the
+  imports that are not WASI, and the module only runs where they are
+  defined (`wasmtime -W unknown-imports-trap=y` runs it until one is
+  called).
+
+The C functions behind this are in `share/runtime/wasi.c`. When the
+program's own C (its stubs, `-l` archives, `c_library_flags`) defines one of
+them, `__syscall_getcwd` or `getaddrinfo` for instance, `link` leaves
+ocaml-emcc's out and says so: that definition is the one linked. The same
+holds for `compat.c` and `dlsym.c`.
 
 ### Targets: wasm32 or wasm64
 
@@ -460,7 +513,7 @@ ocaml-emcc [--target wasm32|wasm64] [--switch SW] [--sysroot DIR] [--recipes DIR
   link PROG.bc -o OUT.js [LINK OPTIONS] [-- EMCC-ARGS]
   env [--cflags|--sysroot]         configuration / flags for C stubs
 link options: -L DIR, -l LIB, --preload, --node-fs, -O FLAG, --stack-size S,
-              --no-deps, --emcc-flag F
+              --no-deps, --wasi (OUT.wasm), --emcc-flag F
 ```
 
 ## How it works
@@ -511,6 +564,20 @@ embed the bytecode in. Its sections become the C arrays of a generated
 (`SYMB`, `CRCS`, and `PRIM` before 5.0), and the debug events of `DBUG`,
 relocated and gathered by `link` into what the runtime would build from
 the executable file (backtraces keep their locations).
+
+**WASI.** emscripten's standalone libc already reads, writes and closes
+files, and reads clocks, arguments and the environment, with WASI calls.
+But opening and `stat`ing a file are stubs that fail (EPERM, ENOSYS),
+whatever the host, and the rest of the file system (`unlink`, `rename`,
+`getcwd`, `readdir`...), sockets and `system` are imports of emscripten's
+JavaScript. `--wasi` adds `share/runtime/wasi.c`, which implements these
+system calls with WASI, as wasi-libc does, and links with `-sPURE_WASI`,
+which removes emscripten's last import (memory growth notifications).
+`setjmp`/`longjmp` (`-sSUPPORT_LONGJMP=wasm`) and C++ exceptions are
+compiled into emscripten's default encoding of wasm exceptions, the legacy
+one, which WASI hosts do not implement: binaryen translates the module to
+the standard one (exnref) as emcc finishes it
+(`-sBINARYEN_EXTRA_PASSES=--translate-to-exnref,--emit-exnref`).
 
 **Signature adapters.** A wasm indirect call traps on any signature
 mismatch, while native code ignores extra arguments: OCaml calls zarith's
@@ -639,6 +706,6 @@ share/driver.sh       recipe driver
 share/recipes/        ocaml (runtime + patches), C libraries (gmp, mpfr, zlib...),
                       OCaml packages needing changes (zarith, apron, lwt...)
 share/tools/          ocamlc / ocamlmklib wrappers for dune -x
-share/runtime/        main.c, compat.c, dlsym.c, node_stdio.js
+share/runtime/        main.c, compat.c, dlsym.c, wasi.c, node_stdio.js
 tests/run.sh          test suite (SWITCH=<opam switch> tests/run.sh --target wasm64)
 ```
