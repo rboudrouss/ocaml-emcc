@@ -1,5 +1,31 @@
 ## Unreleased
 
+- OCaml 5.0 to 5.3: the `ocaml` recipe builds their runtime. They commit
+  the minor heap with `mmap(MAP_FIXED)`, which emscripten lacks ("Failed
+  to create main domain"): `patches/5.0/` and `patches/5.1/` commit it
+  with `mprotect` as 5.2 and later do (`patches/5.4+/` becomes
+  `patches/5.2+/`). 5.0 calls `pthread_getaffinity_np`, which its
+  configure only compiles (`patches/5.0/`), and names the otherlibs stub
+  archives without the `byt` suffix.
+- OCaml 5: `-pthread` is kept out of the runtime by giving
+  `PTHREAD_CFLAGS=-D_REENTRANT` to configure, instead of editing
+  `Makefile.config` (5.0 put it in `OC_CFLAGS`, which the edit missed: "no
+  domain lock held").
+- The C compiler of the wasm context drops `CPATH`, `C_INCLUDE_PATH`,
+  `CPLUS_INCLUDE_PATH` and `LIBRARY_PATH`: their host headers came before
+  those of the sysroot (ctypes-foreign's stubs were compiled with the
+  host's `ffi.h`: "Unexpected type 0" at the first call).
+- ctypes on wasm32, OCaml 5.2 and later: a library compiled against the
+  host's ctypes (ctypes-foreign, once zstd had rebuilt ctypes) is rebuilt
+  for wasm32 again. ocamlc quotes the files of "make inconsistent
+  assumptions", which hid them.
+- A stub library of the sysroot built from an opam package (with dune, or
+  blindly) for another version than the installed one, after an `opam
+  upgrade`, is built again: the old one was linked (digestif 1.4's blake3
+  primitives undefined).
+- A library of the compiler missing from the runtime of the sysroot
+  (`libthreads.a`, built since) has the runtime built again, instead of
+  failing ("libthreads.a (wasm) not found").
 - ctypes on wasm32: ctypes and the packages of the program depending on it
   are rebuilt for wasm32 (`driver.sh shadow`) into the sysroot's findlib
   directory, which the toolchain searches first, and `build` builds the
