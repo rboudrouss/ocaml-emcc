@@ -10,6 +10,8 @@
 #          then fails to execute)
 #   5.x    no POSIX signals (no sigaltstack in emscripten), no -pthread
 #   >=5.4  patches/5.4+ (commit memory with mprotect, no mmap(MAP_FIXED))
+#   all    wasm32: literals beyond 31 bits wrapped while DATA is read;
+#          debug events from memory for caml_startup_code (standalone .wasm)
 
 SOURCE=ocaml
 
@@ -26,6 +28,20 @@ wrap_data_literals() {
   grep -q '^int caml_emcc_wrap_ints' runtime/intern.c || die "intern.c: cannot define caml_emcc_wrap_ints"
   perl -0pi -e 's/^(\s*)((?:caml_global_data|value global_data) = caml_input_val\(chan\);)/$1caml_emcc_wrap_ints = 1;\n$1$2\n$1caml_emcc_wrap_ints = 0;/m; s/(\n#include "caml\/intext.h"\n)/$1extern int caml_emcc_wrap_ints;\n/' runtime/startup_byt.c
   [ "$(grep -c caml_emcc_wrap_ints runtime/startup_byt.c)" = 3 ] || die "startup_byt.c: cannot patch the DATA section reading"
+  # caml_startup_code (a standalone OUT.wasm: the bytecode linked in as C
+  # arrays) reads the DATA section from memory
+  perl -0pi -e 's/caml_input_value_from_block\(data, data_size\)/caml_emcc_input_data(data, data_size)/; s/(\nextern int caml_emcc_wrap_ints;\n)/$1static value caml_emcc_input_data(char *data, asize_t size)\n{\n  value v;\n  caml_emcc_wrap_ints = 1;\n  v = caml_input_value_from_block(data, size);\n  caml_emcc_wrap_ints = 0;\n  return v;\n}\n/' runtime/startup_byt.c
+  [ "$(grep -c caml_emcc_input_data runtime/startup_byt.c)" = 2 ] || die "startup_byt.c: cannot patch caml_startup_code's DATA reading"
+}
+
+# backtrace_byt.c: the debug events of a program started by
+# caml_startup_code come from memory (caml_emcc_debug_events, set by the
+# main.c of a standalone OUT.wasm), already relocated and gathered in an
+# array by `link`, instead of the DBUG section of the executable file, which
+# does not exist.  NULL otherwise: the runtime behaves as before.
+embedded_debug_info() {
+  perl -0pi -e 's/(\nstatic void read_main_debug_info\()/\nchar *caml_emcc_debug_events = NULL;\nuintnat caml_emcc_debug_events_size = 0;\n$1/; s/(\n(\s*)di->already_read = 1;\n)/$1\n$2if (caml_emcc_debug_events != NULL) {\n$2  events = caml_input_value_from_block(caml_emcc_debug_events, caml_emcc_debug_events_size);\n$2  di->events = process_debug_events(caml_start_code, events, &di->num_events);\n$2  CAMLreturn0;\n$2}\n/' runtime/backtrace_byt.c
+  [ "$(grep -c caml_emcc_debug_events runtime/backtrace_byt.c)" = 4 ] || die "backtrace_byt.c: cannot patch read_main_debug_info"
 }
 
 build() {
@@ -84,6 +100,7 @@ build() {
   # the arithmetic; `ocaml-emcc link` warns about each one.  Marshalled data
   # read by the program still fails on them.
   if [ "$TARGET" = wasm32 ]; then wrap_data_literals; fi
+  embedded_debug_info
 
   local cc; cc=$(host_cc)
   # sak (OCaml >= 4.14): build it for the host.  SAK_CC/SAK_LINK exist in

@@ -539,7 +539,8 @@ recipe builds single-threaded.
 | all     | `sigsuspend` missing (unix) | weak stub |
 | all, wasm32 | `ARCH_ALIGN_DOUBLE` (`alignof(double)` is 8): float accesses through memcpy, some stubs refuse to build (gsl) | undefined, as for i686: wasm loads doubles at any alignment |
 | all     | systhreads disabled (no pthreads) | `libthreads.a` built anyway, single-threaded |
-| all, wasm32 | integer literals beyond 31 bits in the DATA section ("input_value: integer too large") | wrapped to 31 bits while DATA is read (`intern.c`, `startup_byt.c`) |
+| all, wasm32 | integer literals beyond 31 bits in the DATA section ("input_value: integer too large") | wrapped to 31 bits while DATA is read (`intern.c`, `startup_byt.c`), from the file (`caml_main`) or from memory (`caml_startup_code`, standalone modules) |
+| all     | a program started by `caml_startup_code` (standalone modules) reads its debug events from the executable file, which does not exist: backtraces without locations | `backtrace_byt.c` takes them from memory when `main.c` gives them (`caml_emcc_debug_events`), unchanged otherwise |
 | all, wasm64 | stubs pass `int` dimensions to `caml_ba_alloc_dims`, read as `intnat` (stb_image: a corrupted heap) | the installed `bigarray.h` converts each one |
 
 Version-specific patches go in `share/recipes/ocaml/patches/4.x/`,
