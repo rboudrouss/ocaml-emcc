@@ -42,6 +42,8 @@ with emcc, and writes `main.js` and `main.wasm`.
   sources are fetched again with `opam source`, which needs network and a
   version still in the repository.
 - The emscripten SDK, with `emcc` in `PATH` (tested with emsdk 6.0.11).
+  Standalone `.wasm` outputs need its clang to support `#embed` (clang 19,
+  emsdk 4.0 and later).
 - dune ≥ 3.11 for `build` and `dune`. Projects without dune only need
   `link`.
 
@@ -74,9 +76,11 @@ The extension of the output selects what is written:
 
 - `.js` (+ `.wasm`): runs in node and in browsers
 - `.html`: the same, plus a minimal emscripten page
-- `.wasm` alone: emcc's standalone mode, without the JavaScript glue (file
-  system, console, bytecode loading). It still imports emscripten
-  functions, so it does not run in a plain WASI host.
+- `.wasm` alone: emcc's standalone mode, without the JavaScript glue. The
+  bytecode is linked in as C arrays (there is no file system to ship it
+  in). The module still imports emscripten functions (file operations
+  other than read/write, `getcwd`, sockets...), which its host must
+  provide: emscripten's JavaScript does, a plain WASI host does not.
 
 Common options: `--target wasm32|wasm64` (see below), `-O -Oz` (default
 `-O2`), `--stack-size 16MB`, `--preload`, `--node-fs`, `-l LIB`, `-L DIR`,
@@ -498,6 +502,15 @@ link options: -L DIR, -l LIB, --preload, --node-fs, -O FLAG, --stack-size S,
    bytecode uses, so wasm-ld drops the rest. The bytecode, without its
    `DLLS`/`DLPT` sections, is embedded in the module and `argv[0]` points
    to it (the `ocamlc -custom` trick), so `Sys.argv` looks native.
+
+**Standalone modules.** A `.wasm` without JavaScript has no file system to
+embed the bytecode in. Its sections become the C arrays of a generated
+`bytecode.c` (`#embed`), and `main.c` starts the program with
+`caml_startup_code`, as the C file of `ocamlc -output-obj` does: `CODE`,
+`DATA`, the section table of that compiler for the toplevel and Dynlink
+(`SYMB`, `CRCS`, and `PRIM` before 5.0), and the debug events of `DBUG`,
+relocated and gathered by `link` into what the runtime would build from
+the executable file (backtraces keep their locations).
 
 **Signature adapters.** A wasm indirect call traps on any signature
 mismatch, while native code ignores extra arguments: OCaml calls zarith's

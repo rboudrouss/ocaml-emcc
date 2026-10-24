@@ -12,7 +12,7 @@ main command (dune projects):
       (or --exe), its C stubs and those of its dependencies, the final link.
       OUT.js (+ OUT.wasm) runs in node and in browsers.  OUT.html adds an
       emscripten HTML page; OUT.wasm alone is a standalone module without the
-      JavaScript glue (probably not what you want).
+      JavaScript glue (it imports emscripten functions).
 
 link options (build and link):
   -L DIR          search lib<x>.a in DIR

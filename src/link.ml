@@ -6,7 +6,8 @@
       rest of the runtime and of the stub libraries,
    3. each stub DLL dll<x> is replaced by the static archive lib<x>.a,
    4. emcc links everything with main.c, the bytecode being embedded in the
-      virtual FS (or preloaded, or read from the real FS under node). *)
+      virtual FS (or preloaded, or read from the real FS under node), or,
+      for a standalone OUT.wasm, linked in as C arrays (Embed). *)
 
 type mode =
   | Embed  (** bytecode inside the .wasm/.js (MEMFS) *)
@@ -340,28 +341,45 @@ let keep_raw_exports js =
         in
         write_file js s
 
+(* The host of a standalone module provides its imports: the WASI ones,
+   and emscripten's JavaScript functions (env). *)
+let report_imports output =
+  match Wasm.imports output with
+  | exception Failure e -> Env.log "note: could not read the imports of %s (%s)" output e
+  | imports -> (
+      let others = List.filter (fun (m, _) -> m <> "wasi_snapshot_preview1") imports in
+      let names l =
+        let shown = Compat.filteri (fun i _ -> i < 12) l in
+        String.concat " " (List.map (fun (m, f) -> m ^ "." ^ f) shown) ^ if List.length l > 12 then " ..." else ""
+      in
+      match others with
+      | [] -> ()
+      | l ->
+          Env.log "note: %s imports %d emscripten function(s) (%s): it needs a host providing them."
+            output (List.length l) (names l))
+
 let run o =
   if not (Env.toolchain_ready ()) then
     Env.fail "no wasm runtime in %s, run `ocaml-emcc setup` first" (Env.sysroot ());
   let emcc = Env.emcc () in
   let bc = Bytecode.parse o.bc in
   check_magic ~bc_path:o.bc bc;
-  if Filename.check_suffix o.output ".wasm" then
-    Env.log
-      "warning: %s: emcc produces a standalone .wasm without its JavaScript glue (file system,\n\
-      \  console, embedded bytecode loading are implemented in JS): it needs a WASI-like host and\n\
-      \  may not run.  You most likely want OUT.js (which writes OUT.js + OUT.wasm)." o.output;
+  (* OUT.wasm alone: emcc's standalone mode, no JavaScript glue *)
+  let standalone = Filename.check_suffix o.output ".wasm" in
+  if standalone && o.mode <> Embed then
+    Env.fail "--preload and --node-fs need the JavaScript glue: not available for a standalone %s" o.output;
   if !Env.target = "wasm32" then warn_literals bc;
   let out_dir = Filename.dirname o.output in
   let base = Filename.remove_extension (Filename.basename o.output) in
   let work = Filename.concat out_dir ("." ^ base ^ ".ocaml-emcc") in
   mkdir_p work;
-  (* 1. bytecode without DLLS/DLPT *)
+  (* 1. bytecode without DLLS/DLPT (a standalone module has it as C arrays,
+     bytecode.c below) *)
   let bc_name = base ^ ".bc" in
   let bc_out =
     match o.mode with Node_rawfs -> Filename.concat out_dir bc_name | _ -> Filename.concat work bc_name
   in
-  Bytecode.write ~drop:[ "DLLS"; "DLPT" ] bc bc_out;
+  if not standalone then Bytecode.write ~drop:[ "DLLS"; "DLPT" ] bc bc_out;
   (* 2. primitive table *)
   let prims = Bytecode.primitives bc in
   let arities = Bytecode.call_arities bc in
@@ -412,6 +430,7 @@ let run o =
   let vfs_path = "/ocaml/" ^ bc_name in
   let main_def =
     match o.mode with
+    | _ when standalone -> "-DOCAML_EMCC_EMBEDDED"
     | Node_rawfs -> "-DOCAML_EMCC_BYTECODE=0"
     | _ -> Printf.sprintf "-DOCAML_EMCC_BYTECODE=\"%s\"" vfs_path
   in
@@ -429,6 +448,20 @@ let run o =
         Env.run_exn emcc (cflags @ [ o.opt; "-c"; Filename.concat (Env.share ()) "runtime/dlsym.c"; "-o"; dlsym_o ]);
         ([ dlsym_o ], "-sALLOW_TABLE_GROWTH=1" :: List.map (fun n -> "-Wl,--export=" ^ n) names)
   in
+  let standalone_objs =
+    if not standalone then []
+    else (
+      let ocaml_major = Option.fold ~none:5 ~some:(fun v -> Scanf.sscanf v "%d" Fun.id) (Env.manifest "ocaml_version") in
+      let src = Embed.write ~ocaml_major ~dir:work bc and bytecode_o = Filename.concat work "bytecode.o" in
+      Env.run_exn emcc (cflags @ [ o.opt; "-Wno-c23-extensions"; "-c"; src; "-o"; bytecode_o ]);
+      (* a runtime built before ocaml-emcc linked bytecode in as data *)
+      if not (Hashtbl.mem (defined_symbols [ camlrun ]) "caml_emcc_debug_events") then
+        Env.log
+          "note: the wasm runtime of this switch predates standalone modules: backtraces have no\n\
+          \  locations%s.  Rebuild it with `ocaml-emcc setup --force`."
+          (if !Env.target = "wasm32" then ", and integer literals beyond 31 bits fail at startup" else "");
+      [ bytecode_o ])
+  in
   let cc_prims () =
     Env.run_exn emcc
       (cflags @ [ o.opt; "-std=gnu11"; "-Wno-incompatible-function-pointer-types"; "-Wno-deprecated-non-prototype"; "-c"; prims_src; "-o"; prims_o ])
@@ -436,6 +469,7 @@ let run o =
   cc_prims ();
   let fs_flags =
     match o.mode with
+    | _ when standalone -> []
     | Embed -> [ "--embed-file"; bc_out ^ "@" ^ vfs_path ]
     | Preload -> [ "--preload-file"; bc_out ^ "@" ^ vfs_path ]
     | Node_rawfs ->
@@ -457,7 +491,7 @@ let run o =
       (if !Env.target = "wasm64" then "-sMAXIMUM_MEMORY=16GB" else "-sMAXIMUM_MEMORY=4GB");
       "-sSTACK_SIZE=" ^ o.stack_size;
       (* not allowed (implied) for a standalone .wasm *)
-      (if Filename.check_suffix o.output ".wasm" then "" else "-sEXIT_RUNTIME=1");
+      (if standalone then "" else "-sEXIT_RUNTIME=1");
       "-sERROR_ON_UNDEFINED_SYMBOLS=1";
       (* C++ exceptions (sysroots set up before it was a target flag) *)
       "-fwasm-exceptions";
@@ -466,11 +500,10 @@ let run o =
   let defaults = List.filter (( <> ) "") defaults in
   (* the standard streams of node, as bytes (not for a standalone .wasm) *)
   let defaults =
-    if Filename.check_suffix o.output ".wasm" then defaults
-    else defaults @ [ "--pre-js"; Filename.concat (Env.share ()) "runtime/node_stdio.js" ]
+    if standalone then defaults else defaults @ [ "--pre-js"; Filename.concat (Env.share ()) "runtime/node_stdio.js" ]
   in
   let args ?(extra = []) ~output () =
-    defaults @ fs_flags @ [ main_o; prims_o; compat_o ] @ foreign_objs @ extra @ archives @ o.libs
+    defaults @ fs_flags @ [ main_o; prims_o; compat_o ] @ standalone_objs @ foreign_objs @ extra @ archives @ o.libs
     @ [ "-L" ^ Env.sysroot_file "lib" ]
     @ flags_of_libs @ [ "-lm" ] @ foreign_flags @ o.emcc_flags @ [ "-o"; output ]
   in
@@ -522,4 +555,5 @@ let run o =
     let code, err = Env.run_capture_stderr emcc (args ~extra:[ adapters_o ] ~output:o.output ()) in
     report err;
     if code <> 0 then Env.fail "emcc failed (exit %d)" code);
-  if foreign <> None then keep_raw_exports o.output
+  if foreign <> None then keep_raw_exports o.output;
+  if standalone then report_imports o.output
