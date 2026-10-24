@@ -4,19 +4,25 @@
    Sys.word_size) is then that of a 32-bit platform, as the wasm32 runtime
    is, instead of the 64-bit host's.
 
-   - linux/arm/v7 (default): the C layouts of wasm32, but for long double
-     (8 bytes, 16 on wasm32).  On an x86 host, it runs under qemu-user
-     (binfmt_misc), slowly.
-   - linux/386: no emulation, but i386 aligns double and int64_t to 4 bytes
-     in structs (wasm32: 8).
+   Once its OCaml is built, the image's C compiler (tools/docker-cc) uses
+   the headers of emscripten and of the sysroot instead of glibc's: the
+   constants a build reads from C headers (errno values, libffi's ABI) are
+   the target's.
+
+   - linux/386 (default): with -malign-double -m128bit-long-double, the C
+     layouts of wasm32, but for the alignment of long double (16 bytes, 8
+     on wasm32).
+   - linux/arm/v7: the C layouts of wasm32, but for long double (8 bytes, 16
+     on wasm32).  On an x86 host, it runs under qemu-user (binfmt_misc),
+     slowly.
 
    The image has an opam switch with the OCaml version of the host's switch
    and the host's version of every package the program uses (found from its
    host-built bytecode and `dune describe external-lib-deps`), installed on
-   demand and committed to the image.  The C stubs are still the host's,
-   rebuilt for wasm32: same versions, same primitives. *)
+   demand (tools/docker-opam) and committed to the image.  The C stubs are
+   still the host's, rebuilt for wasm32: same versions, same primitives. *)
 
-let platform = ref "linux/arm/v7"
+let platform = ref "linux/386"
 
 (* a tag-friendly name: linux/arm/v7 -> arm-v7 *)
 let arch () =
@@ -33,7 +39,39 @@ let ocaml_version () =
   | Some v -> v
   | None -> Env.fail "cannot run the switch's ocamlc"
 
-let image () = Printf.sprintf "ocaml-emcc-docker:%s-%s" (arch ()) (ocaml_version ())
+(* -m128bit-long-double: sizeof (long double) = 16 *)
+let abi_flags () = if arch () = "386" then "-malign-double -m128bit-long-double" else ""
+
+let emcc_version () = Option.value (Env.output_of (Env.emcc ()) [ "-dumpversion" ]) ~default:"unknown"
+
+(* the headers of emscripten's sysroot *)
+let em_include () =
+  let cache =
+    match Env.output_of (Filename.concat (Filename.dirname (Env.emcc ())) "em-config") [ "CACHE" ] with
+    | Some c -> c
+    | None -> Filename.concat (Filename.dirname (Env.emcc ())) "cache"
+  in
+  Filename.concat cache "sysroot/include"
+
+(* its packages are built with emscripten's headers *)
+let image () = Printf.sprintf "ocaml-emcc-docker:%s-%s-emcc%s" (arch ()) (ocaml_version ()) (emcc_version ())
+
+(* without ".." (_build/default/bin/../../../share): the path is mounted
+   as is *)
+let share () =
+  let cwd = Sys.getcwd () in
+  Sys.chdir (Env.share ());
+  let d = Sys.getcwd () in
+  Sys.chdir cwd;
+  d
+
+(* the share directory and the headers given to tools/docker-cc *)
+let mounts_and_env () =
+  let ro d = [ "-v"; d ^ ":" ^ d ^ ":ro" ] in
+  let inc = Env.sysroot_file "include" in
+  ro (share ()) @ ro (em_include ()) @ ro inc
+  @ [ "-e"; "OCAML_EMCC_EMINCLUDE=" ^ em_include (); "-e"; "OCAML_EMCC_INCLUDE=" ^ inc;
+      "-e"; "OCAML_EMCC_ABI_FLAGS=" ^ abi_flags () ]
 
 let docker args = Env.run "docker" args
 
@@ -49,8 +87,7 @@ let check_docker () =
       Env.fail
         "--docker: %s containers need an ARM emulator on this %s machine (qemu-user in binfmt_misc).\n\
         \  Install it with: docker run --privileged --rm tonistiigi/binfmt --install arm\n\
-        \  (Docker Desktop has it), or use --docker-platform linux/386 (no emulation, but\n\
-        \  double and int64_t are aligned to 4 bytes in structs there)." !platform cpu)
+        \  (Docker Desktop has it), or use --docker-platform linux/386 (the default)." !platform cpu)
 
 (* The compiler package of the host's switch *)
 let compiler () =
@@ -65,6 +102,7 @@ let base_image () =
     let dir = Filename.concat (Filename.get_temp_dir_name ()) ("ocaml-emcc-docker-" ^ string_of_int (Unix.getpid ())) in
     (try Unix.mkdir dir 0o755 with Unix.Unix_error (Unix.EEXIST, _, _) -> ());
     let l32 = String.concat " " (linux32 ()) in
+    Compat.write_file (Filename.concat dir "docker-cc") (Compat.read_file (Filename.concat (share ()) "tools/docker-cc"));
     Compat.write_file (Filename.concat dir "Dockerfile")
       (Printf.sprintf
          "FROM --platform=%s debian:trixie\n\
@@ -73,7 +111,10 @@ let base_image () =
           ENV OPAMROOT=/opt/opam OPAMYES=1 OPAMCONFIRMLEVEL=unsafe-yes OPAMDEPEXTYES=1\n\
           RUN %s opam init --bare --disable-sandboxing -n default https://opam.ocaml.org \\\n\
          \ && %s opam switch create default %s && chmod -R a+rX /opt/opam\n\
-          ENV OPAM_SWITCH_PREFIX=/opt/opam/default PATH=/opt/opam/default/bin:/usr/local/bin:/usr/bin:/bin \\\n\
+          COPY docker-cc /opt/ocaml-emcc/bin/gcc\n\
+          RUN chmod a+rx /opt/ocaml-emcc/bin/gcc && ln -s gcc /opt/ocaml-emcc/bin/cc\n\
+          ENV OPAM_SWITCH_PREFIX=/opt/opam/default \\\n\
+         \  PATH=/opt/ocaml-emcc/bin:/opt/opam/default/bin:/usr/local/bin:/usr/bin:/bin \\\n\
          \  CAML_LD_LIBRARY_PATH=/opt/opam/default/lib/stublibs:/opt/opam/default/lib/ocaml/stublibs:/opt/opam/default/lib/ocaml\n"
          !platform l32 l32 (compiler ()));
     docker_exn "image build" [ "build"; "--platform"; !platform; "-t"; img; dir ])
@@ -132,7 +173,11 @@ let ensure_packages pkgs =
       let specs = List.map (fun (p, v) -> p ^ "." ^ v) missing in
       Env.log "--docker: installing in %s: %s" (image ()) (String.concat " " specs);
       let name = Printf.sprintf "ocaml-emcc-setup-%d" (Unix.getpid ()) in
-      let code = docker ([ "run"; "--platform"; !platform; "--name"; name; image () ] @ linux32 () @ ("opam" :: "install" :: specs)) in
+      let code =
+    docker
+      ([ "run"; "--platform"; !platform; "--name"; name ] @ mounts_and_env () @ [ image () ]
+      @ linux32 () @ ("sh" :: Filename.concat (share ()) "tools/docker-opam" :: specs))
+  in
       if code = 0 && Env.output_of "docker" [ "commit"; name; image () ] = None then Env.fail "docker commit failed";
       ignore (Env.output_of "docker" [ "rm"; name ]);
       if code <> 0 then Env.fail "--docker: opam could not install %s in the container" (String.concat " " specs)
@@ -147,25 +192,17 @@ let build ~root ~exe ~host_bc =
   let bdir = Filename.concat root ("_build.docker-" ^ arch ()) in
   let cclibs = Env.sysroot_file "meta/cclibs" in
   (try Unix.mkdir cclibs 0o755 with Unix.Unix_error (Unix.EEXIST, _, _) -> ());
-  (* without ".." (_build/default/bin/../../../share): the path is mounted
-     as is *)
-  let share =
-    let cwd = Sys.getcwd () in
-    Sys.chdir (Env.share ());
-    let d = Sys.getcwd () in
-    Sys.chdir cwd;
-    d
-  in
   Env.log "--docker: building %s with the 32-bit OCaml of %s" exe (image ());
   let out = Filename.temp_file "ocaml-emcc" ".target" in
   let fd = Unix.openfile out [ Unix.O_WRONLY; Unix.O_TRUNC ] 0o600 in
   let args =
     [ "docker"; "run"; "--rm"; "--platform"; !platform;
       "--user"; Printf.sprintf "%d:%d" (Unix.getuid ()) (Unix.getgid ()); "-e"; "HOME=/tmp";
-      "-v"; root ^ ":" ^ root; "-v"; share ^ ":" ^ share ^ ":ro"; "-v"; cclibs ^ ":" ^ cclibs;
-      "-w"; root; image () ]
+      "-v"; root ^ ":" ^ root; "-v"; cclibs ^ ":" ^ cclibs ]
+    @ mounts_and_env ()
+    @ [ "-w"; root; image () ]
     @ linux32 ()
-    @ [ "sh"; Filename.concat share "tools/docker-build"; root; bdir; Env.sysroot ();
+    @ [ "sh"; Filename.concat (share ()) "tools/docker-build"; root; bdir; Env.sysroot ();
         "./" ^ exe ^ ".bc"; "./" ^ exe ^ ".exe" ]
   in
   if !Env.verbose then Env.log "%s" (Compat.quote_command "docker" (List.tl args));

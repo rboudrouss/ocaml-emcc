@@ -14,8 +14,9 @@ main command (dune projects):
       emscripten HTML page; OUT.wasm alone is a standalone module without the
       JavaScript glue (it imports emscripten functions, see --wasi).
       --docker (wasm32, prototype): the bytecode is compiled by a 32-bit
-      OCaml in a container (--docker-platform linux/arm/v7, the default,
-      or linux/386), for the C layouts and constants of a 32-bit platform.
+      OCaml in a container (--docker-platform linux/386, the default, or
+      linux/arm/v7), its C compiled with emscripten's headers, for the C
+      layouts and constants of wasm32.
 
 link options (build and link):
   -L DIR          search lib<x>.a in DIR
