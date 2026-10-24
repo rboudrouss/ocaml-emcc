@@ -1,7 +1,7 @@
 # ocaml-emcc
 
-Compile OCaml programs **with their C stubs** to WebAssembly, for the browser
-and node.
+Compile OCaml programs **together with their C stubs** to WebAssembly, for
+node, browsers and WASI hosts.
 
 Your program and its dependencies (zarith/gmp, unix, str, digestif, your own
 `foreign_stubs`, a C library cloned from GitHub...) end up in one
@@ -13,54 +13,46 @@ But the program runs as bytecode, interpreted by an
 compiled by js_of_ocaml or wasm_of_ocaml, which compile OCaml itself. If your
 project is pure OCaml, or its C stubs already have JavaScript
 implementations, use those instead. ocaml-emcc is for code whose C you
-cannot or do not want to rewrite.
+cannot or do not want to rewrite
+
+ocaml-emcc is a prototype (see [Status](#status)).
 
 ## Quick start
 
 ```sh
-opam switch create myswitch 5.4.1 --keep-build-dir
-opam install . --deps-only --keep-build-dir
-opam install ocaml-emcc                       # or opam pin add ocaml-emcc git+https://github.com/rboudrouss/ocaml-emcc.git
-source /path/to/emsdk/emsdk_env.sh            # emcc in PATH
+opam switch create myswitch <version> --keep-build-dir # keep the sources ocaml-emcc rebuilds
+opam install . --deps-only --keep-build-dir            # your project's dependencies
+opam install ocaml-emcc                                # or opam pin add ocaml-emcc git+https://github.com/rboudrouss/ocaml-emcc.git
+source /path/to/emsdk/emsdk_env.sh                     # emcc in PATH
 
-ocaml-emcc build main.js                      # in your dune project
-node main.js                                  # or load main.js in a web page
+ocaml-emcc build main.js                               # in your dune project
+node main.js                                           # or load main.js in a web page
 ```
 
 `ocaml-emcc build main.js` finds the dune executable named `main`, builds a
 wasm OCaml runtime from the sources of your switch's compiler (the first
-time only), compiles the C stubs of your program and of its dependencies
+time only), compiles the C stubs of the program and of its dependencies
 with emcc, and writes `main.js` and `main.wasm`.
 
 ## Requirements
 
-- An opam switch with **OCaml 4.08 or later**, 4.x or 5.x.
+- An opam switch with **OCaml 4.08 or later** (4.x or 5.x).
 - The sources of the compiler and of the packages with C stubs, which
   ocaml-emcc rebuilds. opam deletes them after a build unless
-  `--keep-build-dir` is given to `opam switch create` and `opam install`, or
-  `OPAMKEEPBUILDDIR=true` is set (there is no persistent option). Missing
-  sources are fetched again with `opam source`, which needs network and a
-  version still in the repository.
+  `--keep-build-dir` is passed to `opam switch create` and `opam install`,
+  or `OPAMKEEPBUILDDIR=true` is set (there is no persistent setting).
+  Missing sources are fetched again with `opam source`, which needs network
+  access and a version still in the repository.
 - The emscripten SDK, with `emcc` in `PATH` (tested with emsdk 6.0.11).
-  Standalone `.wasm` outputs need its clang to support `#embed` (clang 19,
-  emsdk 4.0 and later).
-- dune ≥ 3.11 for `build` and `dune`. Projects without dune only need
-  `link`.
+  Standalone `.wasm` outputs need emsdk 4.0 or later (clang 19, for
+  `#embed`).
+- dune 3.11 or later, except for projects built without dune (see
+  [Without dune](#without-dune)).
 
-The default opam repository starts at OCaml 4.11. For 4.08 to 4.10, add the
-archive repository:
+Everything ocaml-emcc builds (the runtime, C libraries, rebuilt packages)
+lives in `$OPAM_SWITCH_PREFIX/emcc-sysroot/` and goes away with the switch.
 
-```sh
-opam switch create 4.08.1 --keep-build-dir \
-  --repos default,archive=git+https://github.com/ocaml/opam-repository-archive
-```
-
-Everything ocaml-emcc builds lives in `$OPAM_SWITCH_PREFIX/emcc-sysroot/`
-and goes away with the switch.
-
-## Usage
-
-### Building
+## Building
 
 ```sh
 ocaml-emcc build main.js                      # the executable `main`, wherever it is
@@ -68,43 +60,52 @@ ocaml-emcc build bin/main.js                  # the executable bin/main
 ocaml-emcc build dist/app.js --exe bin/main   # any other output path
 ```
 
-The executable is the one at the same path as the output, else the only
-executable of the project with the same name. `--exe DIR/NAME` names it
+The executable built is the one at the same path as the output, else the
+only executable of the project with that name. `--exe DIR/NAME` names it
 explicitly. Any `(modes ...)` works, `byte` is not needed.
 
-The extension of the output selects what is written:
+The extension of the output decides what is written:
 
-- `.js` (+ `.wasm`): runs in node and in browsers
-- `.html`: the same, plus a minimal emscripten page
-- `.wasm` alone: emcc's standalone mode, without the JavaScript glue. The
-  bytecode is linked in as C arrays (there is no file system to ship it
-  in). The module still imports emscripten functions (file operations
-  other than read/write, `getcwd`, sockets...), which its host must
-  provide: emscripten's JavaScript does, a plain WASI host does not.
-- `.wasm` with `--wasi`: a WASI module, which only imports WASI functions
-  and runs in wasmtime, node's WASI, and other WASI hosts (see
-  [WASI](#wasi)). wasm32 only.
+| output | what it is | runs in |
+|--------|------------|---------|
+| `main.js` (+ `main.wasm`) | the module and emscripten's JavaScript glue | node, browsers |
+| `main.html` (+ `.js`, `.wasm`) | the same, plus a minimal emscripten page | browsers |
+| `main.wasm` | a standalone module, without JavaScript | hosts providing emscripten's imports |
+| `main.wasm` with `--wasi` | a module importing only WASI functions | wasmtime, node's WASI, other WASI hosts (see [WASI](#wasi)) |
 
-Common options: `--target wasm32|wasm64` (see below), `-O -Oz` (default
-`-O2`), `--stack-size 16MB`, `--preload`, `--node-fs`, `--wasi`, `-l LIB`,
-`-L DIR`, `--emcc-flag F`. Anything after `--` goes to emcc. The full list
-is in the [command reference](#command-reference).
+A standalone `.wasm` without `--wasi` still imports emscripten functions
+(file operations other than read and write, `getcwd`, sockets...), which
+its host has to provide. See [standalone WebAssembly](https://v8.dev/blog/emscripten-standalone-wasm).
 
-### Running
+Note that `--wasi` uses emscripten's **experimental flag** `-sPURE_WASI`.
 
-The bytecode is embedded in the `.wasm` and emscripten's default
-environment covers both the web and node, so the same files work in both.
+The most common options are `--target wasm64` (see
+[wasm32 or wasm64](#wasm32-or-wasm64)), `-O -Oz` (default `-O2`),
+`--stack-size 16MB` (default 8MB), `-l LIB` and `-L DIR` for extra
+libraries, and `--emcc-flag F`. Arguments after `--` are passed to emcc.
+All options are in the [command reference](#command-reference), and
+project defaults go in [`ocaml-emcc.conf`](#configuration).
 
-Under node, the program behaves like a native executable: arguments, exit
-code, and the standard streams of the node process, as bytes (so
-`node main.js < in.bin > out.bin` works).
+## Running
+
+### In node
 
 ```sh
 node main.js arg1 arg2
 ```
 
-In a web page, the `Module` object gives the arguments and where the output
-goes:
+The bytecode is embedded in the `.wasm`, and the program behaves like a
+native executable: it gets the arguments, the exit code, and the standard
+streams of the node process as bytes (`node main.js < in.bin > out.bin`
+works). Its files are in emscripten's in-memory file system, unless it is
+built with `--node-fs`, the build then only runs in node, sees the real
+file system and the environment variables (`Sys.getenv`), and the bytecode
+is written next to `main.js` instead of being embedded.
+
+### In a browser
+
+The same `main.js` and `main.wasm` work in a web page. The `Module` object
+gives the arguments and receives the output:
 
 ```html
 <script>
@@ -117,16 +118,14 @@ goes:
 <script src="main.js"></script>
 ```
 
-- Don't declare global `out` or `err` variables in the page: emscripten's
+- Don't declare global `out` or `err` variables in the page because emscripten's
   script declares them.
-- `Module.print`, `Module.printErr` and `Module.stdin` take precedence over
-  node's streams too, and handle text lines rather than bytes.
+- `Module.print`, `Module.printErr` and `Module.stdin` handle lines of
+  text rather than bytes. They take precedence over node's streams too.
 - `-- -sMODULARIZE=1 -sEXPORT_NAME=createMain` gives a module to
   instantiate yourself.
 - `--preload` moves the bytecode to a separate `main.data`, loaded next to
   the page (under node, relative to the current directory).
-- `--node-fs` makes a node-only build with access to the real file system
-  and to the environment variables (`Sys.getenv`).
 
 ### WASI
 
@@ -135,184 +134,129 @@ ocaml-emcc build main.wasm --wasi
 wasmtime run -W exceptions=y --dir . main.wasm arg1 arg2
 ```
 
-`--wasi` writes a module whose only imports are WASI (preview1) functions:
-no JavaScript is involved, and the program sees the arguments, environment,
-standard streams, clocks and the directories its host grants it.
+A `--wasi` module imports only WASI (preview1) functions, and the program sees the arguments, environment, standard
+streams, clocks and the directories its host grants it. It is wasm32 only,
+as no host runs wasm64 WASI modules.
 
-- **Hosts**: wasmtime needs `-W exceptions=y` (OCaml raises exceptions from
-  C with longjmp, which uses wasm exception handling) and `--dir DIR` for
-  each directory the program may use. With node, `node:wasi` with
-  `version: 'preview1'` and `preopens` (`tests/wasi-run.mjs`). The host
-  must implement the standard exception handling instructions (exnref):
-  wasmtime 50 and node 22 do.
-- **Files**: paths are resolved against the preopened directories, as
+**Hosts.** The host must implement the standard exception handling
+instructions (exnref), which wasmtime 50 and node 22 do: OCaml raises
+exceptions from C with `longjmp`, which uses them. wasmtime needs
+`-W exceptions=y`, and `--dir DIR` for each directory the program may use.
+With node, use `node:wasi` with `version: 'preview1'` and `preopens` (see
+`tests/wasi-run.mjs`).
+
+**What works:**
+
+- Files: paths are resolved against the preopened directories, as
   wasi-libc does: `/tmp/x` is `x` in the directory preopened as `/tmp`, and
-  a directory preopened as `.` holds every other path. `Sys.chdir` and
-  `Sys.getcwd` work on a current directory kept by the program (`/`
-  first). Opening, reading, writing, `stat`, directories, renaming,
-  removing, truncating, links and times are WASI calls.
-- **Waiting**: `Unix.sleep` and `Unix.select` wait for the host
-  (`poll_oneoff`) instead of spinning, `Sys.time` is the process's CPU
-  time (or the time since it started, when the host has no CPU clock).
-- **wasm32 only**: WASI is 32-bit, no host runs a wasm64 WASI module. Ints
-  are 31-bit (see [targets](#targets-wasm32-or-wasm64)).
-- **Descriptors**: WASI cannot duplicate one. `Unix.dup` and `dup2` of a
-  file the program opened open it again at the same position, a copy with a
-  position of its own (enough for a C library doing `fdopen(dup(fd))`, or
-  to redirect `stdout` to a file); the standard streams cannot be
-  duplicated. Locks (`fcntl`, `lockf`) always succeed: there is a single
-  process.
-- **What WASI does not have** fails as it would without the system
-  support: sockets, `getaddrinfo`, pipes, processes and `Sys.command`
-  (`ENOSYS`). There are no users: everything is owned by root, `chmod` and
-  `chown` do nothing. `Unix.localtime` is UTC.
-- C libraries that call functions emscripten implements in JavaScript
-  (SDL, ctypes-foreign's `dlsym`) keep importing them: `link` lists the
-  imports that are not WASI, and the module only runs where they are
-  defined (`wasmtime -W unknown-imports-trap=y` runs it until one is
-  called).
+  a directory preopened as `.` holds every other path. Opening, reading,
+  writing, `stat`, directories, renaming, removing, truncating, links and
+  times work. `Sys.chdir` and `Sys.getcwd` use a current directory kept by
+  the program, `/` at first.
+- Waiting: `Unix.sleep` and `Unix.select` wait for the host instead of
+  spinning. `Sys.time` is the CPU time of the process, or the time since it
+  started when the host has no CPU clock.
+- `Unix.dup` and `dup2` of a file the program opened open it again at the
+  same position, giving a copy with its own position. This is enough for a
+  C library doing `fdopen(dup(fd))`, or to redirect `stdout` to a file. The
+  standard streams cannot be duplicated.
 
-The C functions behind this are in `share/runtime/wasi.c`. When the
-program's own C (its stubs, `-l` archives, `c_library_flags`) defines one of
-them, `__syscall_getcwd` or `getaddrinfo` for instance, `link` leaves
-ocaml-emcc's out and says so: that definition is the one linked. The same
-holds for `compat.c` and `dlsym.c`.
+**What does not:** sockets, `getaddrinfo`, pipes, processes and
+`Sys.command` fail with `ENOSYS`. There are no users: everything is owned
+by root, and `chmod` and `chown` do nothing. File locks (`fcntl`, `lockf`)
+always succeed, as there is a single process. `Unix.localtime` is UTC.
 
-### Targets: wasm32 or wasm64
+C libraries that call functions emscripten implements in JavaScript (SDL,
+the `dlsym` of ctypes-foreign) keep importing them. `link` lists the
+imports that are not WASI, and such a module only runs where they are
+defined (`wasmtime -W unknown-imports-trap=y` runs it until one is called).
 
-The bytecode is always the one of your switch, compiled for 64 bits.
+## wasm32 or wasm64
 
-- **wasm32** (default): smaller, faster, supported everywhere, but ints
-  are 31 bits at run time:
-  - integer literals beyond 31 bits (`0x40000000`, `123456789012`) are
-    wrapped when the program starts, as a 32-bit compiler would
-    (`0x40000000` becomes `min_int`). This is right for code that selects
-    32-bit variants with `Sys.word_size` (optint, used by checkseum and
-    decompress), wrong otherwise. `build`, `link` and `doctor` **warn**
-    when there are any (the check is exact). Marshalled data holding such
-    integers fails to load (`input_value: integer too large`), as on 32-bit
-    OCaml.
-  - arithmetic beyond 31 bits wraps silently (`1 lsl 40` = 256), which no
-    tool can detect.
-  - ctypes and the bindings using it are rebuilt for wasm32, so that
-    their structs have the layouts of wasm32. `build` and `link` warn
-    about those that cannot be.
+The bytecode is always the one of your switch, compiled for 64 bits. The
+target is what the runtime and the C code are compiled for:
+
+- **wasm32** (default): smaller, faster, supported everywhere, but OCaml
+  ints are 31 bits at run time (see below).
 - **wasm64** (`--target wasm64`): memory64, exactly the semantics of the
-  native 64-bit program. Needs node ≥ 24 (the one shipped with emsdk
-  works), Chrome ≥ 133 or Firefox ≥ 134.
+  native 64-bit program. Needs node 24 or later (the one shipped with emsdk
+  works), Chrome 133 or Firefox 134, and has no WASI.
 
-### `--docker` (prototype)
+On wasm32, as with a 32-bit OCaml:
 
-`ocaml-emcc build OUT.js --docker` (wasm32) compiles the bytecode with a
-32-bit OCaml in a container, so that what libraries compute when they are
-built (ctypes' sizes and struct offsets, dune-configurator answers) is that
-of a 32-bit platform. The image
-(`ocaml-emcc-docker:<arch>-<version>-emcc<version>`, from debian) gets an
-opam switch with the OCaml version of the host's switch and the host's
-version of each package the program uses, installed on demand. The C stubs
-stay the host's, rebuilt for wasm32.
+- Integer literals beyond 31 bits (`0x40000000`, `123456789012`) are
+  wrapped when the program starts: `0x40000000` becomes `min_int`. This is
+  right for code that picks 32-bit variants with `Sys.word_size` (optint,
+  used by checkseum and decompress), wrong otherwise. `build`, `link` and
+  `doctor` **warn** when there are any (the check is exact). Marshalled
+  data holding such integers fails to load
+  (`input_value: integer too large`).
+- Arithmetic beyond 31 bits wraps silently (`1 lsl 40` is 256).
+- ctypes and the packages using it are rebuilt for wasm32, so that their C
+  structs have the layouts of wasm32. `build` and `link` warn about those
+  that cannot be (see [Differences from native](#differences-from-native)).
 
-Once its OCaml is built, the container's C compiler uses the headers of
-emscripten and of the sysroot instead of glibc's, so that the constants a
-build reads from C headers are the target's: errno values (`ENOENT` is 44
-there, 2 on Linux), libffi's ABI (ctypes-foreign). Its programs are still
-linked with glibc: right for the generators that print constants, sizes and
-offsets, not for C code calling the system through the structs of these
-headers. dune, run in the container, is built with glibc's headers.
+## Differences from native
 
-- `--docker-platform linux/386` (default): no emulation; with
-  `-malign-double -m128bit-long-double`, the struct layouts of wasm32 but
-  for the alignment of `long double` (16 bytes, 8 on wasm32).
-- `--docker-platform linux/arm/v7`: the struct layouts of wasm32 but for
-  `long double` (8 bytes, 16 on wasm32); needs qemu-user in binfmt_misc on
-  an x86 machine (`docker run --privileged --rm tonistiigi/binfmt --install
-  arm`), and is slow there.
+Besides 31-bit integers on wasm32:
 
-OCaml 5 has no 32-bit native compiler: the container's switch is bytecode
-only. An opam repository ranked first in it links the generators of dune's
-`(ctypes)` stanza as custom bytecode when there is no `ocamlopt`, and
-drops the conflict with `ocaml-option-bytecode-only` of the packages that
-declare it for that reason (zstd). dune links these generators natively
-only (`Exe.Linkage.native` in `src/dune_rules/ctypes/ctypes_rules.ml`),
-[ocaml/dune#13650](https://github.com/ocaml/dune/issues/13650), still
-open. The fix used here is the linkage dune gives ppx drivers and cinaps,
-`Exe.Linkage.native_or_custom`. It was proposed in
-[ocaml/dune#7431](https://github.com/ocaml/dune/pull/7431), closed
-unmerged for lack of a test: a cram test hiding `ocamlopt`, as
-`test/blackbox-tests/test-cases/byte-code-only.t` does, would do.
-
-Tried on 5.5.1 with linux/386: ctypes (ctypes-foreign), zstd, yaml and
-zarith pass. Pins and local packages are not reproduced. Without
-`--docker`, the wasm32 builds of ctypes and its users (see
-[How it works](#how-it-works)) handle these cases, but cannot rebuild the
-packages using dune's `(ctypes)` stanza.
-
-### Configuration
-
-An optional `ocaml-emcc.conf`, looked up from the current directory
-upwards:
-
-```
-target: wasm32                  # default target of the project
-requires: cjson                 # recipes built before building/linking
-link-flags: -lcjson -sINITIAL_MEMORY=64MB
-cflags: -DNDEBUG
-recipes: emcc-recipes           # recipe directories (default: ./emcc-recipes)
-```
-
-Emscripten flags come from, in increasing precedence (emcc keeps the last
-`-s` setting): `link-flags:`, `$OCAML_EMCC_LDFLAGS`, `--emcc-flag F`, then
-the arguments after `--`:
-
-```sh
-ocaml-emcc build app.js -- -sMODULARIZE=1 -sEXPORT_NAME=createApp \
-  --preload-file assets@/assets -sINITIAL_MEMORY=128MB -sENVIRONMENT=web
-```
-
-C flags for stubs and recipes come from `cflags:` and
-`$OCAML_EMCC_EXTRA_CFLAGS`.
+- **No threads.** `Thread.create` and `Domain.spawn` fail, while `Mutex`
+  and `Condition` work. lwt runs its blocking jobs (`Lwt_unix` file
+  operations...) synchronously, and `Lwt_preemptive` fails.
+- **ctypes structs on wasm32**, for the bindings that could not be rebuilt
+  for wasm32 (dune's `(ctypes)` stanza with structs, packages built without
+  dune): struct fields, `sizeof`, and arrays of `long`, `size_t` or
+  pointers are those of the 64-bit host. `build`, `link` and `doctor`
+  **warn**. Such bindings only work on wasm64, or with the experimental
+  [`--docker`](#experimental---docker).
+- **ctypes-foreign** only finds the C symbols named by string literals of
+  the program, not names computed at run time. `dlopen` accepts any file
+  name, since everything is linked in.
+- **C type mismatches.** A C function declared by a stub with other types
+  than its definition (`int` for `long`) becomes a trap on wasm64. `link`
+  warns about each one.
+- **Floating-point rounding modes** do not exist in wasm: only
+  round-to-nearest is available, so code that switches to directed rounding
+  (`fesetround`) loses that guarantee.
+- **LMDB** opens databases lock-free and writes through the map
+  (`MDB_NOLOCK | MDB_WRITEMAP`): emscripten has no process-shared mutexes,
+  and its file mappings are copies.
+- **SDL2** under node only initializes the timer and events subsystems.
+  Video and audio need a web page.
 
 ## C dependencies
 
 ### What is built automatically
 
-Most programs need no configuration:
+Most programs need no configuration. `build` and `link` find the C a
+program needs from its bytecode and its opam packages:
 
-- **Stub libraries of opam packages** (`dllzarith` in the bytecode) are
+- **Stub libraries of opam packages** are
   rebuilt with emcc from the package that installed them: with the builtin
   recipe of that package if there is one, else with the package's own dune
-  rules, else from the C files of its native build (see
-  [How it works](#how-it-works)).
+  rules, else from the C files of its native build.
 - **System C libraries**: when a package depends on `conf-gmp`,
-  `conf-zlib`..., the recipe of the same name is built first and linked. So
-  are the `-lX` its `.cma` files record when a recipe provides `libX.a`
-  (glpk has no `conf-glpk`). `tests/syslibs` (mlmpfr + zlib) has no
-  configuration at all.
-- **ctypes**: bindings using stub generation (`Cstubs`, dune's `(ctypes)`
-  stanza) and ctypes-foreign both work, on both targets. On wasm32, ctypes
-  and the packages of the program using it are rebuilt for wasm32 (see
-  [How it works](#how-it-works)).
+  `conf-zlib`..., the recipe of the same name is built and linked. So is
+  any recipe providing a `libX.a` for a `-lX` that the package's `.cma`
+  files record.
 - **`c_library_flags`**: the `-lX` that libraries record for their stubs
   (`(c_library_flags (-lfoo))`, `-cclib -lfoo`) are linked when a wasm
   `libX.a` exists or can be built. Host flags (`-L/usr/lib`, `-Wl,-rpath`)
-  and the libraries emcc provides (`-lm`, `-lpthread`...) are dropped.
+  and the libraries emcc provides (`-lm`, `-lpthread`...) are dropped, and
   `-lstdc++` links the program as C++.
-- **Packages configured on the host**: dune rules that run `pkg-config`
-  or `llvm-config` get the sysroot's answers in the wasm context, and the
-  recipes of the libraries a package names (its `conf-*` dependencies, the
-  `-lX` of its `.cma` files) are built before its stubs. A C parser
-  installed with opam against the host's LLVM gets its stubs rebuilt
-  against the `clang` recipe this way. `tests/depgraph` is a smaller case:
-  an installed package with mpfr stubs (flags from `pkg-config`) and
-  zarith, built from a program that only names that package.
+- **Packages configured on the host**: dune rules that run `pkg-config` or
+  `llvm-config` get the answers of the sysroot, and the recipes of the
+  libraries a package names are built before its stubs. A package whose
+  stubs use mpfr through `pkg-config` (`tests/depgraph`), or a C parser
+  built against the host's LLVM (rebuilt against the `clang` recipe), work
+  this way.
+- **ctypes**: bindings using stub generation (`Cstubs`, dune's `(ctypes)`
+  stanza) and ctypes-foreign work on both targets.
 
-A recipe is built once per switch and target. It is not rebuilt when it
-changes (ocaml-emcc says so): `ocaml-emcc install --force NAME` rebuilds
-it.
+A recipe is built once per switch and target, and is not rebuilt when it changes
+(ocaml-emcc says so): `ocaml-emcc install --force NAME` rebuilds it.
 
 ### Builtin recipes
-
-C libraries, named after their `conf-*` package:
 
 | recipe | for (opam) | notes |
 |--------|------------|-------|
@@ -332,62 +276,61 @@ C libraries, named after their `conf-*` package:
 | `libargon2` | argon2 | reference implementation, no threads |
 | `liblmdb` | lmdb | lock-free, see [differences](#differences-from-native) |
 | `sdl2` | tsdl | emscripten's port (`-sUSE_SDL=2`) |
-| `clang` | programs embedding clang's frontend | see [clang](#clang) |
+| `clang` | programs embedding clang's frontend | see [below](#the-clang-recipe) |
+
+These recipes take the sources of the opam package
+that vendors the library if the switch has it, else
+the newest upstream release compatible with the host's library (see
+[system recipes](#system-recipes)).
 
 OCaml packages, built from the sources of the installed package:
 
 - `zarith`, `camlidl`, `mlgmpidl`
 - `apron`: the C libraries and the stubs of every domain (box, oct, polka,
   t1p, avo) in each numeric variant
-- packages whose sources need a change for wasm, then built with their own
-  dune rules:
+- packages whose sources need a change for wasm:
   - `mirage-crypto` (and `-ec`, `-rng`): wasm32 takes the 32-bit code, the
     cycle counter reads the high-resolution clock, entropy comes from
     `getentropy`, no AES-NI
   - `lwt`: blocking calls run synchronously instead of in a thread pool
-  - `cryptokit`: a declaration of a runtime function with the wrong
-    integer type, a trap on wasm64
+  - `cryptokit`: a runtime function declared with the wrong integer type traps on wasm64
   - `secp256k1-internal`: x86-64 assembly disabled
-  - `lmdb`: its bundled LMDB, changed as in `liblmdb`.
+  - `lmdb`: its bundled LMDB is changed as in `liblmdb`
 
-The C library recipes pin no version: they take the sources of the opam
-package that vendors the library if the switch has it (the `gmp` package),
-else the newest upstream release compatible with the library of the host
-(see [system recipes](#system-recipes)).
+#### The clang recipe
 
-### clang
-
-The `clang` recipe builds the libraries of clang's frontend (`libclang*.a`,
-the `libLLVM*.a` they need, `libclang-cpp.a`), their headers and clang's
-resource headers. It also installs in `$SYSROOT/bin`:
-
-- `llvm-config`, which describes this installation (`--cxxflags`,
-  `--ldflags`, `--libs`...), for a configure script or a dune rule
-- `clang`, which compiles nothing but answers `-print-resource-dir` with
-  where the program will find the resource headers at run time
-  (`CLANG_RESOURCE_DIR`, default `/usr/lib/clang/<ver>`, overridden by
-  `$OCAML_EMCC_CLANG_RESOURCE_DIR`): preload them there.
-
-A `-lclang-cpp`, `-lclangFrontend`... or `-lLLVM-<major>` in a `.cma`
-builds the recipe, and `-lclang-cpp` links the LLVM libraries as well (the
-host's `-lLLVM-<major>` is a shared library the recipe does not make). In
-the wasm context of `dune -x`, `llvm-config` is the recipe's, so packages
-whose dune rules run it compile their stubs against the wasm LLVM. Values
-a package's `./configure` wrote into its sources stay the host's, such as
-the output of the host's `clang -print-resource-dir`: preload the resource
-headers there.
+`clang` builds the libraries of clang's frontend (`libclang*.a`,
+`libclang-cpp.a` and the `libLLVM*.a` they need), their headers and
+clang's resource headers. It is built for a `-lclang-cpp`,
+`-lclangFrontend`... or `-lLLVM-<major>` in a `.cma`. It needs cmake and a
+host C++ compiler (and uses ninja if available). LLVM 9.0.1, the only
+version tested, takes about 15 minutes on 4 cores.
 
 The LLVM version is `LLVM_VERSION` if a project recipe sets it (`9.0.1`, or
-a major `9`), else the major version of the host's `llvm-config`, else the
-newest release. It needs cmake, a host C++ compiler, and ninja if
-available. LLVM 9.0.1 takes about 15 minutes on 4 cores. Only 9.0.1 has
-been tested.
+a major such as `9`), else the major version of the host's `llvm-config`,
+else the newest release.
 
-### Writing a recipe
+It also installs two tools in `$SYSROOT/bin`, which come first in `PATH`
+during builds:
+
+- `llvm-config`, describing this installation (`--cxxflags`, `--ldflags`,
+  `--libs`...), so that configure scripts and dune rules compile against
+  the wasm LLVM.
+- `clang`, which compiles nothing but answers `-print-resource-dir` with
+  where the program will find the resource headers at run time:
+  `CLANG_RESOURCE_DIR` (default `/usr/lib/clang/<ver>`), overridden by
+  `$OCAML_EMCC_CLANG_RESOURCE_DIR`. Preload the headers there.
+
+Values that a package's `./configure` wrote into its sources stay the
+host's, such as the output of the host's `clang -print-resource-dir`:
+preload the resource headers at that path instead.
+
+### Project recipes
 
 A project recipe lives in `emcc-recipes/<name>/recipe.sh` next to
-`dune-project`, and is listed in `requires:` and linked with `link-flags:`
-in `ocaml-emcc.conf`. This one clones cJSON (`tests/gitrecipe`):
+`dune-project`, is listed in `requires:` and linked with `link-flags:` in
+[`ocaml-emcc.conf`](#configuration). This one clones cJSON
+(`tests/gitrecipe`):
 
 ```sh
 # emcc-recipes/cjson/recipe.sh
@@ -404,11 +347,12 @@ build() {                         # runs in a fresh copy of the sources
 
 Project recipes take precedence over the builtin ones (`share/recipes/`).
 More directories can be added with `--recipes DIR` or
-`$OCAML_EMCC_RECIPES_PATH`. A project recipe can also **refine** a builtin
-one: `include_recipe NAME` reads the next recipe of that name, after the
-project's variables are set, and an optional `pre_build` function runs
-before its `build`, to patch the sources. Mopsa pins clang 9 and patches
-apron this way:
+`$OCAML_EMCC_RECIPES_PATH`.
+
+A project recipe can also **refine** a builtin one: `include_recipe NAME`
+reads the next recipe of that name, after the project's variables are set,
+and an optional `pre_build` function runs before its `build`, to patch the
+sources. [MOPSA](https://gitlab.com/rboudrouss/mopsa-analyzer-32-bit/-/tree/ocaml-emcc?ref_type=heads) pins clang 9 and patches apron this way:
 
 ```sh
 # emcc-recipes/clang/recipe.sh
@@ -445,12 +389,6 @@ DEPENDS=gmp
 HEADER=mpfr.h                     # host version: pkg-config mpfr, else these macros
 VERSION_MACROS="MPFR_VERSION_MAJOR MPFR_VERSION_MINOR MPFR_VERSION_PATCHLEVEL"
 RELEASES=https://ftp.gnu.org/gnu/mpfr/   # directory listing mpfr-X.Y.Z.tar.*
-# optional: PKGCONFIG=, TARBALL= (prefix), COMPAT=, OPAM_SOURCES= (vendoring
-# opam package), LINK= (default -lmpfr; DEPENDS' flags are appended)
-# or, for releases not in a directory listing, a releases function printing
-# "<version> <tarball url>" lines, oldest first (git_tag_releases helps):
-#   releases() { git_tag_releases https://github.com/libffi/libffi.git v \
-#     'https://github.com/libffi/libffi/releases/download/v{v}/libffi-{v}.tar.gz'; }
 
 build() {
   emconfigure ./configure --host=none --enable-static --disable-shared \
@@ -459,10 +397,20 @@ build() {
 }
 ```
 
+Optional variables are `PKGCONFIG=`, `TARBALL=` (prefix of the tarball
+names), `COMPAT=`, `OPAM_SOURCES=` (the vendoring opam package) and `LINK=`
+(default `-lNAME`, followed by the flags of `DEPENDS`). For releases that
+are not in a directory listing, define a `releases` function printing
+`<version> <tarball url>` lines, oldest first, the `git_tag_releases` function helps:
+
+```sh
+releases() { git_tag_releases https://github.com/libffi/libffi.git v \
+  'https://github.com/libffi/libffi/releases/download/v{v}/libffi-{v}.tar.gz'; }
+```
+
 The recipe should install a pkg-config file in `$SYSROOT/lib/pkgconfig`
-(`install_pc`) when the library's build system does not: in the wasm
-context, `pkg-config` (and dune-configurator) only sees the sysroot's
-libraries.
+(`install_pc`) when the library's build system does not: during builds,
+`pkg-config` (and dune-configurator) only sees the sysroot's libraries.
 
 #### Recipe reference
 
@@ -477,8 +425,7 @@ libraries.
   (`clang`: `'clang* LLVM*'`)
 - `USE_CFLAGS=`: C flags its users' stubs need besides the sysroot's
   include directory (`sdl2`: `-I$SYSROOT/include/SDL2`)
-- functions: `build` (required), `pre_build`, `releases` (see system
-  recipes), `fetch`
+- functions: `build` (required), `pre_build`, `releases`, `fetch`
 - helpers: `stub_cc file.c [flags]` (emcc with the OCaml runtime headers),
   `mklib`, `install_lib`, `install_headers`, `install_pc NAME VERSION LIBS
   [CFLAGS]`, `link_flags LIB "-lfoo"` (flags needed whenever `libLIB.a` is
@@ -490,45 +437,43 @@ libraries.
 - variables: `$EMCC`, `$CFLAGS`, `$LDFLAGS`, `$SYSROOT`, `$OCAML_INC`,
   `$OCAML_VERSION`, `$TARGET`, `$RECIPE_DIR`, `$BASE_RECIPE_DIR` (that of
   the recipe read by `include_recipe`, where its patches are), `$NPROC`,
-  `$SHARED` (target-independent: host tools, big source archives).
+  `$SHARED` (target-independent: host tools, big source archives)
 
-## Differences from native
+## Configuration
 
-Besides 31-bit integers on wasm32 (see [targets](#targets-wasm32-or-wasm64)):
+A project can have an `ocaml-emcc.conf`, looked up from the current
+directory upwards. Every field is optional:
 
-- **No threads.** `Thread.create` and `Domain.spawn` fail, while `Mutex`
-  and `Condition` work. lwt runs its blocking jobs (`Lwt_unix` file
-  operations...) synchronously, and `Lwt_preemptive` fails.
-- **ctypes struct layouts on wasm32**, for the bindings that could not be
-  rebuilt for wasm32 (see [How it works](#how-it-works)):
-  struct fields, `sizeof`, arrays of `long`, `size_t` or pointers are
-  those of the 64-bit host. `build`, `link` and `doctor` **warn**; such
-  bindings only work on wasm64.
-- **ctypes-foreign** only finds the C symbols named by string literals of
-  the program, not names computed at run time. `dlopen` accepts any file
-  name, since everything is linked in.
-- **C type mismatches.** A C function declared by a stub with other types
-  than its definition (`int` for `long`) becomes a trap on wasm64. `link`
-  warns about each one.
-- **Floating-point rounding modes** do not exist in wasm: only
-  round-to-nearest is available, so code that switches to directed rounding
-  (`fesetround`) loses that guarantee.
-- **LMDB** opens databases lock-free and writes through the map
-  (`MDB_NOLOCK | MDB_WRITEMAP`): emscripten has no process-shared mutexes,
-  and its file mappings are copies.
-- **SDL2** under node only initializes the timer and events subsystems.
-  Video and audio need a web page.
+```
+target: wasm32                  # default target of the project
+requires: cjson                 # recipes built before building/linking
+link-flags: -lcjson -sINITIAL_MEMORY=64MB
+cflags: -DNDEBUG
+recipes: emcc-recipes           # recipe directories (default: ./emcc-recipes)
+```
 
-## Without dune: step by step
+Emscripten link flags come from, in increasing precedence (emcc keeps the
+last `-s` setting): `link-flags:`, `$OCAML_EMCC_LDFLAGS`, `--emcc-flag F`,
+then the arguments after `--`:
+
+```sh
+ocaml-emcc build app.js -- -sMODULARIZE=1 -sEXPORT_NAME=createApp \
+  --preload-file assets@/assets -sINITIAL_MEMORY=128MB -sENVIRONMENT=web
+```
+
+C flags for stubs and recipes come from `cflags:` and
+`$OCAML_EMCC_EXTRA_CFLAGS`.
+
+## Without dune
 
 `build` chains the following commands, which can also be run on their own
 from scripts and Makefiles:
 
 ```sh
 ocaml-emcc setup                         # wasm runtime of the switch (once per target)
-ocaml-emcc install gmp zarith cjson      # recipes
+ocaml-emcc install gmp zarith cjson      # build recipes
 ocaml-emcc dune ./bin/main.bc            # dune build -x wasm32: C stubs compiled with emcc
-ocaml-emcc doctor prog.bc                # how stubs/primitives resolve, 31-bit literal check
+ocaml-emcc doctor prog.bc                # how stubs and primitives resolve, 31-bit literals
 ocaml-emcc deps prog.bc                  # build the missing stub libraries of prog.bc
 ocaml-emcc link prog.bc -o prog.js       # the final link
 ocaml-emcc env --cflags                  # flags to compile C stubs yourself
@@ -551,11 +496,16 @@ prog.bc: prog.ml      # -no-check-prims: our primitives only exist in libstub.a
 	ocamlfind ocamlc -package zarith,unix -linkpkg -no-check-prims prog.ml -o $@
 ```
 
-### Command reference
+On wasm32, a bytecode that uses ctypes should be compiled against the
+packages rebuilt for wasm32 (`link` warns otherwise):
+`OCAMLFIND_CONF=<sysroot>/findlib.conf ocamlfind -toolchain wasm32 ocamlc ...`.
+
+## Command reference
 
 ```
 ocaml-emcc [--target wasm32|wasm64] [--switch SW] [--sysroot DIR] [--recipes DIR] [-v] COMMAND
-  build OUT.js [--exe DIR/NAME] [LINK OPTIONS] [-- EMCC-ARGS]   everything (dune projects)
+  build OUT.js [--exe DIR/NAME] [--docker] [--docker-platform P] [LINK OPTIONS] [-- EMCC-ARGS]
+                                   everything (dune projects)
   setup [--force]                  wasm runtime of the switch's compiler
   install [--force] RECIPE...      build recipes
   dune [DUNE-BUILD-ARGS]           dune build -x <target> + static stub archives
@@ -563,11 +513,52 @@ ocaml-emcc [--target wasm32|wasm64] [--switch SW] [--sysroot DIR] [--recipes DIR
   doctor PROG.bc [-L DIR]          stub libraries, primitives, 31-bit literals
   link PROG.bc -o OUT.js [LINK OPTIONS] [-- EMCC-ARGS]
   env [--cflags|--sysroot]         configuration / flags for C stubs
-link options: -L DIR, -l LIB, --preload, --node-fs, -O FLAG, --stack-size S,
-              --no-deps, --wasi (OUT.wasm), --emcc-flag F
+
+link options (build and link):
+  -L DIR          search lib<x>.a in DIR
+  -l LIB          extra library or archive to link (repeatable)
+  --preload       bytecode in a separate .data file instead of embedded
+  --node-fs       node only: real file system access, .bc next to OUT.js
+  -O FLAG         emcc optimisation flag (default -O2)
+  --stack-size S  C stack size (default 8MB)
+  --no-deps       do not build missing stub libraries automatically
+  --wasi          OUT.wasm for a WASI host (wasm32)
+  --emcc-flag F   extra emcc link flag (repeatable)
 ```
 
+`ocaml-emcc help` prints the same with more detail.
+
+## Experimental: `--docker`
+
+On wasm32, some packages compute C layouts when they are built: ctypes'
+sizes and struct offsets, dune-configurator's answers. ocaml-emcc rebuilds
+most of them for wasm32 itself, but not the bindings using dune's
+`(ctypes)` stanza with structs. `build OUT.js --docker` (wasm32 only)
+compiles the bytecode with a 32-bit OCaml in a container instead, so that
+these values are those of a 32-bit platform. The C stubs are still the
+host's, rebuilt for wasm32.
+
+The image (`ocaml-emcc-docker:<arch>-<version>-emcc<version>`, based on
+Debian) gets an opam switch with the OCaml version of the host's switch,
+and the host's version of each package the program uses, installed on
+demand. Pins and local packages are not reproduced. Two platforms are
+available:
+
+- `--docker-platform linux/386` (default): no emulation. The struct
+  layouts are those of wasm32, except for the alignment of `long double`
+  (16 bytes, 8 on wasm32).
+- `--docker-platform linux/arm/v7`: the struct layouts of wasm32, except
+  for the size of `long double` (8 bytes, 16 on wasm32). On an x86 machine
+  it needs qemu-user in binfmt_misc
+  (`docker run --privileged --rm tonistiigi/binfmt --install arm`), and is
+  slow.
+
+Tried on OCaml 5.5.1 with linux/386: ctypes (ctypes-foreign), zstd, yaml
+and zarith pass. See [How it works](#--docker) for the details.
+
 ## How it works
+
+### The build
 
 1. **Runtime** (`setup`, the `ocaml` recipe): the sources of the switch's
    compiler are configured with `emconfigure`, then `libcamlrun.a` and the
@@ -582,22 +573,24 @@ link options: -L DIR, -l LIB, --preload, --node-fs, -O FLAG, --stack-size S,
    `(modes exe)` executables come out as plain bytecode
    (`-output-complete-exe` is intercepted). Package rules that call
    `ocamlmklib`, `pkg-config` or `llvm-config` themselves get the wasm
-   versions, which come first in dune's `PATH`. The wasm `ocamlmklib`
-   hands host objects to the host tool.
+   versions, which come first in dune's `PATH`; the wasm `ocamlmklib`
+   hands host objects to the host tool. The C compiler of this context
+   turns the executables it links into node scripts, so that build rules
+   can run them.
 4. **Dependencies**: the bytecode's `DLLS` section names the stub libraries
    (`dllzarith`...), and each `dll<x>` maps to a wasm `lib<x>.a`. A missing
    one is built from the opam package that installed `dll<x>.so`, by the
    first of:
-   1. a recipe with the package's name
-   2. the package's own dune rules (`dune -x`), as for digestif
+   1. a recipe with the package's name;
+   2. the package's own dune rules (`dune -x`), as for digestif;
    3. the C files behind each stub archive of the package's native build,
       with its `-I` flags: for packages without dune (glpk), when `dune -x`
       fails (the `(ctypes)` stanza), or when an archive was built by a host
-      tool (ocaml-lua runs `make` in its copy of Lua)
+      tool (ocaml-lua runs `make` in its copy of Lua);
    4. every `.c` file of the package that includes `<caml/...>`.
 
    `c_library_flags` are only used by custom links, which a bytecode build
-   does not do, so the toolchain's `ocamlc` records those of every linked
+   does not do. So the toolchain's `ocamlc` records those of every linked
    `.cma` in the sysroot, and `link` builds the missing ones: the stub
    library of the opam package that installed `dllX.so` (libraries built
    with `ocamlmklib -custom`, such as stb_image, are only named there), or
@@ -607,76 +600,110 @@ link options: -L DIR, -l LIB, --preload, --node-fs, -O FLAG, --stack-size S,
    `DLLS`/`DLPT` sections, is embedded in the module and `argv[0]` points
    to it (the `ocamlc -custom` trick), so `Sys.argv` looks native.
 
-**Standalone modules.** A `.wasm` without JavaScript has no file system to
-embed the bytecode in. Its sections become the C arrays of a generated
-`bytecode.c` (`#embed`), and `main.c` starts the program with
-`caml_startup_code`, as the C file of `ocamlc -output-obj` does: `CODE`,
-`DATA`, the section table of that compiler for the toplevel and Dynlink
-(`SYMB`, `CRCS`, and `PRIM` before 5.0), and the debug events of `DBUG`,
-relocated and gathered by `link` into what the runtime would build from
-the executable file (backtraces keep their locations).
+### Standalone modules
 
-**WASI.** emscripten's standalone libc already reads, writes and closes
-files, and reads clocks, arguments and the environment, with WASI calls.
-But opening and `stat`ing a file are stubs that fail (EPERM, ENOSYS),
-whatever the host, and the rest of the file system (`unlink`, `rename`,
-`getcwd`, `readdir`...), sockets and `system` are imports of emscripten's
+A `.wasm` without JavaScript has no file system to embed the bytecode in.
+Its sections become the C arrays of a generated `bytecode.c` (`#embed`),
+and `main.c` starts the program with `caml_startup_code`, as the C file of
+`ocamlc -output-obj` does: `CODE`, `DATA`, the section table of that
+compiler for the toplevel and Dynlink (`SYMB`, `CRCS`, and `PRIM` before
+5.0), and the debug events of `DBUG`, relocated and gathered by `link`
+into what the runtime would build from the executable file (backtraces
+keep their locations).
+
+### WASI
+
+emscripten's standalone libc already reads, writes and closes files, and
+reads clocks, arguments and the environment, with WASI calls. But opening
+and `stat`ing a file are stubs that fail (EPERM, ENOSYS) whatever the host,
+and the rest of the file system (`unlink`, `rename`, `getcwd`,
+`readdir`...), sockets and `system` are imports of emscripten's
 JavaScript. `--wasi` adds `share/runtime/wasi.c`, which implements these
-system calls with WASI, as wasi-libc does, and links with `-sPURE_WASI`,
+system calls with WASI as wasi-libc does, and links with `-sPURE_WASI`,
 which removes emscripten's last import (memory growth notifications).
+
 `setjmp`/`longjmp` (`-sSUPPORT_LONGJMP=wasm`) and C++ exceptions are
 compiled into emscripten's default encoding of wasm exceptions, the legacy
 one, which WASI hosts do not implement: binaryen translates the module to
 the standard one (exnref) as emcc finishes it
 (`-sBINARYEN_EXTRA_PASSES=--translate-to-exnref,--emit-exnref`).
 
-**Signature adapters.** A wasm indirect call traps on any signature
-mismatch, while native code ignores extra arguments: OCaml calls zarith's
-`ml_z_init()` with one argument, for instance. The arity of each call site
-is read from the bytecode (`C_CALLn`), wasm-ld reports the definitions that
-differ, and an adapter is generated for each of them.
+When the program's own C (its stubs, `-l` archives, `c_library_flags`)
+defines one of the functions of `wasi.c`, `compat.c` or `dlsym.c`
+(`__syscall_getcwd` or `getaddrinfo` for instance), `link` leaves
+ocaml-emcc's out and says so: the program's definition is the one linked.
 
-**ctypes on wasm32.** ctypes lays C types out (struct fields, `sizeof`,
-arrays) with sizes it generated when it was built (`ctypes_primitives.ml`),
-and bindings that generate their type descriptions (`Cstubs_structs`,
-yaml) print the offsets of the structs from a C program. Built on the 64-bit host, both are those
-of LP64: right for wasm64, wrong for wasm32 (`long`, `size_t` and pointers
-have 4 bytes there). A 32-bit host would not do either: i386 aligns
-`double` and `int64_t` to 4 bytes in structs, wasm32 to 8.
+### Signature adapters
+
+A wasm indirect call traps on any signature mismatch, while native code
+ignores extra arguments: OCaml calls zarith's `ml_z_init()` with one
+argument, for instance. The arity of each call site is read from the
+bytecode (`C_CALLn`), wasm-ld reports the definitions that differ, and an
+adapter is generated for each of them.
+
+### ctypes on wasm32
+
+ctypes lays C types out (struct fields, `sizeof`, arrays) with sizes it
+generated when it was built (`ctypes_primitives.ml`), and bindings that
+generate their type descriptions (`Cstubs_structs`, yaml) print the
+offsets of the structs from a C program. Built on the 64-bit host, both
+are those of LP64: right for wasm64, wrong for wasm32, where `long`,
+`size_t` and pointers have 4 bytes. A 32-bit host would not do either:
+i386 aligns `double` and `int64_t` to 4 bytes in structs, wasm32 to 8.
 
 So on wasm32, `build` and `link` rebuild ctypes and the packages of the
-program that depend on it (from the program's `CRCS` section and the opam
-dependencies) for wasm32, once per switch and package version
-(`driver.sh shadow`), and install their OCaml libraries in
+program that depend on it (found from the program's `CRCS` section and
+the opam dependencies), once per switch and package version
+(`driver.sh shadow`). Their OCaml libraries are installed in
 `<sysroot>/lib/findlib`, which the toolchain searches before the switch.
-`build` then builds the bytecode against them, and rebuilds as well the
+`build` then builds the bytecode against them, and also rebuilds the
 libraries of the switch that ocamlc finds compiled against the host's
-build of one of them (ctypes-foreign imports `Ctypes_primitives`). The package is built with
-dune, in a single context on the wasm32 toolchain (without the host context
-of `dune -x`, whose executables dune would run instead): its OCaml
-generators are bytecode run by the host's `ocamlrun` with the host's stub
-DLLs, its C generators are compiled by emcc into node scripts (the
-toolchain's C compiler does this for any executable it links), and
-dune-configurator gets the answers of wasm32.
+build of one of them (ctypes-foreign imports `Ctypes_primitives`).
 
-A bytecode built otherwise (`link` of a `.bc` made with the host's
-ocamlfind) is checked against these libraries: `link` warns when it was
-compiled against the host's, and the fix is to build it with the wasm32
-toolchain (`OCAMLFIND_CONF=<sysroot>/findlib.conf ocamlfind -toolchain
-wasm32 ocamlc ...`). It also warns about the packages that could not be
-rebuilt: those built without dune, and dune's `(ctypes)` stanza, whose
-generators dune only builds natively
+Each package is built with dune, in a single context on the wasm32
+toolchain (without the host context of `dune -x`, whose executables dune
+would run instead): its OCaml generators are bytecode run by the host's
+`ocamlrun` with the host's stub DLLs, its C generators are compiled by
+emcc into node scripts, and dune-configurator gets the answers of wasm32.
+
+Packages built without dune cannot be rebuilt this way, nor those using
+dune's `(ctypes)` stanza, whose generators dune only builds natively
 ([ocaml/dune#13650](https://github.com/ocaml/dune/issues/13650)). A
 package whose generated types have no structs or unions (zstd: constants)
 needs no rebuild.
 
-**ctypes-foreign.** A static wasm program has no `dlsym`, so `link` exports
-the C functions and variables whose names appear as string literals in the
-program, and links a `dlopen`/`dlsym` that looks them up among the module's
-exports. ctypes-foreign also needs the `threads` library, which the `ocaml`
-recipe builds single-threaded.
+### ctypes-foreign
 
-**Flags used for all C code**:
+A static wasm program has no `dlsym`, so `link` exports the C functions and
+variables whose names appear as string literals in the program, and links
+a `dlopen`/`dlsym` that looks them up among the module's exports.
+ctypes-foreign also needs the `threads` library, which the `ocaml` recipe
+builds single-threaded.
+
+### `--docker`
+
+The container's OCaml is built with glibc. Once it is, the container's C
+compiler uses the headers of emscripten and of the sysroot instead of
+glibc's, so that the constants a build reads from C headers are the
+target's: errno values (`ENOENT` is 44 there, 2 on Linux), libffi's ABI
+(ctypes-foreign). Its programs are still linked with glibc: right for the
+generators that print constants, sizes and offsets, not for C code calling
+the system through the structs of these headers. On i386, it compiles with
+`-malign-double -m128bit-long-double`, for the struct layouts of wasm32.
+
+OCaml 5 has no 32-bit native compiler, so the container's switch is
+bytecode only. dune links the generators of its `(ctypes)` stanza natively
+only ([ocaml/dune#13650](https://github.com/ocaml/dune/issues/13650)): an
+opam repository ranked first in the container patches dune to link them as
+custom bytecode when there is no `ocamlopt`, the linkage dune already uses
+for ppx drivers (proposed upstream in
+[ocaml/dune#7431](https://github.com/ocaml/dune/pull/7431), closed for
+lack of a test). The same repository drops the conflict with
+`ocaml-option-bytecode-only` of the packages that declare it for that
+reason (zstd).
+
+### Flags used for all C code
+
 - `-fno-strict-overflow`: works around an LLVM bug on wasm64, which folds
   `p[-8]` (`Tag_val`) into an unsigned load offset that traps
 - `-sSUPPORT_LONGJMP=wasm`: OCaml raises exceptions from C with longjmp,
@@ -685,9 +712,11 @@ recipe builds single-threaded.
   (emscripten's JS exceptions cannot be thrown alongside)
 - no `-pthread` (lwt asks for it): the program is single-threaded, and
   with it `caml_state` would be a thread-local variable, unlike in the
-  runtime.
+  runtime
 
-**Version specifics** of the `ocaml` recipe:
+### OCaml versions
+
+The `ocaml` recipe works around these issues:
 
 | version | issue | fix |
 |---------|-------|-----|
@@ -710,16 +739,16 @@ recipe builds single-threaded.
 
 Patches go in `share/recipes/ocaml/patches/`: `all/`, `4.x/` or `5.x/`,
 `5.4+/`, `<major>.<minor>/` (applied in this order), and `headers/` for the
-headers installed for the stubs only. Compilers before 4.08 are
-not supported: their build has no autoconf `configure`, and their bytecode,
+headers installed for the stubs only. Compilers before 4.08 are not
+supported: their build has no autoconf `configure`, and their bytecode,
 marshal and runtime layouts differ from what the link step reads.
 
 ## Status
 
-Prototype. `tests/run.sh [--target wasm32|wasm64]` builds each test with
+`tests/run.sh [--target wasm32|wasm64]` builds each test with
 `ocaml-emcc build` (or make), runs it with node and compares the output
-with the native executable (or `expected.txt`). CI
-(`.github/workflows/ci.yml`) runs the suite on OCaml 4.14 and 5.5, both
+with that of the native executable (or with `expected.txt`). CI
+(`.github/workflows/ci.yml`) runs the suite on OCaml 4.14 and 5.5, on both
 targets.
 
 | test        | what it covers | 4.08.1 | 4.11.2 | 4.12.1 | 4.14.2 | 5.4.1 | 5.5.1 |
@@ -757,24 +786,21 @@ targets.
 | `binio`     | binary data on stdout and stderr under node | – | – | – | – | ✅ | – |
 | `depgraph`  | an installed package (`opam install ./tests/depgraph/pkg`): stubs on mpfr with flags from `pkg-config`, zarith; gmp, mpfr and both stub libraries built from the program | – | – | – | ✅ | – | – |
 
-Each test passes on both targets, except `hello` (on purpose: it checks
-63-bit ints) and `sdl` (ctypes structs, not tried on wasm32 since ctypes
-is rebuilt for it), which are wasm64 only. "–"
-means the packages were not installed in that switch, or the test does not
-apply (mlmpfr 4.2.1 does not build with OCaml 5). The 5.4.1 tests from
-`clibs` on ran in a Debian 13 container with the system libraries the
-bindings need. The zarith test also ran unmodified in Chrome 154, on both
-targets.
+Every test passes on both targets, except `hello` (it checks 63-bit ints
+on purpose) and `sdl` (not tried on wasm32 yet), which are wasm64 only.
+"–" means the packages were not installed in that switch, or the test does
+not apply (mlmpfr 4.2.1 does not build with OCaml 5). The zarith test also
+ran unmodified in Chrome, on both targets.
 
-`tests/run.sh --wasi` builds the tests marked `wasi` in its table with
-`--wasi` and runs them with wasmtime (`$WASMTIME`, or the one in `PATH`),
-else with node's WASI. They pass with wasmtime 50 on OCaml 4.14.2 and 5.5.1
-(stubs, zarith, mixed, ocaml5, gitrecipe, nodune, syslibs, apron, sqlite,
-bz2, pcre2, zstd, gsl, camlzip, binio, the packages installed in each
-switch), and stubs, zarith, gitrecipe, nodune and mixed on 4.08.1, 4.11.2
-and 4.12.1; sqlite, stubs, camlzip and binio also with node 24's WASI.
-`ctypes` cannot pass: libffi's emscripten port makes its calls in
-JavaScript. The tests from `clibs` on were not tried.
+`tests/run.sh --wasi` builds the tests marked `wasi` in `run.sh` (from
+`stubs` to `camlzip`, and `binio`) with `--wasi`, and runs them with
+wasmtime (`$WASMTIME`, or the one in `PATH`), else with node's WASI. They
+pass with wasmtime 50 on OCaml 4.14.2 and 5.5.1 (those whose packages are
+installed), and `stubs`, `zarith`, `gitrecipe`, `nodune` and `mixed` also
+on 4.08.1, 4.11.2 and 4.12.1. `sqlite`, `stubs`, `camlzip` and `binio`
+pass with node 24's WASI too. `ctypes` cannot pass, as libffi's emscripten
+port makes its calls in JavaScript, and the tests from `clibs` on were not
+tried.
 
 ## Next steps
 
@@ -783,12 +809,9 @@ JavaScript. The tests from `clibs` on were not tried.
   headers on the web).
 - OCaml 5.0 to 5.3 are untested and probably need patches of their own:
   the memory code moved around.
-- ctypes structs on wasm32 for dune's `(ctypes)` stanza with structs:
-  dune builds its generators natively, which the wasm32 context cannot
-  (no `ocamlopt`),
-  [ocaml/dune#13650](https://github.com/ocaml/dune/issues/13650).
-  [`--docker`](#--docker-prototype) patches dune for it; the patch is to
-  be proposed to dune, then tried in the wasm32 context.
+- ctypes structs on wasm32 for dune's `(ctypes)` stanza ([#13650 in dune](https://github.com/ocaml/dune/issues/13650)): propose the patch
+  that `--docker` applies to dune upstream, then use it in the wasm32
+  context.
 - More recipes: ppl (C++, apron's `ppl` and `polkaGrid` domains), flint,
   openssl, libtidy, and newer LLVM versions for `clang`.
 - WASI: sockets the host preopens (preview1's `sock_accept`, `sock_recv`,
@@ -796,9 +819,6 @@ JavaScript. The tests from `clibs` on were not tried.
   exported functions generated by `link`), though ctypes-foreign would
   still need a libffi without JavaScript. WASI preview 2 (components) is not
   targeted.
-- Distribution: prebuilt runtimes and C libraries (npm, GitHub releases),
-  keyed by OCaml version, emsdk version and target, and a
-  `conf-emscripten` opam package for the emsdk requirement.
 
 ## Development
 
