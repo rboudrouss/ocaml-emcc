@@ -1,0 +1,15 @@
+No x86-64 assembly.
+
+config/discover.ml enables the x86-64 assembly when the machine running it
+(a host program) is x86-64, not the C compiler's target.
+
+--- a/config/discover.ml
++++ b/config/discover.ml
+@@ -1,6 +1,6 @@
+ module C = Configurator.V1
+ 
+-let is_x86_64 = Config.hw_is_x86_64 ()
++let is_x86_64 = false (* ocaml-emcc: wasm *)
+ 
+ let sixtyfour = Sys.word_size = 64
+ 
