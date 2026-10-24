@@ -153,17 +153,18 @@ let owner rel =
            Some (Filename.chop_suffix f ".changes")
          else None)
 
-(* ocamlc's "Files A and B make inconsistent assumptions over interface X":
-   a library of the switch compiled against the host's build of a package
-   rebuilt for wasm32 (ctypes-foreign imports Ctypes_primitives).  Its
-   package is rebuilt as well; whether there was one to rebuild. *)
+(* ocamlc's "Files A and B make inconsistent assumptions over interface X"
+   (A and B quoted since 5.2): a library of the switch compiled against the
+   host's build of a package rebuilt for wasm32 (ctypes-foreign imports
+   Ctypes_primitives).  Its package is rebuilt as well; whether there was
+   one to rebuild. *)
 let fix_inconsistent err =
   if Str_util.find err "inconsistent assumptions" = None then false
   else
     let lib = Filename.concat (Lazy.force Env.switch_prefix) "lib/" in
     let prefix = Lazy.force Env.switch_prefix ^ "/" in
     let words =
-      String.split_on_char ' ' (String.map (fun c -> if String.contains "\n\t()" c then ' ' else c) err)
+      String.split_on_char ' ' (String.map (fun c -> if String.contains "\n\t()\"" c then ' ' else c) err)
     in
     let pkgs =
       List.filter_map
