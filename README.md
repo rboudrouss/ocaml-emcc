@@ -230,10 +230,16 @@ headers. dune, run in the container, is built with glibc's headers.
 
 OCaml 5 has no 32-bit native compiler: the container's switch is bytecode
 only. An opam repository ranked first in it links the generators of dune's
-`(ctypes)` stanza as custom bytecode when there is no `ocamlopt` (dune links
-them natively only), and drops the conflict with
-`ocaml-option-bytecode-only` of the packages that declare it for that
-reason (zstd).
+`(ctypes)` stanza as custom bytecode when there is no `ocamlopt`, and
+drops the conflict with `ocaml-option-bytecode-only` of the packages that
+declare it for that reason (zstd). dune links these generators natively
+only (`Exe.Linkage.native` in `src/dune_rules/ctypes/ctypes_rules.ml`),
+[ocaml/dune#13650](https://github.com/ocaml/dune/issues/13650), still
+open. The fix used here is the linkage dune gives ppx drivers and cinaps,
+`Exe.Linkage.native_or_custom`. It was proposed in
+[ocaml/dune#7431](https://github.com/ocaml/dune/pull/7431), closed
+unmerged for lack of a test: a cram test hiding `ocamlopt`, as
+`test/blackbox-tests/test-cases/byte-code-only.t` does, would do.
 
 Tried on 5.5.1 with linux/386: ctypes (ctypes-foreign), zstd, yaml and
 zarith pass. Pins and local packages are not reproduced. Without
@@ -659,8 +665,10 @@ compiled against the host's, and the fix is to build it with the wasm32
 toolchain (`OCAMLFIND_CONF=<sysroot>/findlib.conf ocamlfind -toolchain
 wasm32 ocamlc ...`). It also warns about the packages that could not be
 rebuilt: those built without dune, and dune's `(ctypes)` stanza, whose
-generators dune only builds natively. A package whose generated types
-have no structs or unions (zstd: constants) needs no rebuild.
+generators dune only builds natively
+([ocaml/dune#13650](https://github.com/ocaml/dune/issues/13650)). A
+package whose generated types have no structs or unions (zstd: constants)
+needs no rebuild.
 
 **ctypes-foreign.** A static wasm program has no `dlsym`, so `link` exports
 the C functions and variables whose names appear as string literals in the
@@ -777,7 +785,10 @@ JavaScript. The tests from `clibs` on were not tried.
   the memory code moved around.
 - ctypes structs on wasm32 for dune's `(ctypes)` stanza with structs:
   dune builds its generators natively, which the wasm32 context cannot
-  (no `ocamlopt`).
+  (no `ocamlopt`),
+  [ocaml/dune#13650](https://github.com/ocaml/dune/issues/13650).
+  [`--docker`](#--docker-prototype) patches dune for it; the patch is to
+  be proposed to dune, then tried in the wasm32 context.
 - More recipes: ppl (C++, apron's `ppl` and `polkaGrid` domains), flint,
   openssl, libtidy, and newer LLVM versions for `clang`.
 - WASI: sockets the host preopens (preview1's `sock_accept`, `sock_recv`,
