@@ -38,7 +38,8 @@ jobs:
       fail-fast: false
       matrix:
         ocaml: ['4.14', '5.5']
-        target: [wasm32, wasm64]
+        # wasi: OUT.wasm --wasi, run with node's WASI
+        target: [wasm32, wasm64, wasi]
     runs-on: ubuntu-latest
     timeout-minutes: 180
     env:
@@ -76,8 +77,10 @@ jobs:
           # the package of tests/depgraph (mpfr through pkg-config, zarith)
           opam install $pkgs ./tests/depgraph/pkg
       - run: opam exec -- dune build
-      - name: tests/run.sh --target ${{ matrix.target }}
-        run: opam exec -- bash -c 'SWITCH=$(opam var prefix) tests/run.sh --target ${{ matrix.target }}'
+      - name: tests/run.sh (${{ matrix.target }})
+        run: |
+          case ${{ matrix.target }} in wasi) args=--wasi ;; *) args="--target ${{ matrix.target }}" ;; esac
+          opam exec -- bash -c "SWITCH=\$(opam var prefix) tests/run.sh $args"
       - if: failure()
         uses: actions/upload-artifact@v7
         with:
