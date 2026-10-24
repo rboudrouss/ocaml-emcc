@@ -161,23 +161,32 @@ let rec mkdir_p d =
     mkdir_p (Filename.dirname d);
     Unix.mkdir d 0o755)
 
-(* Global symbols defined by a set of archives/objects (llvm-nm). *)
+(* Global symbols defined by a set of archives/objects (llvm-nm), each file
+   read once per link. *)
+let file_symbols : (string, string list) Hashtbl.t = Hashtbl.create 16
+
 let defined_symbols files =
   let nm =
     let emcc_dir = Filename.dirname (Env.emcc ()) in
     let cands = [ Filename.concat emcc_dir "../bin/llvm-nm"; Filename.concat emcc_dir "emnm" ] in
     match List.find_opt Sys.file_exists cands with Some n -> n | None -> "llvm-nm"
   in
+  let symbols f =
+    match Hashtbl.find_opt file_symbols f with
+    | Some l -> l
+    | None ->
+        let l =
+          match Env.output_of nm [ "--defined-only"; "-g"; "-P"; "--quiet"; f ] with
+          | None -> []
+          | Some out ->
+              String.split_on_char '\n' out
+              |> List.filter_map (fun l -> match Str_util.words l with name :: _ :: _ -> Some name | _ -> None)
+        in
+        Hashtbl.replace file_symbols f l;
+        l
+  in
   let tbl = Hashtbl.create 4096 in
-  List.iter
-    (fun f ->
-      match Env.output_of nm [ "--defined-only"; "-g"; "-P"; f ] with
-      | None -> ()
-      | Some out ->
-          String.split_on_char '\n' out
-          |> List.iter (fun l ->
-                 match Str_util.words l with name :: _ :: _ -> Hashtbl.replace tbl name () | _ -> ()))
-    files;
+  List.iter (fun f -> List.iter (fun name -> Hashtbl.replace tbl name ()) (symbols f)) files;
   tbl
 
 (* ctypes-foreign binds C functions by name at run time (dlsym).  The C
