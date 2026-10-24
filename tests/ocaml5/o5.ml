@@ -25,8 +25,8 @@ let () =
       Printf.printf "%d" r);
   step "unhandled effect" (fun () -> ignore (perform Ask));
   step "Atomic" (fun () -> let a = Atomic.make 0 in for _ = 1 to 1000 do Atomic.incr a done; Printf.printf "%d" (Atomic.get a));
-  step "Mutex" (fun () -> let m = Mutex.create () in Mutex.protect m (fun () -> print_string "ok"));
-  step "Dynarray" (fun () -> let d = Dynarray.create () in for i = 1 to 10 do Dynarray.add_last d i done; Printf.printf "%d" (Dynarray.fold_left ( + ) 0 d));
+  step "Mutex" (fun () -> let m = Mutex.create () in Mutex.lock m; print_string "ok"; Mutex.unlock m);
+  step "Dynarray" Dynarray_step.run;
   step "Domain.recommended_count" (fun () -> Printf.printf "%d" (Domain.recommended_domain_count ()));
   step "Domain.spawn" (fun () -> let d = Domain.spawn (fun () -> 6 * 7) in Printf.printf "%d" (Domain.join d));
   step "Gc" (fun () -> Gc.full_major (); Printf.printf "ok")

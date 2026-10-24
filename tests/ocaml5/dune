@@ -1,1 +1,7 @@
 (executable (name o5) (modes byte exe) (libraries unix))
+
+; Dynarray: OCaml >= 5.2
+(rule (target dynarray_step.ml) (enabled_if (>= %{ocaml_version} 5.2))
+ (action (copy dynarray_step.real.ml %{target})))
+(rule (target dynarray_step.ml) (enabled_if (< %{ocaml_version} 5.2))
+ (action (write-file %{target} "let run () = print_string \"(OCaml >= 5.2)\"\n")))
