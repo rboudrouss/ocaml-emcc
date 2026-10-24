@@ -689,8 +689,10 @@ The `ocaml` recipe works around these issues:
 | ≥ 4.14  | `runtime/sak` is a build-time tool | built with the host `cc` |
 | ≤ 4.11  | otherlibs ignore the configure `CFLAGS` | target flags passed in `CC` |
 | 5.x     | no `sigaltstack` in emscripten ("Failed to allocate signal stack") | `ac_cv_func_sigaction=no` |
-| 5.x     | configure adds `-pthread`: runtime and stubs disagree on `caml_state` ("no domain lock held") | `-pthread` removed |
-| ≥ 5.4   | minor heap committed with `mmap(MAP_FIXED)` ("Failed to create main domain") | `patches/5.4+/` |
+| 5.x     | configure adds `-pthread`: runtime and stubs disagree on `caml_state` ("no domain lock held") | `PTHREAD_CFLAGS=-D_REENTRANT` given to configure, which AX_PTHREAD keeps |
+| 5.x     | minor heap committed with `mmap(MAP_FIXED)` ("Failed to create main domain") | `patches/5.0/`, `patches/5.1/`, `patches/5.2+/`: committed with `mprotect`, as on Cygwin |
+| 5.0     | configure only compiles its `pthread_getaffinity_np` test: undefined at link time | `patches/5.0/`: not called |
+| 5.0     | otherlibs stub archives without the `byt` suffix (5.1) | `libunix.a`, `libcamlstr.a`... |
 | ≥ 5.5   | `caml_byte_program_mode` and `caml_runtime_standard_library_default` come from the file ocamlc generates | weak definitions (`compat.c`) |
 | ≥ 5.5   | DLL names in the bytecode start with `-` or `:` | prefix removed (`Bytecode.dlls`) |
 | all     | `sigsuspend` missing (unix) | weak stub |
@@ -701,7 +703,7 @@ The `ocaml` recipe works around these issues:
 | all, wasm64 | stubs pass `int` dimensions to `caml_ba_alloc_dims`, read as `intnat` (stb_image: a corrupted heap) | `patches/headers/`: the installed `bigarray.h` converts each one |
 
 Patches go in `share/recipes/ocaml/patches/`: `all/`, `4.x/` or `5.x/`,
-`5.4+/`, `<major>.<minor>/` (applied in this order), and `headers/` for the
+`5.2+/`, `<major>.<minor>/` (applied in this order), and `headers/` for the
 headers installed for the stubs only. Compilers before 4.08 are not
 supported: their build has no autoconf `configure`, and their bytecode,
 marshal and runtime layouts differ from what the link step reads.
@@ -771,8 +773,6 @@ tried.
 - Domains: a `--threads` variant (runtime, stubs and link with `-pthread`)
   could enable `Domain.spawn`. It needs SharedArrayBuffer (COOP/COEP
   headers on the web).
-- OCaml 5.0 to 5.3 are untested and probably need patches of their own:
-  the memory code moved around.
 - Propose the patch of dune's `(ctypes)` stanza upstream
   ([ocaml/dune#13650](https://github.com/ocaml/dune/issues/13650)), so that
   the switch's dune can build it.
