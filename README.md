@@ -716,54 +716,59 @@ with that of the native executable (or with `expected.txt`). CI
 (`.github/workflows/ci.yml`) runs the suite on OCaml 4.14 and 5.5, on both
 targets.
 
-| test        | what it covers | 4.08.1 | 4.11.2 | 4.12.1 | 4.14.2 | 5.4.1 | 5.5.1 |
-|-------------|----------------|--------|--------|--------|--------|-------|-------|
-| `hello`     | stdlib, 63-bit ints and literals, Marshal, GC, files, exit code | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `stubs`     | dune `foreign_stubs` (int64, floats, callbacks, C exceptions, custom blocks), unix, str | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `zarith`    | zarith + gmp | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `mixed`     | digestif (dune stubs rebuilt automatically), yojson, re, cmdliner | ✅ | – | ✅ | ✅ | ✅ | ✅ |
-| `ocaml5`    | effects, Atomic, Mutex, Dynarray (`Domain.spawn` raises) | – | – | – | – | ✅ | ✅ |
-| `gitrecipe` | project recipe cloning cJSON from GitHub | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `nodune`    | Makefile, ocamlfind, hand-compiled stub + `ocaml-emcc link` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `syslibs`   | mlmpfr + zlib through `conf-mpfr`/`conf-zlib`, no configuration | – | – | – | ✅ | – | – |
-| `apron`     | apron (box, octagons, polyhedra) + mlgmpidl + camlidl | – | – | – | ✅ | – | ✅ |
-| `sqlite`    | sqlite3: SQL, JSON, math functions, a database file | – | – | – | ✅ | – | ✅ |
-| `bz2`       | bz2 + libbz2 | – | – | – | ✅ | – | ✅ |
-| `pcre2`     | pcre2 + libpcre2-8 (named groups, UTF-8) | – | – | – | ✅ | – | ✅ |
-| `zstd`      | zstd (ctypes stub generation) | – | – | – | ✅ | – | ✅ |
-| `gsl`       | gsl: special functions, integration, LU, RNG, stats | – | – | – | ✅ | – | ✅ |
-| `camlzip`   | camlzip (no dune) + zlib: gzip, zip archives | – | – | – | ✅ | – | ✅ |
-| `ctypes`    | ctypes-foreign + libffi: libc functions, callbacks (qsort), structs by value | – | – | – | ✅ | – | ✅ |
-| `yaml`      | yaml (ctypes stubs, vendored libyaml) | – | – | – | ✅ | – | ✅ |
-| `cstanza`   | the project's own `(ctypes)` stanza, with a struct (patched dune) | – | – | – | ✅ | – | ✅ |
-| `clibs`     | sha, checkseum (optint's 32-bit code on wasm32), bigstringaf, mtime/ptime clocks, eqaf | – | – | – | – | ✅ | – |
-| `mcrypto`   | mirage-crypto, -rng, -ec (X25519, Ed25519, P-256/384/521), -pk (RSA, DSA, DH) | – | – | – | – | ✅ | – |
-| `lwt`       | lwt.unix: timers, files, pipes, timeouts | – | – | – | – | ✅ | – |
-| `cryptokit` | ciphers, hashes, MACs, RSA, zlib | – | – | – | – | ✅ | – |
-| `minisat`   | minisat (vendored C++, exceptions) | – | – | – | – | ✅ | – |
-| `lua`       | ocaml-lua (vendored Lua built by `make`), callbacks | – | – | – | – | ✅ | – |
-| `stb`       | stb_image (no dune, `ocamlmklib -custom`) | – | – | – | – | ✅ | – |
-| `extunix`   | extunix (feature tests with dune-configurator) | – | – | – | – | ✅ | – |
-| `lz4`, `snappy`, `expat`, `glpk`, `fftw3` | each binding + its library's recipe | – | – | – | – | ✅ | – |
-| `argon2`    | argon2 (ctypes-foreign, `-largon2`) + libargon2 | – | – | – | – | ✅ | – |
-| `lmdb`      | lmdb + liblmdb: a database file, cursors, transactions | – | – | – | – | ✅ | – |
-| `secp`      | secp256k1-internal (vendored libsecp256k1, gmp) | – | – | – | – | ✅ | – |
-| `sdl`       | tsdl + sdl2: timer, events, surfaces, RWops | – | – | – | – | ✅ | – |
-| `binio`     | binary data on stdout and stderr under node | – | – | – | – | ✅ | – |
-| `depgraph`  | an installed package (`opam install ./tests/depgraph/pkg`): stubs on mpfr with flags from `pkg-config`, zarith; gmp, mpfr and both stub libraries built from the program | – | – | – | ✅ | – | – |
+| test        | what it covers | 4.08.1 | 4.11.2 | 4.12.1 | 4.13.1 | 4.14.2 | 4.14.4 | 5.0.0 | 5.1.1 | 5.2.1 | 5.3.0 | 5.4.1 | 5.5.1 |
+|-------------|----------------|--------|--------|--------|--------|--------|--------|-------|-------|-------|-------|-------|-------|
+| `hello`     | stdlib, 63-bit ints and literals, Marshal, GC, files, exit code | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `stubs`     | dune `foreign_stubs` (int64, floats, callbacks, C exceptions, custom blocks), unix, str | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `zarith`    | zarith + gmp | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `mixed`     | digestif (dune stubs rebuilt automatically), yojson, re, cmdliner | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ocaml5`    | effects, Atomic, Mutex, Dynarray (5.2+; `Domain.spawn` raises) | – | – | – | – | – | – | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `gitrecipe` | project recipe cloning cJSON from GitHub | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `nodune`    | Makefile, ocamlfind, hand-compiled stub + `ocaml-emcc link` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `syslibs`   | mlmpfr + zlib through `conf-mpfr`/`conf-zlib`, no configuration | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | – | – | – | – | – | – |
+| `apron`     | apron (box, octagons, polyhedra) + mlgmpidl + camlidl | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `sqlite`    | sqlite3: SQL, JSON, math functions, a database file | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `bz2`       | bz2 + libbz2 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `pcre2`     | pcre2 + libpcre2-8 (named groups, UTF-8) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `zstd`      | zstd (ctypes stub generation) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `gsl`       | gsl: special functions, integration, LU, RNG, stats | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `camlzip`   | camlzip (no dune) + zlib: gzip, zip archives | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ctypes`    | ctypes-foreign + libffi: libc functions, callbacks (qsort), structs by value | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `yaml`      | yaml (ctypes stubs, vendored libyaml) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `cstanza`   | the project's own `(ctypes)` stanza, with a struct (patched dune) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `clibs`     | sha, checkseum (optint's 32-bit code on wasm32), bigstringaf, mtime/ptime clocks, eqaf | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `mcrypto`   | mirage-crypto, -rng, -ec (X25519, Ed25519, P-256/384/521), -pk (RSA, DSA, DH) | –² | –² | –² | –² | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `lwt`       | lwt.unix: timers, files, pipes, timeouts | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `cryptokit` | ciphers, hashes, MACs, RSA, zlib | –² | –² | –² | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `minisat`   | minisat (vendored C++, exceptions) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `lua`       | ocaml-lua (vendored Lua built by `make`), callbacks | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `stb`       | stb_image (no dune, `ocamlmklib -custom`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `extunix`   | extunix (feature tests with dune-configurator) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `lz4`, `snappy`, `expat`, `glpk`, `fftw3` | each binding + its library's recipe | – | – | – | – | – | – | – | – | – | – | ✅¹ | – |
+| `argon2`    | argon2 (ctypes-foreign, `-largon2`) + libargon2 | – | – | – | – | – | – | – | – | – | – | ✅¹ | – |
+| `lmdb`      | lmdb + liblmdb: a database file, cursors, transactions | – | – | – | – | – | – | – | – | – | – | ✅¹ | – |
+| `secp`      | secp256k1-internal (vendored libsecp256k1, gmp) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `sdl`       | tsdl + sdl2: timer, events, surfaces, RWops | – | – | – | – | – | – | – | – | – | – | ✅¹ | – |
+| `binio`     | binary data on stdout and stderr under node | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `depgraph`  | an installed package (`opam install ./tests/depgraph/pkg`): stubs on mpfr with flags from `pkg-config`, zarith; gmp, mpfr and both stub libraries built from the program | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-Every test passes on both targets, except `hello` (it checks 63-bit ints
-on purpose) and `sdl` (not tried on wasm32 yet), which are wasm64 only.
-"–" means the packages were not installed in that switch, or the test does
-not apply (mlmpfr 4.2.1 does not build with OCaml 5). The zarith test also
-ran unmodified in Chrome, on both targets.
+✅: passes on both targets, except `hello` (it checks 63-bit ints on
+purpose) and `sdl` (not tried on wasm32 yet), which are wasm64 only. Each
+switch has the latest patch release of its version, and was tested with
+the current ocaml-emcc from an empty sysroot (`emcc-sysroot/wasm32`,
+`wasm64`), except 5.4.1's. "–": the test does not apply (`ocaml5` before 5.0, mlmpfr 4.2.1
+does not build with OCaml 5), or its library is not installed on the
+machine of the last run (lz4, snappy, expat, glpk, fftw3, argon2, lmdb,
+sdl2: no `-dev` packages there). ¹: passed in an earlier run, not run
+again. ²: opam installs an older mirage-crypto (before 2.0) or cryptokit
+(1.20) on OCaml < 4.14 (< 4.13 for cryptokit), whose API the test does
+not compile with, natively either. The zarith test also ran unmodified in Chrome, on both targets.
 
 `tests/run.sh --wasi` builds the tests marked `wasi` in `run.sh` (from
 `stubs` to `camlzip`, `cstanza` and `binio`) with `--wasi`, and runs them with
 wasmtime (`$WASMTIME`, or the one in `PATH`), else with node's WASI. They
-pass with wasmtime 50 on OCaml 4.14.2 and 5.5.1 (those whose packages are
-installed), and `stubs`, `zarith`, `gitrecipe`, `nodune` and `mixed` also
-on 4.08.1, 4.11.2 and 4.12.1. `sqlite`, `stubs`, `camlzip` and `binio`
+pass with wasmtime 50 on every version of the table (`ocaml5` from 5.0,
+`syslibs` before 5.0). `sqlite`, `stubs`, `camlzip` and `binio`
 pass with node 24's WASI too. `ctypes` cannot pass, as libffi's emscripten
 port makes its calls in JavaScript, and the tests from `clibs` on were not
 tried.
