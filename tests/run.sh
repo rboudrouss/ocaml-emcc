@@ -44,7 +44,7 @@ zstd      | zs       |            | zstd                        | wasm32 wasm64 
 gsl       | gs       |            | gsl                         | wasm32 wasm64 wasi |
 camlzip   | cz       |            | camlzip                     | wasm32 wasm64 wasi |
 ctypes    | cf       |            | ctypes-foreign              | wasm32 wasm64      |
-yaml      | ym       |            | yaml                        | wasm64             |
+yaml      | ym       |            | yaml                        | wasm32 wasm64      |
 clibs     | sm       |            | sha checkseum bigstringaf mtime ptime eqaf | wasm32 wasm64      |
 mcrypto   | mc       |            | mirage-crypto-ec mirage-crypto-pk mirage-crypto-rng | wasm32 wasm64      |
 lwt       | lw       |            | lwt                         | wasm32 wasm64      |
@@ -67,9 +67,9 @@ depgraph  | bin/main |            | depgraph                    | wasm32 wasm64 
 '
 # wasi (tests/run.sh --wasi): OUT.wasm --wasi, the tests checked that way.
 # ctypes needs libffi's JavaScript functions, no WASI host has them.
-# hello is wasm64 only on purpose: 63-bit literals and arithmetic.  yaml and
-# sdl too: their ctypes structs are laid out with the sizes of the host
-# (LP64) when the bytecode was built, which only wasm64 matches.
+# hello is wasm64 only on purpose: 63-bit literals and arithmetic.  sdl
+# too, for now: its ctypes structs, laid out with the sizes of the host
+# before ctypes was rebuilt for wasm32 (as yaml's are), were not tried since.
 # depgraph needs its package installed: opam install ./tests/depgraph/pkg
 
 has_pkg() {

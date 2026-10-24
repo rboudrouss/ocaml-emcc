@@ -5,6 +5,9 @@
 #   driver.sh install-dune [--force] <opam-package>
 #                                            rebuild the C stubs of a dune
 #                                            package with the wasm32 toolchain
+#   driver.sh shadow [--force] <opam-package>...
+#                                            its OCaml libraries built for the
+#                                            target (ctypes: C layouts)
 #   driver.sh auto [--force] <opam-package> <lib-name>
 #                                            compile every OCaml stub file of
 #                                            a package into lib<lib-name>.a
@@ -499,7 +502,7 @@ include_recipe() {
 # Bumped whenever write_toolchain changes: the CLI then regenerates it in
 # existing sysroots (cheap: the runtime is not rebuilt).  Keep in sync with
 # Env.toolchain_version.
-TOOLCHAIN_VERSION=7
+TOOLCHAIN_VERSION=8
 
 write_toolchain() {
   local tool host_conf cc=$SYSROOT/bin/emcc-$TARGET
@@ -514,16 +517,21 @@ write_toolchain() {
   # own): dune-configurator's C tests only get the C flags, not -I.
   # The C standard is left out for C++ (snappy's stubs: -x c++), which
   # clang refuses with -std=gnu23.
+  # An executable (-o X.exe, or without extension) is a program the build
+  # runs: ctypes' type generators print the layouts of the target's structs.
+  # It becomes a node script (the wasm inside, real files) dune can run.
   cat > "$cc" <<EOF
 #!/bin/sh
-link=-L'$SYSROOT/lib' std='$STUB_STD' prev=
+link=-L'$SYSROOT/lib' std='$STUB_STD' prev= exe=
 for a; do
   shift
   case \$a in -c|-E|-S|-M|-MM) link= ;; -xc++*|*.cc|*.cpp|*.cxx|*.C) std= ;; esac
   case \$prev\$a in -xc++*) std= ;; esac
+  [ "\$prev" = -o ] && case \${a##*/} in *.exe) exe=1 ;; *.*) exe= ;; *) exe=1 ;; esac
   prev=\$a
   [ "\$a" = -pthread ] || set -- "\$@" "\$a"
 done
+[ -n "\$link" ] && [ -n "\$exe" ] && set -- "\$@" -sEXECUTABLE=1 -sSINGLE_FILE=1 -sEXIT_RUNTIME=1 -sNODERAWFS=1
 exec '$EMCC' $TARGET_FLAGS \$std -idirafter '$SYSROOT/include' \$link "\$@"
 EOF
   chmod +x "$cc"
@@ -721,6 +729,68 @@ run_dune_package() {
   echo "$SOURCE_VERSION emcc-$EMCC_VERSION" > "$stamp"
 }
 
+# shadow <opam-package>: the OCaml libraries of a package, built for the
+# target and installed in $SYSROOT/lib/findlib, which the toolchain searches
+# before the switch.  For ctypes and its users: ctypes lays C types out with
+# the sizes it generated when it was built (ctypes_primitives.ml), and
+# bindings generating their type descriptions (Cstubs_structs, dune's
+# (ctypes) stanza) print the offsets of the structs from a C program: on the
+# host, those of LP64.  The build has a single context on the target's
+# toolchain, without the host context of `dune -x`, whose executables dune
+# would run instead: OCaml generators are bytecode run by the host ocamlrun
+# (with the host's stub DLLs), C ones are compiled by emcc and run by node
+# (see write_toolchain), dune-configurator gets the target's answers.
+# The stamp records the package version and the outcome: ok (installed),
+# failed (it lays C types out when built, and could not be rebuilt), none
+# (it does not: the host's build is kept).  Rebuilt when the package
+# changes version.
+run_shadow() {
+  local pkg=$1 stamp=$SYSROOT/stamps/shadow-$1 work=$SYSROOT/build/shadow-$1 dirs=$SYSROOT/meta/shadow-$1.dirs
+  local ver status layouts=no d
+  ver=$(opam_pkg_version "$pkg") || die "$pkg is not installed in $PREFIX"
+  if [ "$FORCE" = no ] && [ -f "$stamp" ] && [ "$(cut -d' ' -f1 "$stamp")" = "$ver" ]; then return 0; fi
+  # the libraries of the previous version
+  if [ -f "$dirs" ]; then
+    while IFS= read -r d; do [ -n "$d" ] && rm -rf "${SYSROOT:?}/lib/findlib/$d"; done < "$dirs"
+    rm -f "$dirs"
+  fi
+  rm -rf "$work"
+  fetch_opam_source "$pkg" "$work"
+  # generated type descriptions, with structs or unions (`seal`): zstd's
+  # only have constants
+  if grep -rqE 'Cstubs_structs|Cstubs\.Types|type_description' --include='*.ml' --include=dune --exclude-dir='_build*' "$work" 2>/dev/null \
+     && grep -rqw seal --include='*.ml' --exclude-dir='_build*' "$work" 2>/dev/null; then
+    layouts=yes
+  fi
+  status=none; [ $layouts = yes ] && status=failed
+  if [ -f "$work/dune-project" ]; then
+    FORCE=no system_deps "$pkg" >/dev/null
+    log "building the OCaml libraries of $pkg for $TARGET (C layouts of $TARGET)"
+    printf '(lang dune 3.0)\n(context (default (name default.%s) (toolchain %s)))\n' "$TARGET" "$TARGET" > "$work/.ocaml-emcc-workspace"
+    if ( cd "$work" && PATH=$SYSROOT/bin/path:$PATH OCAMLFIND_CONF=$SYSROOT/findlib.conf \
+           CAML_LD_LIBRARY_PATH=$PREFIX/lib/stublibs:$PREFIX/lib/ocaml/stublibs \
+           "$HOST_BIN/dune" build --build-dir _build.ocaml-emcc --workspace .ocaml-emcc-workspace \
+             -p "$pkg" @install > ocaml-emcc-build.log 2>&1 ); then
+      mkdir -p "$SYSROOT/lib/findlib"
+      for d in "$work/_build.ocaml-emcc/install/default.$TARGET/lib"/*; do
+        [ -d "$d" ] && [ "$(basename "$d")" != stublibs ] || continue
+        rm -rf "$SYSROOT/lib/findlib/$(basename "$d")"
+        cp -rL "$d" "$SYSROOT/lib/findlib/"
+        basename "$d" >> "$dirs"
+        log "  $SYSROOT/lib/findlib/$(basename "$d")"
+      done
+      status=ok
+    elif [ $layouts = yes ]; then
+      tail -n 30 "$work/ocaml-emcc-build.log" >&2
+      log "$pkg: could not be built for $TARGET (log: $work/ocaml-emcc-build.log)"
+    else
+      # the (ctypes) stanza of dune builds its generators natively (zstd)
+      log "  not built for $TARGET, which it does not need: no structs in its generated types"
+    fi
+  fi
+  echo "$ver $status emcc-$EMCC_VERSION" > "$stamp"
+}
+
 # dune_stubs <opam-package> [<provider>]: in the sources of a dune package
 # (the current directory), build its stub archives with `dune build -x` and
 # install them, with the link flags of the system libraries it uses.  Also
@@ -916,9 +986,10 @@ if [ "${1:-}" = --force ]; then FORCE=yes; shift; fi
 case "$cmd" in
   install)      for r in "$@"; do run_recipe "$r"; done ;;
   install-dune) run_dune_package "$1" ;;
+  shadow)       for p in "$@"; do run_shadow "$p"; done ;;
   auto)         run_auto "$1" "$2" ;;
   obtain)       run_obtain "$1" "$2" ;;
   toolchain)    write_toolchain ;;
   lib-recipe)   lib_recipe "$1" ;;
-  *) die "usage: driver.sh install|install-dune|auto|obtain|toolchain|lib-recipe ..." ;;
+  *) die "usage: driver.sh install|install-dune|shadow|auto|obtain|toolchain|lib-recipe ..." ;;
 esac

@@ -1,5 +1,17 @@
 ## Unreleased
 
+- ctypes on wasm32: ctypes and the packages of the program depending on it
+  are rebuilt for wasm32 (`driver.sh shadow`) into the sysroot's findlib
+  directory, which the toolchain searches first, and `build` builds the
+  bytecode against them: struct layouts, `sizeof` and arrays now have the
+  sizes of wasm32, for the structs laid out at run time and for the type
+  descriptions generated when the package is built (yaml now works on
+  wasm32). `link` and `doctor` warn when a bytecode was compiled against
+  the host's builds, or uses a package that could not be rebuilt (dune's
+  `(ctypes)` stanza with structs, packages without dune).
+- The C compiler of the wasm context makes node scripts of the executables
+  it links (`-sEXECUTABLE`), so that build rules can run them.
+
 - `--wasi` (`link`, `build`): `OUT.wasm` is a WASI module, importing only
   WASI functions, for wasmtime, node's WASI and other WASI hosts (wasm32).
   emscripten's standalone libc fails to open or `stat` a file and imports

@@ -61,6 +61,16 @@ let dlls t =
   | _ -> names
 let dll_paths t = Option.fold ~none:[] ~some:split_nul (section t "DLPT")
 
+(* The interfaces the linked units were compiled against (CRCS: a marshalled
+   (name, digest option) list), with their CRCs in hex. *)
+let crcs t =
+  match section t "CRCS" with
+  | None -> []
+  | Some d ->
+      List.filter_map
+        (fun (n, c) -> Option.map (fun c -> (n, Digest.to_hex c)) c)
+        (Marshal.from_string d 0 : (string * Digest.t option) list)
+
 (* Write a copy without the given sections.  Used to drop DLLS/DLPT: the
    stubs are linked statically, so the runtime must not try to dlopen
    anything (it would abort with "cannot load shared library"). *)

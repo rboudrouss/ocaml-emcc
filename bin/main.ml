@@ -254,15 +254,38 @@ let cmd_build args =
      plain bytecode there (the ocamlc wrapper turns byte_complete into it). *)
   let dune = dune_bin () and env = dune_env () in
   let target ext = Filename.concat (ctx_dir ()) (exe ^ ext) in
-  let built =
+  let layouts = !Env.target = "wasm32" && o.auto_deps in
+  let rec build_bc tries =
+    let errs = Buffer.create 256 in
     let try_build ext =
       let code, err = Env.run_capture_stderr ~env dune [ "build"; "-x"; !Env.target; "--root"; root; target ext ] in
+      Buffer.add_string errs err;
       if code = 0 then (prerr_string err; Some (target ext)) else (if ext = ".exe" then prerr_string err; None)
     in
     Env.log "building %s (dune -x %s)" exe !Env.target;
     match try_build ".bc" with
     | Some t -> t
-    | None -> ( match try_build ".exe" with Some t -> t | None -> Env.fail "dune could not build %s" exe)
+    | None -> (
+        match try_build ".exe" with
+        | Some t -> t
+        | None ->
+            (* a library of the switch compiled against the host's build of
+               a package rebuilt for wasm32 (ctypes-foreign and ctypes) *)
+            if tries > 0 && layouts && Layouts.fix_inconsistent (Buffer.contents errs) then build_bc (tries - 1)
+            else Env.fail "dune could not build %s" exe)
+  in
+  let built = build_bc 5 in
+  (* wasm32: ctypes and its users built for wasm32 (C layouts), then the
+     bytecode again, against them *)
+  let built =
+    if not layouts then built
+    else
+      let bc = Bytecode.parse (Filename.concat root built) in
+      let installed = Layouts.ensure bc in
+      if installed || List.exists (fun (_, s) -> s = Layouts.Stale) (Layouts.states bc) then (
+        Env.log "rebuilding %s against the wasm32 builds of its ctypes libraries" exe;
+        build_bc 5)
+      else built
   in
   if build_stub_archives ~root <> 0 then Env.fail "dune could not build the stub archives";
   Link.run (with_config_flags { o with bc = Filename.concat root built; output = out })
@@ -301,6 +324,16 @@ let cmd_doctor args =
         \  -> on wasm32 they are wrapped to 31 bits when the program starts, as\n\
         \     32-bit OCaml would; fine on wasm64.\n"
         (List.length l) (Link.show_literals l));
+  if !Env.target = "wasm32" then
+    List.iter
+      (fun (p, s) ->
+        Printf.printf "C layouts of %s: %s\n" p
+          (match s with
+          | Layouts.Rebuilt -> "wasm32 (ok)"
+          | Layouts.Stale -> "WARNING: the 64-bit host's; rebuild the bytecode against its wasm32 build"
+          | Layouts.Not_rebuilt -> "WARNING: the 64-bit host's, no wasm32 build (`link` tries one; or --target wasm64)"
+          | Layouts.Unneeded -> "none computed when it was built (ok)"))
+      (Layouts.states bc);
   let found = ref [ Env.sysroot_file "lib/libcamlrun.a" ] in
   List.iter
     (fun d ->

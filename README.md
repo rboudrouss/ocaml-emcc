@@ -194,6 +194,9 @@ The bytecode is always the one of your switch, compiled for 64 bits.
     OCaml.
   - arithmetic beyond 31 bits wraps silently (`1 lsl 40` = 256), which no
     tool can detect.
+  - ctypes and the bindings using it are rebuilt for wasm32, so that
+    their structs have the layouts of wasm32. `build` and `link` warn
+    about those that cannot be.
 - **wasm64** (`--target wasm64`): memory64, exactly the semantics of the
   native 64-bit program. Needs node ≥ 24 (the one shipped with emsdk
   works), Chrome ≥ 133 or Firefox ≥ 134.
@@ -240,8 +243,9 @@ Most programs need no configuration:
   (glpk has no `conf-glpk`). `tests/syslibs` (mlmpfr + zlib) has no
   configuration at all.
 - **ctypes**: bindings using stub generation (`Cstubs`, dune's `(ctypes)`
-  stanza) and ctypes-foreign both work, on both targets (but see
-  [struct layouts](#differences-from-native) on wasm32).
+  stanza) and ctypes-foreign both work, on both targets. On wasm32, ctypes
+  and the packages of the program using it are rebuilt for wasm32 (see
+  [How it works](#how-it-works)).
 - **`c_library_flags`**: the `-lX` that libraries record for their stubs
   (`(c_library_flags (-lfoo))`, `-cclib -lfoo`) are linked when a wasm
   `libX.a` exists or can be built. Host flags (`-L/usr/lib`, `-Wl,-rpath`)
@@ -449,11 +453,11 @@ Besides 31-bit integers on wasm32 (see [targets](#targets-wasm32-or-wasm64)):
 - **No threads.** `Thread.create` and `Domain.spawn` fail, while `Mutex`
   and `Condition` work. lwt runs its blocking jobs (`Lwt_unix` file
   operations...) synchronously, and `Lwt_preemptive` fails.
-- **ctypes struct layouts on wasm32.** The layouts a binding describes
-  (`Ctypes.structure`, sizes of `size_t`, `long`...) were computed for the
-  64-bit host when the package was built. Constants, enums and functions
-  are fine (zstd works on both targets), but bindings that read C structs,
-  such as yaml and tsdl, only work on wasm64.
+- **ctypes struct layouts on wasm32**, for the bindings that could not be
+  rebuilt for wasm32 (see [How it works](#how-it-works)):
+  struct fields, `sizeof`, arrays of `long`, `size_t` or pointers are
+  those of the 64-bit host. `build`, `link` and `doctor` **warn**; such
+  bindings only work on wasm64.
 - **ctypes-foreign** only finds the C symbols named by string literals of
   the program, not names computed at run time. `dlopen` accepts any file
   name, since everything is linked in.
@@ -586,6 +590,38 @@ mismatch, while native code ignores extra arguments: OCaml calls zarith's
 is read from the bytecode (`C_CALLn`), wasm-ld reports the definitions that
 differ, and an adapter is generated for each of them.
 
+**ctypes on wasm32.** ctypes lays C types out (struct fields, `sizeof`,
+arrays) with sizes it generated when it was built (`ctypes_primitives.ml`),
+and bindings that generate their type descriptions (`Cstubs_structs`,
+yaml) print the offsets of the structs from a C program. Built on the 64-bit host, both are those
+of LP64: right for wasm64, wrong for wasm32 (`long`, `size_t` and pointers
+have 4 bytes there). A 32-bit host would not do either: i386 aligns
+`double` and `int64_t` to 4 bytes in structs, wasm32 to 8.
+
+So on wasm32, `build` and `link` rebuild ctypes and the packages of the
+program that depend on it (from the program's `CRCS` section and the opam
+dependencies) for wasm32, once per switch and package version
+(`driver.sh shadow`), and install their OCaml libraries in
+`<sysroot>/lib/findlib`, which the toolchain searches before the switch.
+`build` then builds the bytecode against them, and rebuilds as well the
+libraries of the switch that ocamlc finds compiled against the host's
+build of one of them (ctypes-foreign imports `Ctypes_primitives`). The package is built with
+dune, in a single context on the wasm32 toolchain (without the host context
+of `dune -x`, whose executables dune would run instead): its OCaml
+generators are bytecode run by the host's `ocamlrun` with the host's stub
+DLLs, its C generators are compiled by emcc into node scripts (the
+toolchain's C compiler does this for any executable it links), and
+dune-configurator gets the answers of wasm32.
+
+A bytecode built otherwise (`link` of a `.bc` made with the host's
+ocamlfind) is checked against these libraries: `link` warns when it was
+compiled against the host's, and the fix is to build it with the wasm32
+toolchain (`OCAMLFIND_CONF=<sysroot>/findlib.conf ocamlfind -toolchain
+wasm32 ocamlc ...`). It also warns about the packages that could not be
+rebuilt: those built without dune, and dune's `(ctypes)` stanza, whose
+generators dune only builds natively. A package whose generated types
+have no structs or unions (zstd: constants) needs no rebuild.
+
 **ctypes-foreign.** A static wasm program has no `dlsym`, so `link` exports
 the C functions and variables whose names appear as string literals in the
 program, and links a `dlopen`/`dlsym` that looks them up among the module's
@@ -674,7 +710,8 @@ targets.
 | `depgraph`  | an installed package (`opam install ./tests/depgraph/pkg`): stubs on mpfr with flags from `pkg-config`, zarith; gmp, mpfr and both stub libraries built from the program | – | – | – | ✅ | – | – |
 
 Each test passes on both targets, except `hello` (on purpose: it checks
-63-bit ints), `yaml` and `sdl` (ctypes structs), which are wasm64 only. "–"
+63-bit ints) and `sdl` (ctypes structs, not tried on wasm32 since ctypes
+is rebuilt for it), which are wasm64 only. "–"
 means the packages were not installed in that switch, or the test does not
 apply (mlmpfr 4.2.1 does not build with OCaml 5). The 5.4.1 tests from
 `clibs` on ran in a Debian 13 container with the system libraries the
@@ -698,11 +735,9 @@ JavaScript. The tests from `clibs` on were not tried.
   headers on the web).
 - OCaml 5.0 to 5.3 are untested and probably need patches of their own:
   the memory code moved around.
-- ctypes structs on wasm32: `dune -x` already builds ctypes' OCaml code
-  with the sizes of the target. Installing it in the sysroot's findlib
-  directory, which the toolchain searches first, would fix bindings that
-  lay structs out at run time (tsdl). Type descriptions generated at build
-  time (yaml) need the package itself rebuilt that way.
+- ctypes structs on wasm32 for dune's `(ctypes)` stanza with structs:
+  dune builds its generators natively, which the wasm32 context cannot
+  (no `ocamlopt`).
 - More recipes: ppl (C++, apron's `ppl` and `polkaGrid` domains), flint,
   openssl, libtidy, and newer LLVM versions for `clang`.
 - WASI: sockets the host preopens (preview1's `sock_accept`, `sock_recv`,
