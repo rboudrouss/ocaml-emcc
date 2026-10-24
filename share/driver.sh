@@ -648,12 +648,15 @@ EOF
 
 FORCE=no
 
-# Checksum of every recipe.sh named <name> along the recipe path (a recipe
-# may include the next one).
+# Checksum of every recipe named <name> along the recipe path (a recipe may
+# include the next one): its recipe.sh, then its other files (patches...).
 recipe_sum() {
   local IFS=: d
-  for d in $RECIPES_PATH; do if [ -f "$d/$1/recipe.sh" ]; then cat "$d/$1/recipe.sh"; fi; done \
-    | sha256sum | cut -c1-16
+  for d in $RECIPES_PATH; do
+    [ -f "$d/$1/recipe.sh" ] || continue
+    cat "$d/$1/recipe.sh"
+    find "$d/$1" -type f ! -path "$d/$1/recipe.sh" -print0 | LC_ALL=C sort -z | xargs -0r cat
+  done | sha256sum | cut -c1-16
 }
 
 run_recipe() {
