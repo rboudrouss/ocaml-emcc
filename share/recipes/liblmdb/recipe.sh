@@ -18,15 +18,10 @@ releases() {
     'https://github.com/LMDB/lmdb/archive/refs/tags/LMDB_{v}.tar.gz'
 }
 
-# the flags forced in mdb_env_open (the lmdb recipe does the same)
-lmdb_wasm_flags() {
-  perl -0pi -e 's/(\nmdb_env_open\(MDB_env \*env, const char \*path, unsigned int flags, mdb_mode_t mode\)\n\{\n)/$1#ifdef __EMSCRIPTEN__\n\tflags |= MDB_NOLOCK | MDB_WRITEMAP; \/* ocaml-emcc *\/\n#endif\n/' "$1"
-  grep -q 'MDB_NOLOCK | MDB_WRITEMAP; /\* ocaml-emcc' "$1" || die "$1: cannot force MDB_NOLOCK | MDB_WRITEMAP"
-}
-
 build() {
+  # the flags forced in mdb_env_open (the lmdb recipe applies it as well)
+  apply_patches "$BASE_RECIPE_DIR/patches"
   cd libraries/liblmdb
-  lmdb_wasm_flags mdb.c
   "$EMCC" $CFLAGS -c mdb.c -o mdb.o && "$EMCC" $CFLAGS -c midl.c -o midl.o || die "cannot compile liblmdb"
   mklib lmdb mdb.o midl.o
   install_lib liblmdb.a

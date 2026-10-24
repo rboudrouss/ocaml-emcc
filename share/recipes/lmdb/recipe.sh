@@ -5,8 +5,6 @@
 SOURCE=opam:lmdb
 
 build() {
-  local f=liblmdb/libraries/liblmdb/mdb.c
-  perl -0pi -e 's/(\nmdb_env_open\(MDB_env \*env, const char \*path, unsigned int flags, mdb_mode_t mode\)\n\{\n)/$1#ifdef __EMSCRIPTEN__\n\tflags |= MDB_NOLOCK | MDB_WRITEMAP; \/* ocaml-emcc *\/\n#endif\n/' "$f"
-  grep -q 'MDB_NOLOCK | MDB_WRITEMAP; /\* ocaml-emcc' "$f" || die "$f: cannot force MDB_NOLOCK | MDB_WRITEMAP"
+  ( cd liblmdb && apply_patches "$OCAML_EMCC_SHARE/recipes/liblmdb/patches" )
   dune_stubs lmdb
 }
