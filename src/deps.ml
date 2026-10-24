@@ -108,10 +108,13 @@ let stale name f =
     | _ -> None
 
 (* Build what can be built: a recipe named after the package, the package's
-   dune rules (dune -x <target>), or a blind compilation of its stubs. *)
+   dune rules (dune -x <target>), or a blind compilation of its stubs.  A
+   library of the compiler missing from a built runtime (libthreads.a, built
+   since): the runtime is built again. *)
 let obtain pkg name =
   let code =
-    if pkg = "ocaml" then Env.driver [ "install"; "ocaml" ]
+    if pkg = "ocaml" then
+      Env.driver ([ "install" ] @ (if Sys.file_exists (Env.sysroot_file "stamps/ocaml") then [ "--force" ] else []) @ [ "ocaml" ])
     else Env.driver [ "obtain"; pkg; name ]
   in
   if code <> 0 then Env.fail "could not build lib%s.a (package %s)" name pkg
