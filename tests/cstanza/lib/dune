@@ -1,0 +1,13 @@
+; dune's (ctypes) stanza, with a struct: its offsets are those of the C
+; compiler of the context
+(library
+ (name pt)
+ (flags (:standard -w -9-27))
+ (foreign_stubs (language c) (names pt))
+ (ctypes
+  (external_library_name pt)
+  (build_flags_resolver (vendored (c_flags ("-Ilib" "-I."))))
+  (headers (include "pt.h"))
+  (type_description (instance Types) (functor Type_description))
+  (function_description (instance Functions) (functor Function_description))
+  (generated_entry_point C)))

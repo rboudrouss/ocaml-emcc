@@ -204,10 +204,9 @@ Besides 31-bit integers on wasm32:
   and `Condition` work. lwt runs its blocking jobs (`Lwt_unix` file
   operations...) synchronously, and `Lwt_preemptive` fails.
 - **ctypes structs on wasm32**, for the bindings that could not be rebuilt
-  for wasm32 (dune's `(ctypes)` stanza with structs, packages built without
-  dune): struct fields, `sizeof`, and arrays of `long`, `size_t` or
-  pointers are those of the 64-bit host. `build`, `link` and `doctor`
-  **warn**. Such bindings only work on wasm64.
+  for wasm32 (packages built without dune): struct fields, `sizeof`, and
+  arrays of `long`, `size_t` or pointers are those of the 64-bit host.
+  `build`, `link` and `doctor` **warn**. Such bindings only work on wasm64.
 - **ctypes-foreign** only finds the C symbols named by string literals of
   the program, not names computed at run time. `dlopen` accepts any file
   name, since everything is linked in.
@@ -556,8 +555,8 @@ link options (build and link):
    2. the package's own dune rules (`dune -x`), as for digestif;
    3. the C files behind each stub archive of the package's native build,
       with its `-I` flags: for packages without dune (glpk), when `dune -x`
-      fails (the `(ctypes)` stanza), or when an archive was built by a host
-      tool (ocaml-lua runs `make` in its copy of Lua);
+      fails, or when an archive was built by a host tool (ocaml-lua runs
+      `make` in its copy of Lua);
    4. every `.c` file of the package that includes `<caml/...>`.
 
    `c_library_flags` are only used by custom links, which a bytecode build
@@ -637,11 +636,26 @@ would run instead): its OCaml generators are bytecode run by the host's
 `ocamlrun` with the host's stub DLLs, its C generators are compiled by
 emcc into node scripts, and dune-configurator gets the answers of wasm32.
 
-Packages built without dune cannot be rebuilt this way, nor those using
-dune's `(ctypes)` stanza, whose generators dune only builds natively
-([ocaml/dune#13650](https://github.com/ocaml/dune/issues/13650)). A
-package whose generated types have no structs or unions (zstd: constants)
-needs no rebuild.
+Packages built without dune cannot be rebuilt this way. When one of them
+does not generate structs or unions (its types are constants), the host's
+build is kept as it is.
+
+### dune's `(ctypes)` stanza
+
+dune links the generators of its `(ctypes)` stanza natively only
+([ocaml/dune#13650](https://github.com/ocaml/dune/issues/13650)), which
+the wasm context cannot do, having no `ocamlopt`. So a project or package
+that uses the stanza (`(using ctypes ...)` in its `dune-project`) is built
+by a dune patched to link them as custom bytecode when there is no
+`ocamlopt`, the linkage dune already uses for ppx drivers and cinaps
+(`share/tools/dune/ctypes-linkage.patch`). It is built from the sources of
+the switch's dune, once per version, into `<sysroot>/libexec/dune`. The
+OCaml generators then run on the host's `ocamlrun`, and the C program
+printing the offsets of the structs is compiled by emcc: the layouts are
+those of the target. The fix was proposed upstream in
+[ocaml/dune#7431](https://github.com/ocaml/dune/pull/7431), closed unmerged
+for lack of a test: a cram test hiding `ocamlopt`, as
+`test/blackbox-tests/test-cases/byte-code-only.t` does, would do.
 
 ### ctypes-foreign
 
@@ -719,6 +733,7 @@ targets.
 | `camlzip`   | camlzip (no dune) + zlib: gzip, zip archives | – | – | – | ✅ | – | ✅ |
 | `ctypes`    | ctypes-foreign + libffi: libc functions, callbacks (qsort), structs by value | – | – | – | ✅ | – | ✅ |
 | `yaml`      | yaml (ctypes stubs, vendored libyaml) | – | – | – | ✅ | – | ✅ |
+| `cstanza`   | the project's own `(ctypes)` stanza, with a struct (patched dune) | – | – | – | ✅ | – | ✅ |
 | `clibs`     | sha, checkseum (optint's 32-bit code on wasm32), bigstringaf, mtime/ptime clocks, eqaf | – | – | – | – | ✅ | – |
 | `mcrypto`   | mirage-crypto, -rng, -ec (X25519, Ed25519, P-256/384/521), -pk (RSA, DSA, DH) | – | – | – | – | ✅ | – |
 | `lwt`       | lwt.unix: timers, files, pipes, timeouts | – | – | – | – | ✅ | – |
@@ -742,7 +757,7 @@ not apply (mlmpfr 4.2.1 does not build with OCaml 5). The zarith test also
 ran unmodified in Chrome, on both targets.
 
 `tests/run.sh --wasi` builds the tests marked `wasi` in `run.sh` (from
-`stubs` to `camlzip`, and `binio`) with `--wasi`, and runs them with
+`stubs` to `camlzip`, `cstanza` and `binio`) with `--wasi`, and runs them with
 wasmtime (`$WASMTIME`, or the one in `PATH`), else with node's WASI. They
 pass with wasmtime 50 on OCaml 4.14.2 and 5.5.1 (those whose packages are
 installed), and `stubs`, `zarith`, `gitrecipe`, `nodune` and `mixed` also
@@ -758,10 +773,9 @@ tried.
   headers on the web).
 - OCaml 5.0 to 5.3 are untested and probably need patches of their own:
   the memory code moved around.
-- ctypes structs on wasm32 for dune's `(ctypes)` stanza ([#13650 in dune](https://github.com/ocaml/dune/issues/13650)): link its
-  generators as custom bytecode without `ocamlopt`
-  (`Exe.Linkage.native_or_custom`, as for ppx drivers), proposed in
-  [ocaml/dune#7431](https://github.com/ocaml/dune/pull/7431).
+- Propose the patch of dune's `(ctypes)` stanza upstream
+  ([ocaml/dune#13650](https://github.com/ocaml/dune/issues/13650)), so that
+  the switch's dune can build it.
 - More recipes: ppl (C++, apron's `ppl` and `polkaGrid` domains), flint,
   openssl, libtidy, and newer LLVM versions for `clang`.
 - WASI: sockets the host preopens (preview1's `sock_accept`, `sock_recv`,
@@ -778,7 +792,7 @@ src/                  bytecode reading, linking, dependency resolution, project 
 share/driver.sh       recipe driver
 share/recipes/        ocaml (runtime + patches), C libraries (gmp, mpfr, zlib...),
                       OCaml packages needing changes (zarith, apron, lwt...)
-share/tools/          ocamlc / ocamlmklib wrappers for dune -x
+share/tools/          ocamlc / ocamlmklib wrappers for dune -x, dune's (ctypes) patch
 share/runtime/        main.c, compat.c, dlsym.c, wasi.c, node_stdio.js
 tests/run.sh          test suite (SWITCH=<opam switch> tests/run.sh --target wasm64, --wasi)
 ```

@@ -7,8 +7,16 @@
   sizes of wasm32, for the structs laid out at run time and for the type
   descriptions generated when the package is built (yaml now works on
   wasm32). `link` and `doctor` warn when a bytecode was compiled against
-  the host's builds, or uses a package that could not be rebuilt (dune's
-  `(ctypes)` stanza with structs, packages without dune).
+  the host's builds, or uses a package that could not be rebuilt (packages
+  without dune).
+- dune's `(ctypes)` stanza (a project's, or a package's): dune links its
+  generators natively only (ocaml/dune#13650), which the wasm context
+  cannot. A project or package using it is built by a dune patched to link
+  them as custom bytecode without `ocamlopt`
+  (`share/tools/dune/ctypes-linkage.patch`), built once per version from
+  the sources of the switch's dune: its structs have the layouts of the
+  target. The `build` of a project with the stanza used to fail, and the
+  stubs of such packages came from their native build.
 - The C compiler of the wasm context makes node scripts of the executables
   it links (`-sEXECUTABLE`), for build rules to run, with the node of
   emscripten's configuration (memory64 for wasm64).

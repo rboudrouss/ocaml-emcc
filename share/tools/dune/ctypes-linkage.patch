@@ -1,0 +1,11 @@
+--- a/src/dune_rules/ctypes/ctypes_rules.ml
++++ b/src/dune_rules/ctypes/ctypes_rules.ml
+@@ -280,7 +280,7 @@
+   Exe.link_many
+     ~link_args
+     ~programs:[ program ]
+-    ~linkages:[ Exe.Linkage.native ]
++    ~linkages:[ Exe.Linkage.native_or_custom (Compilation_context.ocaml shared_cctx) ]
+     ~promote:None
+     shared_cctx
+     ~sandbox

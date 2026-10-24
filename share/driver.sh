@@ -8,6 +8,8 @@
 #   driver.sh shadow [--force] <opam-package>...
 #                                            its OCaml libraries built for the
 #                                            target (ctypes: C layouts)
+#   driver.sh patched-dune                   path of a dune building the
+#                                            (ctypes) stanza for the target
 #   driver.sh auto [--force] <opam-package> <lib-name>
 #                                            compile every OCaml stub file of
 #                                            a package into lib<lib-name>.a
@@ -733,6 +735,36 @@ run_dune_package() {
   echo "$SOURCE_VERSION emcc-$EMCC_VERSION" > "$stamp"
 }
 
+# patched_dune: a dune whose (ctypes) stanza links its generators as custom
+# bytecode in a context without ocamlopt, as dune does for ppx drivers and
+# cinaps (tools/dune/*.patch); the stock one links them natively only
+# (ocaml/dune#13650), which the target's toolchain cannot.  Built from the
+# sources of the switch's dune, once per version and patch; prints its path.
+patched_dune() {
+  local ver sum bin=$SYSROOT/libexec/dune stamp=$SYSROOT/stamps/patched-dune work=$SYSROOT/build/patched-dune
+  ver=$(opam_pkg_version dune) || die "dune is not installed in $PREFIX"
+  sum=$(cat "$OCAML_EMCC_SHARE"/tools/dune/*.patch | sha256sum | cut -c1-16)
+  if [ -x "$bin" ] && [ "$(cat "$stamp" 2>/dev/null)" = "$ver patch=$sum" ]; then echo "$bin"; return 0; fi
+  rm -rf "$work"
+  fetch_opam_source dune "$work"
+  log "building dune $ver, its (ctypes) stanza patched for the target's toolchain"
+  ( cd "$work" && rm -rf _build _boot && apply_patches "$OCAML_EMCC_SHARE/tools/dune" \
+      && PATH=$HOST_BIN:$PATH make release > build.log 2>&1 ) \
+    || { tail -n 20 "$work/build.log" >&2 2>/dev/null; die "could not build the patched dune (log: $work/build.log)"; }
+  mkdir -p "$(dirname "$bin")"
+  cp "$work/_build/install/default/bin/dune" "$bin"
+  echo "$ver patch=$sum" > "$stamp"
+  rm -rf "$work"
+  echo "$bin"
+}
+
+# dune_for <dir>: the dune that builds the package in <dir>, patched_dune's
+# if it uses the (ctypes) stanza.
+dune_for() {
+  if grep -rqE '\(using[[:space:]]+ctypes' --include=dune-project --exclude-dir='_build*' "$1"; then patched_dune
+  else echo "$HOST_BIN/dune"; fi
+}
+
 # shadow <opam-package>: the OCaml libraries of a package, built for the
 # target and installed in $SYSROOT/lib/findlib, which the toolchain searches
 # before the switch.  For ctypes and its users: ctypes lays C types out with
@@ -750,7 +782,7 @@ run_dune_package() {
 # changes version.
 run_shadow() {
   local pkg=$1 stamp=$SYSROOT/stamps/shadow-$1 work=$SYSROOT/build/shadow-$1 dirs=$SYSROOT/meta/shadow-$1.dirs
-  local ver status layouts=no d
+  local ver status layouts=no d dune
   ver=$(opam_pkg_version "$pkg") || die "$pkg is not installed in $PREFIX"
   if [ "$FORCE" = no ] && [ -f "$stamp" ] && [ "$(cut -d' ' -f1 "$stamp")" = "$ver" ]; then return 0; fi
   # the libraries of the previous version
@@ -768,12 +800,13 @@ run_shadow() {
   fi
   status=none; [ $layouts = yes ] && status=failed
   if [ -f "$work/dune-project" ]; then
+    dune=$(dune_for "$work")
     FORCE=no system_deps "$pkg" >/dev/null
     log "building the OCaml libraries of $pkg for $TARGET (C layouts of $TARGET)"
     printf '(lang dune 3.0)\n(context (default (name default.%s) (toolchain %s)))\n' "$TARGET" "$TARGET" > "$work/.ocaml-emcc-workspace"
     if ( cd "$work" && PATH=$SYSROOT/bin/path:$PATH OCAMLFIND_CONF=$SYSROOT/findlib.conf \
            CAML_LD_LIBRARY_PATH=$PREFIX/lib/stublibs:$PREFIX/lib/ocaml/stublibs \
-           "$HOST_BIN/dune" build --build-dir _build.ocaml-emcc --workspace .ocaml-emcc-workspace \
+           "$dune" build --build-dir _build.ocaml-emcc --workspace .ocaml-emcc-workspace \
              -p "$pkg" @install > ocaml-emcc-build.log 2>&1 ); then
       mkdir -p "$SYSROOT/lib/findlib"
       for d in "$work/_build.ocaml-emcc/install/default.$TARGET/lib"/*; do
@@ -788,7 +821,6 @@ run_shadow() {
       tail -n 30 "$work/ocaml-emcc-build.log" >&2
       log "$pkg: could not be built for $TARGET (log: $work/ocaml-emcc-build.log)"
     else
-      # the (ctypes) stanza of dune builds its generators natively (zstd)
       log "  not built for $TARGET, which it does not need: no structs in its generated types"
     fi
   fi
@@ -810,9 +842,10 @@ dune_stubs() {
   # whose _build/install is a file): dune gets its own then.
   DUNE_BDIR=_build
   if [ -e _build ] && ! [ -d _build/default ] && ! [ -e _build/.lock ]; then DUNE_BDIR=_build.dune; fi
-  local a l found=no archives
+  local a l found=no archives dune
+  dune=$(dune_for .)
   if PATH=$SYSROOT/bin/path:$PATH OCAMLFIND_CONF=$SYSROOT/findlib.conf \
-       "$HOST_BIN/dune" build --build-dir "$DUNE_BDIR" -x "$TARGET" -p "$pkg" @install >&2; then
+       "$dune" build --build-dir "$DUNE_BDIR" -x "$TARGET" -p "$pkg" @install >&2; then
     archives=$(find "$DUNE_BDIR/default.$TARGET" -name 'lib*.a' ! -path '*/.*')
     # Archives made by a rule of the package with its own build system
     # (ocaml-lua: `make` in the vendored Lua) hold host objects.  Those of
@@ -845,16 +878,15 @@ dune_stubs() {
   [ $found = yes ] || { log "  (no C archive produced)"; return 1; }
 }
 
-# Fallback of run_dune_package, for what dune cannot cross-compile: the
-# (ctypes) stanza builds its generators as native executables of the target
-# context.  Each stub archive of the native build ($DUNE_BDIR/default, see
-# dune_stubs; kept by OPAMKEEPBUILDDIR, else built here) is rebuilt with
-# emcc from the C files behind its members: hand-written stubs, vendored C,
-# and the C that ctypes generated (architecture independent).  The stanza's
-# own C flags are not known: only -I flags are given (the file's directory
-# and its source directory, the headers of the opam packages it depends on,
-# those of the system recipes).  Also for
-# archives of `dune -x` holding host objects (see dune_stubs).
+# Fallback of run_dune_package, for what dune cannot cross-compile, and for
+# the archives of `dune -x` holding host objects (see dune_stubs).  Each
+# stub archive of the native build ($DUNE_BDIR/default, see dune_stubs; kept
+# by OPAMKEEPBUILDDIR, else built here) is rebuilt with emcc from the C
+# files behind its members: hand-written stubs, vendored C, and the C that
+# ctypes generated (architecture independent).  The stubs' own C flags are
+# not known: only -I flags are given (the file's directory and its source
+# directory, the headers of the opam packages it depends on, those of the
+# system recipes).
 #   dune_native_stubs <pkg> [<libX.a>...]   (default: every archive)
 # Prints the wasm archives.
 dune_native_stubs() {
@@ -991,9 +1023,10 @@ case "$cmd" in
   install)      for r in "$@"; do run_recipe "$r"; done ;;
   install-dune) run_dune_package "$1" ;;
   shadow)       for p in "$@"; do run_shadow "$p"; done ;;
+  patched-dune) patched_dune ;;
   auto)         run_auto "$1" "$2" ;;
   obtain)       run_obtain "$1" "$2" ;;
   toolchain)    write_toolchain ;;
   lib-recipe)   lib_recipe "$1" ;;
-  *) die "usage: driver.sh install|install-dune|shadow|auto|obtain|toolchain|lib-recipe ..." ;;
+  *) die "usage: driver.sh install|install-dune|shadow|patched-dune|auto|obtain|toolchain|lib-recipe ..." ;;
 esac

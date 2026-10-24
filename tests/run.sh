@@ -45,6 +45,7 @@ gsl       | gs       |            | gsl                         | wasm32 wasm64 
 camlzip   | cz       |            | camlzip                     | wasm32 wasm64 wasi |
 ctypes    | cf       |            | ctypes-foreign              | wasm32 wasm64      |
 yaml      | ym       |            | yaml                        | wasm32 wasm64      |
+cstanza   | bin/main |            | ctypes                      | wasm32 wasm64 wasi |
 clibs     | sm       |            | sha checkseum bigstringaf mtime ptime eqaf | wasm32 wasm64      |
 mcrypto   | mc       |            | mirage-crypto-ec mirage-crypto-pk mirage-crypto-rng | wasm32 wasm64      |
 lwt       | lw       |            | lwt                         | wasm32 wasm64      |

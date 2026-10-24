@@ -93,9 +93,22 @@ let cmd_install args =
 
 (* ------------------------------------------------------------------ dune *)
 
-let dune_bin () =
-  let d = Filename.concat (Env.host_bin ()) "dune" in
-  if Sys.file_exists d then d else "dune"
+(* dune's (ctypes) stanza links its generators natively only, which the wasm
+   context cannot (no ocamlopt, ocaml/dune#13650): a project using it is
+   built by a patched dune (driver.sh patched_dune). *)
+let patched_dune =
+  lazy (match Env.driver_output [ "patched-dune" ] with Some d -> d | None -> Env.fail "could not build the patched dune")
+
+let uses_ctypes_stanza root =
+  match Compat.read_file (Filename.concat root "dune-project") with
+  | s -> Str_util.find s "(using ctypes" <> None
+  | exception Sys_error _ -> false
+
+let dune_bin ~root =
+  if uses_ctypes_stanza root then Lazy.force patched_dune
+  else
+    let d = Filename.concat (Env.host_bin ()) "dune" in
+    if Sys.file_exists d then d else "dune"
 
 (* bin/path first in PATH: rules running `ocamlmklib` themselves get the wasm one *)
 let dune_env () =
@@ -128,14 +141,15 @@ let build_stub_archives ~root =
   in
   walk "";
   if !archives = [] then 0
-  else Env.run ~env:(dune_env ()) (dune_bin ()) ("build" :: "-x" :: !Env.target :: "--root" :: root :: !archives)
+  else Env.run ~env:(dune_env ()) (dune_bin ~root) ("build" :: "-x" :: !Env.target :: "--root" :: root :: !archives)
 
 let cmd_dune args =
   ensure_requires ();
-  let code = Env.run ~env:(dune_env ()) (dune_bin ()) ("build" :: "-x" :: !Env.target :: args) in
-  if code <> 0 then exit code;
   let rec root = function "--root" :: r :: _ -> r | _ :: rest -> root rest | [] -> "." in
-  exit (build_stub_archives ~root:(root args))
+  let root = root args in
+  let code = Env.run ~env:(dune_env ()) (dune_bin ~root) ("build" :: "-x" :: !Env.target :: args) in
+  if code <> 0 then exit code;
+  exit (build_stub_archives ~root)
 
 (* ------------------------------------------------------------ link options *)
 
@@ -215,7 +229,7 @@ let find_exe ~root ~exe out =
   | Some e -> e
   | None ->
       let name = Filename.remove_extension (Filename.basename out) in
-      let exes = Describe.run ~dune:(dune_bin ()) ~root in
+      let exes = Describe.run ~dune:(dune_bin ~root) ~root in
       let candidates = List.filter (fun (e : Describe.exe) -> List.mem name e.names) exes in
       let same_place =
         match relative_to root (absolute out) with
@@ -252,7 +266,7 @@ let cmd_build args =
   in
   (* In the wasm context, X.bc exists for (modes byte), and X.exe is also
      plain bytecode there (the ocamlc wrapper turns byte_complete into it). *)
-  let dune = dune_bin () and env = dune_env () in
+  let dune = dune_bin ~root and env = dune_env () in
   let target ext = Filename.concat (ctx_dir ()) (exe ^ ext) in
   let layouts = !Env.target = "wasm32" && o.auto_deps in
   let rec build_bc tries =
