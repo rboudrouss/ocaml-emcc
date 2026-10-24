@@ -1,0 +1,79 @@
+wasm32: wrap the integer literals of the DATA section to 31 bits.
+
+wasm32 runs 64-bit bytecode: the literals that do not fit in 31 bits are
+in the DATA section, as 64-bit integers, which intern refuses ("input_value:
+integer too large").  A 32-bit ocamlc would have wrapped those it accepts
+(0x40000000 is min_int there), and they are mostly in code meant for
+32-bit platforms, selected at run time by Sys.word_size (optint).  While
+startup_byt.c reads the DATA section (from the file in caml_main, from
+memory in caml_startup_code), such a literal keeps its low 32 bits, which
+Val_long wraps to 31.  `ocaml-emcc link` warns about each one.  Marshalled
+data read by the program still fails on them.
+
+No effect on 64-bit targets: the intern.c part is not compiled there.
+
+--- a/runtime/intern.c
++++ b/runtime/intern.c
+@@ -29,6 +29,8 @@
+ #include "caml/fail.h"
+ #include "caml/gc.h"
+ #include "caml/intext.h"
++/* ocaml-emcc: set by startup_byt.c while it reads the DATA section */
++int caml_emcc_wrap_ints = 0;
+ #include "caml/io.h"
+ #include "caml/memory.h"
+ #include "caml/memprof.h"
+@@ -494,6 +496,16 @@
+         v = Val_long(read32s());
+         break;
+       case CODE_INT64:
++#ifndef ARCH_SIXTYFOUR
++        /* ocaml-emcc: a literal of the 64-bit bytecode beyond 31 bits keeps
++           its low 32 bits (big-endian: the second word), wrapped by Val_long
++           like the arithmetic of a 32-bit ocamlc */
++        if (caml_emcc_wrap_ints) {
++          (void) read32u();
++          v = Val_long((intnat) (int32_t) read32u());
++          break;
++        }
++#endif
+ #ifdef ARCH_SIXTYFOUR
+         v = Val_long((intnat) (read64u()));
+         break;
+--- a/runtime/startup_byt.c
++++ b/runtime/startup_byt.c
+@@ -45,6 +45,8 @@
+ #include "caml/instrtrace.h"
+ #include "caml/interp.h"
+ #include "caml/intext.h"
++/* ocaml-emcc: see intern.c */
++extern int caml_emcc_wrap_ints;
+ #include "caml/io.h"
+ #include "caml/memory.h"
+ #include "caml/minor_gc.h"
+@@ -564,6 +566,7 @@
+   caml_stat_free(shared_libs);
+   caml_stat_free(req_prims);
+   /* Load the globals */
++  caml_emcc_wrap_ints = 1;
+   caml_seek_section(fd, &trail, "DATA");
+   chan = caml_open_descriptor_in(fd);
+   Lock(chan);
+@@ -571,6 +574,7 @@
+   Unlock(chan);
+   caml_close_channel(chan); /* this also closes fd */
+   caml_stat_free(trail.section);
++  caml_emcc_wrap_ints = 0;
+   /* Ensure that the globals are in the major heap. */
+   caml_oldify_one (caml_global_data, &caml_global_data);
+   caml_oldify_mopup ();
+@@ -660,7 +664,9 @@
+   /* Use the builtin table of primitives */
+   caml_build_primitive_table_builtin();
+   /* Load the globals */
++  caml_emcc_wrap_ints = 1;
+   caml_global_data = caml_input_value_from_block(data, data_size);
++  caml_emcc_wrap_ints = 0;
+   /* Ensure that the globals are in the major heap. */
+   caml_oldify_one (caml_global_data, &caml_global_data);
+   caml_oldify_mopup ();

@@ -1,0 +1,38 @@
+Debug events from memory for caml_startup_code.
+
+A program started by caml_startup_code (a standalone module: the bytecode
+linked in as C arrays) has no executable file to read its DBUG section
+from: backtraces have no locations.  main.c gives the events instead,
+already relocated and gathered in an array by `ocaml-emcc link`, in
+caml_emcc_debug_events.  NULL otherwise: the runtime behaves as before.
+
+--- a/runtime/backtrace_byt.c
++++ b/runtime/backtrace_byt.c
+@@ -347,6 +347,12 @@
+   return trace_pos;
+ }
+ 
++/* ocaml-emcc: the debug events of a program started by caml_startup_code,
++   set by its main.c (a standalone module has no executable file to read
++   them from).  NULL otherwise. */
++char *caml_emcc_debug_events = NULL;
++uintnat caml_emcc_debug_events_size = 0;
++
+ /* Read the debugging info contained in the current bytecode executable. */
+ 
+ static void read_main_debug_info(struct debug_info *di)
+@@ -360,6 +366,14 @@
+ 
+   CAMLassert(di->already_read == 0);
+   di->already_read = 1;
++
++  if (caml_emcc_debug_events != NULL) {
++    events = caml_input_value_from_block(caml_emcc_debug_events,
++                                         caml_emcc_debug_events_size);
++    di->events =
++      process_debug_events(caml_start_code, events, &di->num_events);
++    CAMLreturn0;
++  }
+ 
+   /* At the moment, bytecode programs built with --output-complete-exe
+      do not contain any debug info.

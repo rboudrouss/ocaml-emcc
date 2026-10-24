@@ -1,0 +1,17 @@
+Define caml_debug_info once.
+
+In 4.08, caml_debug_info is defined in both backtrace.c and
+backtrace_byt.c, which only links with common symbols (-fcommon), not
+supported on wasm.  Keep the backtrace_byt.c one.
+
+--- a/runtime/backtrace.c
++++ b/runtime/backtrace.c
+@@ -28,7 +28,7 @@
+ #include "caml/fail.h"
+ 
+ /* The table of debug information fragments */
+-struct ext_table caml_debug_info;
++extern struct ext_table caml_debug_info;
+ 
+ CAMLexport int32_t caml_backtrace_active = 0;
+ CAMLexport int32_t caml_backtrace_pos = 0;

@@ -607,7 +607,7 @@ recipe builds single-threaded.
 
 | version | issue | fix |
 |---------|-------|-----|
-| < 4.10  | `caml_debug_info` defined in two files (needs `-fcommon`, which wasm lacks) | made `extern` in `backtrace.c` |
+| 4.08    | `caml_debug_info` defined in two files (needs `-fcommon`, which wasm lacks) | `patches/4.08/`: made `extern` in `backtrace.c` |
 | 4.x     | `Tag_val` indexes with an unsigned `-sizeof(value)`: out-of-bounds wasm32 load | `patches/4.x/` (fixed upstream in 5.0) |
 | < 4.12  | `afl.c` needs `shmat`, missing from emscripten's libc | weak stub (`share/runtime/compat.c`) |
 | ≥ 4.14  | `runtime/sak` is a build-time tool | built with the host `cc` |
@@ -620,12 +620,13 @@ recipe builds single-threaded.
 | all     | `sigsuspend` missing (unix) | weak stub |
 | all, wasm32 | `ARCH_ALIGN_DOUBLE` (`alignof(double)` is 8): float accesses through memcpy, some stubs refuse to build (gsl) | undefined, as for i686: wasm loads doubles at any alignment |
 | all     | systhreads disabled (no pthreads) | `libthreads.a` built anyway, single-threaded |
-| all, wasm32 | integer literals beyond 31 bits in the DATA section ("input_value: integer too large") | wrapped to 31 bits while DATA is read (`intern.c`, `startup_byt.c`), from the file (`caml_main`) or from memory (`caml_startup_code`, standalone modules) |
-| all     | a program started by `caml_startup_code` (standalone modules) reads its debug events from the executable file, which does not exist: backtraces without locations | `backtrace_byt.c` takes them from memory when `main.c` gives them (`caml_emcc_debug_events`), unchanged otherwise |
-| all, wasm64 | stubs pass `int` dimensions to `caml_ba_alloc_dims`, read as `intnat` (stb_image: a corrupted heap) | the installed `bigarray.h` converts each one |
+| all, wasm32 | integer literals beyond 31 bits in the DATA section ("input_value: integer too large") | `patches/4.x/`, `patches/5.x/`: wrapped to 31 bits while DATA is read (`intern.c`, `startup_byt.c`), from the file (`caml_main`) or from memory (`caml_startup_code`, standalone modules) |
+| all     | a program started by `caml_startup_code` (standalone modules) reads its debug events from the executable file, which does not exist: backtraces without locations | `patches/all/`: `backtrace_byt.c` takes them from memory when `main.c` gives them (`caml_emcc_debug_events`), unchanged otherwise |
+| all, wasm64 | stubs pass `int` dimensions to `caml_ba_alloc_dims`, read as `intnat` (stb_image: a corrupted heap) | `patches/headers/`: the installed `bigarray.h` converts each one |
 
-Version-specific patches go in `share/recipes/ocaml/patches/4.x/`,
-`patches/5.4+/` or `patches/<major>.<minor>/`. Compilers before 4.08 are
+Patches go in `share/recipes/ocaml/patches/`: `all/`, `4.x/` or `5.x/`,
+`5.4+/`, `<major>.<minor>/` (applied in this order), and `headers/` for the
+headers installed for the stubs only. Compilers before 4.08 are
 not supported: their build has no autoconf `configure`, and their bytecode,
 marshal and runtime layouts differ from what the link step reads.
 

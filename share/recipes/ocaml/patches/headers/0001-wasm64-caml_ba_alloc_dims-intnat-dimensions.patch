@@ -1,0 +1,42 @@
+wasm64: convert the dimensions given to caml_ba_alloc_dims to intnat.
+
+Applied to the headers installed for the stubs, once the runtime is built
+(bigarray.c defines caml_ba_alloc_dims, which the macro would rename).
+
+--- a/runtime/caml/bigarray.h
++++ b/runtime/caml/bigarray.h
+@@ -131,4 +131,34 @@
+ 
+ #endif
+ 
++/* ocaml-emcc: caml_ba_alloc_dims reads its dimensions with va_arg(ap,
++   intnat).  Stubs often pass ints (stb_image: x * y * n), which works on
++   x86-64 (registers) and wasm32 (same size), but on wasm64 reads 8 bytes
++   for 4: a wrong size, a corrupted heap.  Each dimension is converted. */
++#if defined(__wasm64__)
++#define OCAML_EMCC_BA_N(_1,_2,_3,_4,_5,_6,_7,_8,_9,_10,_11,_12,_13,_14,_15,_16,N,...) N
++#define OCAML_EMCC_BA_COUNT(...) OCAML_EMCC_BA_N(__VA_ARGS__,16,15,14,13,12,11,10,9,8,7,6,5,4,3,2,1)
++#define OCAML_EMCC_BA_C1(a) (intnat)(a)
++#define OCAML_EMCC_BA_C2(a, ...) (intnat)(a), OCAML_EMCC_BA_C1(__VA_ARGS__)
++#define OCAML_EMCC_BA_C3(a, ...) (intnat)(a), OCAML_EMCC_BA_C2(__VA_ARGS__)
++#define OCAML_EMCC_BA_C4(a, ...) (intnat)(a), OCAML_EMCC_BA_C3(__VA_ARGS__)
++#define OCAML_EMCC_BA_C5(a, ...) (intnat)(a), OCAML_EMCC_BA_C4(__VA_ARGS__)
++#define OCAML_EMCC_BA_C6(a, ...) (intnat)(a), OCAML_EMCC_BA_C5(__VA_ARGS__)
++#define OCAML_EMCC_BA_C7(a, ...) (intnat)(a), OCAML_EMCC_BA_C6(__VA_ARGS__)
++#define OCAML_EMCC_BA_C8(a, ...) (intnat)(a), OCAML_EMCC_BA_C7(__VA_ARGS__)
++#define OCAML_EMCC_BA_C9(a, ...) (intnat)(a), OCAML_EMCC_BA_C8(__VA_ARGS__)
++#define OCAML_EMCC_BA_C10(a, ...) (intnat)(a), OCAML_EMCC_BA_C9(__VA_ARGS__)
++#define OCAML_EMCC_BA_C11(a, ...) (intnat)(a), OCAML_EMCC_BA_C10(__VA_ARGS__)
++#define OCAML_EMCC_BA_C12(a, ...) (intnat)(a), OCAML_EMCC_BA_C11(__VA_ARGS__)
++#define OCAML_EMCC_BA_C13(a, ...) (intnat)(a), OCAML_EMCC_BA_C12(__VA_ARGS__)
++#define OCAML_EMCC_BA_C14(a, ...) (intnat)(a), OCAML_EMCC_BA_C13(__VA_ARGS__)
++#define OCAML_EMCC_BA_C15(a, ...) (intnat)(a), OCAML_EMCC_BA_C14(__VA_ARGS__)
++#define OCAML_EMCC_BA_C16(a, ...) (intnat)(a), OCAML_EMCC_BA_C15(__VA_ARGS__)
++#define OCAML_EMCC_BA_CAT_(a, b) a##b
++#define OCAML_EMCC_BA_CAT(a, b) OCAML_EMCC_BA_CAT_(a, b)
++#define caml_ba_alloc_dims(flags, num_dims, data, ...) \
++  caml_ba_alloc_dims(flags, num_dims, data, \
++    OCAML_EMCC_BA_CAT(OCAML_EMCC_BA_C, OCAML_EMCC_BA_COUNT(__VA_ARGS__))(__VA_ARGS__))
++#endif
++
+ #endif /* CAML_BIGARRAY_H */
