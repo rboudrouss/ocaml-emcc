@@ -502,7 +502,7 @@ include_recipe() {
 # Bumped whenever write_toolchain changes: the CLI then regenerates it in
 # existing sysroots (cheap: the runtime is not rebuilt).  Keep in sync with
 # Env.toolchain_version.
-TOOLCHAIN_VERSION=8
+TOOLCHAIN_VERSION=9
 
 write_toolchain() {
   local tool host_conf cc=$SYSROOT/bin/emcc-$TARGET
@@ -519,7 +519,11 @@ write_toolchain() {
   # clang refuses with -std=gnu23.
   # An executable (-o X.exe, or without extension) is a program the build
   # runs: ctypes' type generators print the layouts of the target's structs.
-  # It becomes a node script (the wasm inside, real files) dune can run.
+  # It becomes a node script (the wasm inside, real files) dune can run,
+  # with the node of emscripten's configuration (memory64 for wasm64): the
+  # one in PATH can be older.
+  local node
+  node=$("$EMSDK_BIN/em-config" NODE_JS 2>/dev/null | sed -e "s/^\['//" -e "s/'.*//")
   cat > "$cc" <<EOF
 #!/bin/sh
 link=-L'$SYSROOT/lib' std='$STUB_STD' prev= exe=
@@ -531,7 +535,7 @@ for a; do
   prev=\$a
   [ "\$a" = -pthread ] || set -- "\$@" "\$a"
 done
-[ -n "\$link" ] && [ -n "\$exe" ] && set -- "\$@" -sEXECUTABLE=1 -sSINGLE_FILE=1 -sEXIT_RUNTIME=1 -sNODERAWFS=1
+[ -n "\$link" ] && [ -n "\$exe" ] && set -- "\$@" -sEXECUTABLE='${node:-1}' -sSINGLE_FILE=1 -sEXIT_RUNTIME=1 -sNODERAWFS=1
 exec '$EMCC' $TARGET_FLAGS \$std -idirafter '$SYSROOT/include' \$link "\$@"
 EOF
   chmod +x "$cc"

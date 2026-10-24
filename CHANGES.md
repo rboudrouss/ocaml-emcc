@@ -10,7 +10,8 @@
   the host's builds, or uses a package that could not be rebuilt (dune's
   `(ctypes)` stanza with structs, packages without dune).
 - The C compiler of the wasm context makes node scripts of the executables
-  it links (`-sEXECUTABLE`), so that build rules can run them.
+  it links (`-sEXECUTABLE`), for build rules to run, with the node of
+  emscripten's configuration (memory64 for wasm64).
 - The `ocamlc` wrapper of the toolchains no longer writes placeholder
   `dllX.so` files in the host's switch, next to its installed libraries.
   On OCaml 4.x, those of `unix` and `str` in `lib/ocaml` (in `ld.conf`)
