@@ -84,11 +84,12 @@ if [ -n "$out" ]; then
     # A (modes exe) link is byte_complete: dune built lib<x>.a, not the
     # dll<x>.so ocamlc reads once -output-complete-exe is gone.  Same
     # placeholder as ocamlmklib's.
+    # Installed libraries have theirs in stublibs.
     d=$(dirname "$f")
     for l in $(printf '%s\n' "$info" | sed -n 's/^Extra dynamically-loaded libraries: *//p'); do
       l=${l#-l}
-      if [ ! -f "$d/dll$l.so" ] && [ -f "$d/lib$l.a" ]; then
-        printf '' | ${OCAML_EMCC_HOST_CC:-cc} -shared -x c -o "$d/dll$l.so" - 2>/dev/null || : > "$d/dll$l.so"
+      if [ ! -f "$d/dll$l.so" ] && [ ! -f "$OCAML_EMCC_HOST_BIN/../lib/stublibs/dll$l.so" ] && [ -f "$d/lib$l.a" ]; then
+        printf '' | ${OCAML_EMCC_HOST_CC:-cc} -shared -x c -o "$d/dll$l.so" - 2>/dev/null || { : > "$d/dll$l.so"; } 2>/dev/null || true
       fi
     done
   done

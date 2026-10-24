@@ -201,6 +201,31 @@ The bytecode is always the one of your switch, compiled for 64 bits.
   native 64-bit program. Needs node ≥ 24 (the one shipped with emsdk
   works), Chrome ≥ 133 or Firefox ≥ 134.
 
+### `--docker` (prototype)
+
+`ocaml-emcc build OUT.js --docker` (wasm32) compiles the bytecode with a
+32-bit OCaml in a container, so that what libraries compute when they are
+built (ctypes' sizes and struct offsets, dune-configurator answers) is that
+of a 32-bit platform. The image (`ocaml-emcc-docker:<arch>-<version>`, from
+debian) gets an opam switch with the OCaml version of the host's switch and
+the host's version of each package the program uses, installed on demand.
+The C stubs stay the host's, rebuilt for wasm32.
+
+- `--docker-platform linux/arm/v7` (default): the struct layouts of wasm32
+  but for `long double`; needs qemu-user in binfmt_misc on an x86 machine
+  (`docker run --privileged --rm tonistiigi/binfmt --install arm`), and is
+  slow there.
+- `--docker-platform linux/386`: no emulation, but `double` and `int64_t`
+  are aligned to 4 bytes in structs.
+
+Tried on 5.5.1 with linux/386: zarith and yaml pass. Its limits are those
+of a 32-bit Linux, which is not emscripten either: the constants a package
+reads from C headers are those of the container's (ctypes-foreign gets the
+libffi ABI of i386, `FFI_BAD_ABI` at run time), and packages unavailable on
+32-bit OCaml do not install (zstd on 5.x, bytecode only). Pins and local
+packages are not reproduced. Without `--docker`, the wasm32 builds of ctypes
+and its users (see [How it works](#how-it-works)) handle these cases.
+
 ### Configuration
 
 An optional `ocaml-emcc.conf`, looked up from the current directory

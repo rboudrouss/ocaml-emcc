@@ -26,6 +26,9 @@ type opts = {
   auto_deps : bool;
   check : bool;
   wasi : bool;  (** OUT.wasm for a WASI host (share/runtime/wasi.c) *)
+  host_bytecode : bool;
+      (** compiled by the host's 64-bit OCaml (not --docker): wasm32 checks
+          its literals and C layouts *)
 }
 
 (* C prototype of a primitive as the interpreter calls it. *)
@@ -400,7 +403,7 @@ let run o =
     Env.fail "--wasi: WASI (preview1) is 32-bit, no WASI host runs a wasm64 module.  Use --target wasm32.";
   if standalone && o.mode <> Embed then
     Env.fail "--preload and --node-fs need the JavaScript glue: not available for a standalone %s" o.output;
-  if !Env.target = "wasm32" then (
+  if !Env.target = "wasm32" && o.host_bytecode then (
     warn_literals bc;
     if o.auto_deps then ignore (Layouts.ensure bc);
     Layouts.warn ~bc_path:o.bc bc);
