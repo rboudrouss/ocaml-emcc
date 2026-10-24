@@ -9,7 +9,7 @@ let () =
   Unix.ftruncate fd 6;
   Printf.printf "size: %d\n" (Unix.fstat fd).Unix.st_size;
   Unix.close fd;
-  Printf.printf "content: %s\n" (In_channel.with_open_bin "eu.txt" In_channel.input_all);
+  Printf.printf "content: %s\n" (let ic = open_in_bin "eu.txt" in let s = really_input_string ic (in_channel_length ic) in close_in ic; s);
   Unix.unlink "eu.txt";
   Printf.printf "endian: %d %ld %Lx\n" (BigEndian.get_uint16 "\x01\x02" 0) (LittleEndian.get_int32 "\x01\x02\x03\x04" 0)
     (BigEndian.get_int64 "\x01\x02\x03\x04\x05\x06\x07\x08" 0);
