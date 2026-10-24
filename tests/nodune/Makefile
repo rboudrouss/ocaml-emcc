@@ -1,9 +1,10 @@
 # Building without dune: the C stubs with emcc, the bytecode with ocamlfind,
-# then `ocaml-emcc link`.  OCAML_EMCC can point to a development build.
+# then `ocaml-emcc link`.  OCAML_EMCC can point to a development build,
+# LINK_FLAGS adds link options (--wasi, with out/prog.wasm).
 OCAML_EMCC ?= ocaml-emcc
 
-out/prog.js: prog.bc libstub.a
-	$(OCAML_EMCC) link prog.bc -o $@ -l ./libstub.a
+out/prog.js out/prog.wasm: prog.bc libstub.a
+	$(OCAML_EMCC) link prog.bc -o $@ -l ./libstub.a $(LINK_FLAGS)
 
 # The stub archive for wasm: emcc with the runtime's headers and flags.
 libstub.a: stub.c

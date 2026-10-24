@@ -679,6 +679,16 @@ apply (mlmpfr 4.2.1 does not build with OCaml 5). The 5.4.1 tests from
 bindings need. The zarith test also ran unmodified in Chrome 154, on both
 targets.
 
+`tests/run.sh --wasi` builds the tests marked `wasi` in its table with
+`--wasi` and runs them with wasmtime (`$WASMTIME`, or the one in `PATH`),
+else with node's WASI. They pass with wasmtime 50 on OCaml 4.14.2 and 5.5.1
+(stubs, zarith, mixed, ocaml5, gitrecipe, nodune, syslibs, apron, sqlite,
+bz2, pcre2, zstd, gsl, camlzip, binio, the packages installed in each
+switch), and stubs, zarith, gitrecipe, nodune and mixed on 4.08.1, 4.11.2
+and 4.12.1; sqlite, stubs, camlzip and binio also with node 24's WASI.
+`ctypes` cannot pass: libffi's emscripten port makes its calls in
+JavaScript. The tests from `clibs` on were not tried.
+
 ## Next steps
 
 - Domains: a `--threads` variant (runtime, stubs and link with `-pthread`)
@@ -707,5 +717,5 @@ share/recipes/        ocaml (runtime + patches), C libraries (gmp, mpfr, zlib...
                       OCaml packages needing changes (zarith, apron, lwt...)
 share/tools/          ocamlc / ocamlmklib wrappers for dune -x
 share/runtime/        main.c, compat.c, dlsym.c, wasi.c, node_stdio.js
-tests/run.sh          test suite (SWITCH=<opam switch> tests/run.sh --target wasm64)
+tests/run.sh          test suite (SWITCH=<opam switch> tests/run.sh --target wasm64, --wasi)
 ```
