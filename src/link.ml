@@ -341,6 +341,26 @@ let keep_raw_exports js =
         in
         write_file js s
 
+(* Compiles share/runtime/NAME.c, whose functions stand in for libc or
+   emscripten ones.  Those the program's libraries define as well are
+   renamed out of the way (and dropped by wasm-ld), so that theirs are
+   linked: a weak definition is not enough, wasm-ld does not take an
+   archive member for a symbol that is already defined. *)
+let runtime_object ~emcc ~flags ~lib_syms ~work name =
+  let src = Filename.concat (Env.share ()) ("runtime/" ^ name ^ ".c") in
+  let obj = Filename.concat work (name ^ ".o") in
+  let cc defs = Env.run_exn emcc (flags @ defs @ [ "-c"; src; "-o"; obj ]) in
+  cc [];
+  Hashtbl.remove file_symbols obj;
+  let theirs =
+    Hashtbl.fold (fun sym () acc -> if Hashtbl.mem (Lazy.force lib_syms) sym then sym :: acc else acc) (defined_symbols [ obj ]) []
+    |> List.sort compare
+  in
+  if theirs <> [] then (
+    Env.log "%s: defined by the program's libraries, used instead of ocaml-emcc's (%s.c)" (String.concat " " theirs) name;
+    cc (List.map (fun sym -> Printf.sprintf "-D%s=ocaml_emcc_overridden_%s" sym sym) theirs));
+  obj
+
 (* The host of a standalone module provides its imports: the WASI ones,
    and emscripten's JavaScript functions (env). *)
 let report_imports output =
@@ -411,6 +431,8 @@ let run o =
         else None)
       flags_of_libs
   in
+  (* what the program's libraries define (not the runtime's) *)
+  let lib_syms = lazy (defined_symbols (List.map snd libs @ user_archives () @ flag_archives)) in
   if o.check then (
     let syms = defined_symbols (archives @ user_archives () @ flag_archives) in
     let missing = List.filter (fun p -> not (Hashtbl.mem syms p)) prims in
@@ -438,14 +460,13 @@ let run o =
   (* Same flags as the runtime (target, longjmp flavour...). *)
   let cflags = Env.manifest_flags "cflags" and ldflags = Env.manifest_flags "ldflags" in
   Env.run_exn emcc (cflags @ [ o.opt; main_def ] @ inc @ [ "-c"; Filename.concat (Env.share ()) "runtime/main.c"; "-o"; main_o ]);
-  let compat_o = Filename.concat work "compat.o" in
-  Env.run_exn emcc (cflags @ [ o.opt; "-c"; Filename.concat (Env.share ()) "runtime/compat.c"; "-o"; compat_o ]);
+  let runtime_object = runtime_object ~emcc ~flags:(cflags @ [ o.opt ]) ~lib_syms ~work in
+  let compat_o = runtime_object "compat" in
   let foreign_objs, foreign_flags =
     match foreign with
     | None -> ([], [])
     | Some names ->
-        let dlsym_o = Filename.concat work "dlsym.o" in
-        Env.run_exn emcc (cflags @ [ o.opt; "-c"; Filename.concat (Env.share ()) "runtime/dlsym.c"; "-o"; dlsym_o ]);
+        let dlsym_o = runtime_object "dlsym" in
         ([ dlsym_o ], "-sALLOW_TABLE_GROWTH=1" :: List.map (fun n -> "-Wl,--export=" ^ n) names)
   in
   let standalone_objs =
