@@ -504,7 +504,7 @@ include_recipe() {
 # Bumped whenever write_toolchain changes: the CLI then regenerates it in
 # existing sysroots (cheap: the runtime is not rebuilt).  Keep in sync with
 # Env.toolchain_version.
-TOOLCHAIN_VERSION=9
+TOOLCHAIN_VERSION=10
 
 write_toolchain() {
   local tool host_conf cc=$SYSROOT/bin/emcc-$TARGET
@@ -516,7 +516,9 @@ write_toolchain() {
   # single-threaded, and with it emcc compiles `caml_state` as a real
   # thread-local variable, which the runtime's is not (see the ocaml recipe).
   # The headers and libraries of the sysroot come last (after the package's
-  # own): dune-configurator's C tests only get the C flags, not -I.
+  # own): dune-configurator's C tests only get the C flags, not -I.  Those
+  # of the host in CPATH and friends would come before them (the host's
+  # ffi.h for ctypes-foreign): the environment loses them.
   # The C standard is left out for C++ (snappy's stubs: -x c++), which
   # clang refuses with -std=gnu23.
   # An executable (-o X.exe, or without extension) is a program the build
@@ -528,6 +530,7 @@ write_toolchain() {
   node=$("$EMSDK_BIN/em-config" NODE_JS 2>/dev/null | sed -e "s/^\['//" -e "s/'.*//")
   cat > "$cc" <<EOF
 #!/bin/sh
+unset CPATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH LIBRARY_PATH
 link=-L'$SYSROOT/lib' std='$STUB_STD' prev= exe=
 for a; do
   shift
