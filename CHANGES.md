@@ -11,9 +11,13 @@
   `(ctypes)` stanza with structs, packages without dune).
 - The C compiler of the wasm context makes node scripts of the executables
   it links (`-sEXECUTABLE`), so that build rules can run them.
-- The `ocamlc` wrapper of the toolchains no longer writes a placeholder
-  `dllX.so` next to an installed library whose DLL is in `stublibs` (it
-  did in the host's switch).
+- The `ocamlc` wrapper of the toolchains no longer writes placeholder
+  `dllX.so` files in the host's switch, next to its installed libraries.
+  On OCaml 4.x, those of `unix` and `str` in `lib/ocaml` (in `ld.conf`)
+  hid the real ones: the host's `ocaml unix.cma` and `ocamlc unix.cma`
+  failed (`The external function unix_waitpid is not available`). A
+  switch where `build` ran before keeps them: delete the empty `dll*.so`
+  of `lib/` outside the `stublibs` directories.
 
 - `--wasi` (`link`, `build`): `OUT.wasm` is a WASI module, importing only
   WASI functions, for wasmtime, node's WASI and other WASI hosts (wasm32).

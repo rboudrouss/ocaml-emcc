@@ -83,12 +83,14 @@ if [ -n "$out" ]; then
       | sed -n -e 's/^Extra C object files: *//p' -e 's/^Extra C options: *//p' | tr '\n' ' ')"
     # A (modes exe) link is byte_complete: dune built lib<x>.a, not the
     # dll<x>.so ocamlc reads once -output-complete-exe is gone.  Same
-    # placeholder as ocamlmklib's.
-    # Installed libraries have theirs in stublibs.
+    # placeholder as ocamlmklib's.  Never in the switch: its libraries have
+    # theirs in a stublibs directory, which the placeholder would shadow
+    # for the host's ocamlc and ocaml (lib/ocaml is in ld.conf).
     d=$(dirname "$f")
+    case $d in "${OCAML_EMCC_HOST_BIN%/bin}"/*) continue ;; esac
     for l in $(printf '%s\n' "$info" | sed -n 's/^Extra dynamically-loaded libraries: *//p'); do
       l=${l#-l}
-      if [ ! -f "$d/dll$l.so" ] && [ ! -f "$OCAML_EMCC_HOST_BIN/../lib/stublibs/dll$l.so" ] && [ -f "$d/lib$l.a" ]; then
+      if [ ! -f "$d/dll$l.so" ] && [ -f "$d/lib$l.a" ]; then
         printf '' | ${OCAML_EMCC_HOST_CC:-cc} -shared -x c -o "$d/dll$l.so" - 2>/dev/null || { : > "$d/dll$l.so"; } 2>/dev/null || true
       fi
     done
