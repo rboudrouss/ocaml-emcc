@@ -1,3 +1,30 @@
+## Unreleased
+
+- `--wasi` (`link`, `build`): `OUT.wasm` is a WASI module, importing only
+  WASI functions, for wasmtime, node's WASI and other WASI hosts (wasm32).
+  emscripten's standalone libc fails to open or `stat` a file and imports
+  the rest of the file system from JavaScript: `share/runtime/wasi.c`
+  implements these system calls with WASI (preopened directories, a
+  current directory), sleeping, `select` and `getrusage` with
+  `poll_oneoff` and the WASI clocks, `dup`/`dup2` of an opened file by
+  opening it again, file locks and owners as no-ops. Linked with
+  `-sPURE_WASI`, the module is translated to the standard exception
+  handling instructions (exnref) that WASI hosts implement.
+  `tests/run.sh --wasi` runs the suite this way (wasmtime or node's WASI),
+  and CI does on 4.14 and 5.5.
+- A standalone `OUT.wasm` (with or without `--wasi`) has its bytecode as C
+  arrays started by `caml_startup_code`, instead of a file of emscripten's
+  JavaScript file system, which it does not have. `link` lists the imports
+  that are not WASI.
+- The functions of `share/runtime/*.c` (`compat.c`, `dlsym.c`, `wasi.c`)
+  that the program's libraries define as well are left out: the program's
+  are linked.
+- `ocaml` recipe: on wasm32, the integer literals beyond 31 bits are
+  wrapped by `caml_startup_code` as well; the debug events of a program
+  started by `caml_startup_code` can come from memory (backtraces of
+  standalone modules have their locations). A runtime built before needs
+  `ocaml-emcc setup --force` (`link` says so).
+
 ## 0.2.1
 
 - Installed packages configured against a host library: in the wasm context
