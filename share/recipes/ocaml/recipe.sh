@@ -39,6 +39,13 @@ build() {
   # anyway: take the non-POSIX (Windows-like) code path.
   local cache_vars=()
   [ "$OCAML_MAJOR" -ge 5 ] && cache_vars+=(ac_cv_func_sigaction=no)
+  # OCaml 5's configure adds the -pthread found by AX_PTHREAD to the C
+  # flags.  Objects built with it access caml_state through real wasm TLS,
+  # objects built without it (the stubs) through a plain global: mixed, the
+  # stubs read a wrong address ("no domain lock held").  Stay single-threaded
+  # everywhere: AX_PTHREAD keeps the flags it is given when they link
+  # pthread_join, which emscripten's single-threaded stubs do.
+  [ "$OCAML_MAJOR" -ge 5 ] && cache_vars+=(PTHREAD_CFLAGS=-D_REENTRANT)
 
   # Target flags (-m64, longjmp flavour...) go in CC as well: some versions
   # (4.08 to 4.11) compile the otherlibs without the configure-time CFLAGS.
@@ -47,14 +54,6 @@ build() {
     --disable-native-compiler --disable-ocamltest --disable-ocamldoc \
     --disable-debugger --disable-systhreads \
     CC="$EMCC $TARGET_FLAGS" CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" "${cache_vars[@]}" > configure.log 2>&1 || { tail -30 configure.log; die "configure failed"; }
-
-  # OCaml 5's configure appends -pthread to CFLAGS.  Objects built with it
-  # access caml_state through real wasm TLS, objects built without it (the
-  # stubs) through a plain global: mixed, the stubs read a wrong address
-  # ("no domain lock held").  Stay single-threaded everywhere.
-  if grep -q -- '-pthread' Makefile.config; then
-    sed -i -e '/^CFLAGS=/s/ -pthread//g' -e '/^LDFLAGS=/s/ -pthread//g' Makefile.config
-  fi
 
   # wasm loads doubles and 64-bit ints at any alignment, like i686, the only
   # 32-bit target configure exempts.  With ARCH_ALIGN_DOUBLE every float field
