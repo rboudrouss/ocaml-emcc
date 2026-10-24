@@ -24,6 +24,12 @@
   started by `caml_startup_code` can come from memory (backtraces of
   standalone modules have their locations). A runtime built before needs
   `ocaml-emcc setup --force` (`link` says so).
+- Recipes change the sources they build with patches (`patches/` next to
+  `recipe.sh`) instead of `sed` and `perl`: ocaml, libffi, liblmdb, lmdb,
+  lwt, mirage-crypto, cryptokit, secp256k1-internal. The `ocaml` ones apply
+  to the sources of every version from 4.08 to 5.5 (on 5.0 to 5.3, still
+  untested, the wasm32 build used to stop on the DATA literals). A recipe's checksum covers its patches:
+  the "recipe changed" note shows when they change.
 
 ## 0.2.1
 
