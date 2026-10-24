@@ -11,6 +11,23 @@
   `(ctypes)` stanza with structs, packages without dune).
 - The C compiler of the wasm context makes node scripts of the executables
   it links (`-sEXECUTABLE`), so that build rules can run them.
+- `build --docker` (wasm32, prototype): the bytecode is compiled by a
+  32-bit OCaml in a container (`--docker-platform linux/386`, the default,
+  or `linux/arm/v7`, which needs qemu-user on an x86 machine), whose opam
+  switch gets the host's OCaml and package versions on demand
+  (`ocaml-emcc-docker:<arch>-<version>-emcc<version>` images); the host's
+  wasm32 stubs are linked. The container's C compiler uses the headers of
+  emscripten and of the sysroot instead of glibc's (the constants of the
+  target: errno values, libffi's ABI), and on i386
+  `-malign-double -m128bit-long-double` (the struct layouts of wasm32 but
+  for the alignment of `long double`). OCaml 5 has no 32-bit native
+  compiler: an opam repository ranked first links the generators of dune's
+  `(ctypes)` stanza as custom bytecode (ocaml/dune#13650) and drops the
+  conflict of zstd with `ocaml-option-bytecode-only`. ctypes-foreign,
+  zstd, yaml and zarith pass on 5.5.
+- The `ocamlc` wrapper of the toolchains no longer writes a placeholder
+  `dllX.so` next to an installed library whose DLL is in `stublibs` (it
+  did in the host's switch).
 
 - `--wasi` (`link`, `build`): `OUT.wasm` is a WASI module, importing only
   WASI functions, for wasmtime, node's WASI and other WASI hosts (wasm32).
