@@ -16,6 +16,9 @@
 #   5.x    patches/5.x (wasm32: literals beyond 31 bits wrapped while DATA
 #          is read); no POSIX signals (no sigaltstack in emscripten), no
 #          -pthread
+#   5.0    patches/5.0 (commit memory with mprotect, no mmap(MAP_FIXED); no
+#          pthread_getaffinity_np, configure only compiles its test); stub
+#          archives without the "byt" suffix
 #   >=5.4  patches/5.4+ (commit memory with mprotect, no mmap(MAP_FIXED))
 
 SOURCE=ocaml
@@ -94,8 +97,8 @@ build() {
   # C stubs of the otherlibs.  Their archive is built by ocamlmklib, which
   # needs a working ocamlrun: substitute our emar-based replacement
   # (MKLIB_CMD in 4.x, MKLIB in 5.x).  Bytecode stub archives got a "byt"
-  # suffix in 5.0.
-  local sfx=; [ "$OCAML_MAJOR" -ge 5 ] && sfx=byt
+  # suffix in 5.1.
+  local sfx=; ocaml_version_ge 5 1 && sfx=byt
   local dir clib
   # systhreads (configured out) builds as well: without -pthread, emscripten's
   # pthread functions are single-threaded stubs, so Mutex, Condition and

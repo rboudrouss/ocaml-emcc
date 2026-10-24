@@ -76,7 +76,7 @@ let owner_of_dll name =
            if Str_util.find s needle <> None then Some (Filename.chop_suffix f ".changes") else None)
 
 (* Libraries built by the `ocaml` recipe. *)
-let compiler_libs = [ "camlrun"; "unix"; "camlstr"; "unixbyt"; "camlstrbyt"; "camlruntime_eventsbyt"; "threads"; "threadsbyt" ]
+let compiler_libs = [ "camlrun"; "unix"; "camlstr"; "camlruntime_events"; "unixbyt"; "camlstrbyt"; "camlruntime_eventsbyt"; "threads"; "threadsbyt" ]
 
 type status = Found of string | Local of string | Missing of string option (* owner *)
 

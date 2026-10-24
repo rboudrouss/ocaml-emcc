@@ -1,0 +1,24 @@
+emscripten: commit reserved memory with mprotect.
+
+OCaml 5 reserves the minor heap with mmap(PROT_NONE) and commits it with
+mmap(MAP_FIXED), which emscripten does not implement ("Failed to create
+main domain").  Use mprotect instead, as later versions do for Cygwin.
+
+--- a/runtime/platform.c
++++ b/runtime/platform.c
+@@ -230,7 +230,14 @@
+   return (void*)aligned_start;
+ }
+ 
+-#ifndef _WIN32
++#if defined(__EMSCRIPTEN__)
++/* emscripten: mmap(MAP_FIXED) over a reservation is not supported, commit
++   with mprotect (a no-op there: memory is always accessible). */
++static void* map_fixed(void* mem, uintnat size, int prot)
++{
++  return mprotect(mem, size, prot) == 0 ? mem : 0;
++}
++#elif !defined(_WIN32)
+ static void* map_fixed(void* mem, uintnat size, int prot)
+ {
+   if (mmap((void*)mem, size, prot,
