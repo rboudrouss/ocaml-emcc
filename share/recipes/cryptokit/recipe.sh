@@ -6,7 +6,6 @@
 SOURCE=opam:cryptokit
 
 build() {
-  sed -i 's/unsigned char \*buf, unsigned len);/unsigned char *buf, uintnat len);/' src/stubs-md5.c
-  grep -q 'uintnat len' src/stubs-md5.c || die "stubs-md5.c: cannot fix the caml_MD5Update prototype"
+  apply_patches "$BASE_RECIPE_DIR/patches"
   dune_stubs cryptokit
 }
