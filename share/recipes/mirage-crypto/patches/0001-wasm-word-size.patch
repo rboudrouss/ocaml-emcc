@@ -1,0 +1,19 @@
+wasm: pick the 32- or 64-bit C code.
+
+mirage_crypto.h picks the 32- or 64-bit C code (fiat, tables) from the
+architecture macros and stops on unknown ones.  The OCaml side chooses with
+Sys.word_size, which is 32 on wasm32.
+
+--- a/src/native/mirage_crypto.h
++++ b/src/native/mirage_crypto.h
+@@ -54,6 +54,10 @@
+ #define ARCH_64BIT
+ #elif defined (__i386__) || defined (__arm__) || (32 == __riscv_xlen) || (defined (__mips__) && _MIPS_SIM==_ABIO32) || defined (__ppc__) || (1 == _WIN32)
+ #define ARCH_32BIT
++#elif defined (__wasm64__)
++#define ARCH_64BIT
++#elif defined (__wasm32__)
++#define ARCH_32BIT
+ #else
+ #error "unsupported platform"
+ #endif

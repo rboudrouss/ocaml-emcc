@@ -1,0 +1,28 @@
+wasm: a cycle counter.
+
+The cycle counter (an entropy source of the RNG) reads the CPU's; on wasm,
+the high resolution clock (performance.now, in ns).
+
+--- a/src/native/entropy_cpu_stubs.c
++++ b/src/native/entropy_cpu_stubs.c
+@@ -178,6 +178,10 @@
+ }
+ #endif
+ 
++#if defined (__wasm__)
++#include <emscripten/emscripten.h>
++#endif
++
+ CAMLprim value mc_cycle_counter (value __unused(unit)) {
+ #if defined (__i386__) || defined (__x86_64__) || defined (_MSC_VER)
+   return Val_long (__rdtsc ());
+@@ -193,6 +197,9 @@
+   return Val_long (get_count());
+ #elif defined(__loongarch_lp64)
+   return Val_long (get_count());
++#elif defined (__wasm__)
++  /* the high resolution clock (performance.now), in ns */
++  return Val_long ((intnat) (int64_t) (emscripten_get_now () * 1e6));
+ #else
+ #error ("No known cycle-counting instruction.")
+ #endif
