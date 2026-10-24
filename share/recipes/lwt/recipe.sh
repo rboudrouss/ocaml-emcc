@@ -9,8 +9,6 @@
 SOURCE=opam:lwt
 
 build() {
-  perl -0pi -e 's/(\n  int done = 0;\n)/$1\n#if defined(__EMSCRIPTEN__) \&\& !defined(__EMSCRIPTEN_PTHREADS__)\n  async_method = LWT_UNIX_ASYNC_METHOD_NONE; \/* no threads (ocaml-emcc) *\/\n#endif\n/' \
-    src/unix/lwt_unix_stubs.c
-  grep -q __EMSCRIPTEN_PTHREADS__ src/unix/lwt_unix_stubs.c || die "lwt_unix_stubs.c: cannot run the jobs synchronously"
+  apply_patches "$BASE_RECIPE_DIR/patches"
   dune_stubs lwt
 }

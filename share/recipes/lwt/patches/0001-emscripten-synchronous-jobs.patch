@@ -1,0 +1,21 @@
+emscripten without pthreads: run the jobs synchronously.
+
+Blocking calls (Lwt_unix file operations, Lwt_io.with_file...) are "jobs"
+run by a pool of POSIX threads; without pthreads, lwt_unix_start_job raises
+Unix_error (EOPNOTSUPP, "launch_thread").  They run synchronously instead,
+as lwt does when its pool is full.
+
+--- a/src/unix/lwt_unix_stubs.c
++++ b/src/unix/lwt_unix_stubs.c
+@@ -1062,6 +1062,11 @@
+   lwt_unix_job job = Job_val(val_job);
+   lwt_unix_async_method async_method = Int_val(val_async_method);
+   int done = 0;
++
++#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
++  /* ocaml-emcc: no threads, the job runs synchronously */
++  async_method = LWT_UNIX_ASYNC_METHOD_NONE;
++#endif
+ 
+   /* Ensure threading is initialized before using pool_mutex.
+      On Windows, CRITICAL_SECTION must be initialized before use;
