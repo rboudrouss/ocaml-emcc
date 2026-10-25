@@ -20,13 +20,11 @@ ocaml-emcc is a prototype (see [Status](#status)).
 ## Quick start
 
 ```sh
-opam switch create myswitch <version> --keep-build-dir # keep the sources ocaml-emcc rebuilds
-opam install . --deps-only --keep-build-dir            # your project's dependencies
-opam install ocaml-emcc                                # or opam pin add ocaml-emcc git+https://github.com/rboudrouss/ocaml-emcc.git
-source /path/to/emsdk/emsdk_env.sh                     # emcc in PATH
+opam install ocaml-emcc             # or opam pin add ocaml-emcc git+https://github.com/rboudrouss/ocaml-emcc.git
+source /path/to/emsdk/emsdk_env.sh  # emcc in PATH
 
-ocaml-emcc build main.js                               # in your dune project
-node main.js                                           # or load main.js in a web page
+ocaml-emcc build main.js            # in your dune project
+node main.js                        # or load main.js in a web page
 ```
 
 `ocaml-emcc build main.js` finds the dune executable named `main`, builds a
@@ -38,11 +36,12 @@ with emcc, and writes `main.js` and `main.wasm`.
 
 - An opam switch with **OCaml 4.08 or later** (4.x or 5.x).
 - The sources of the compiler and of the packages with C stubs, which
-  ocaml-emcc rebuilds. opam deletes them after a build unless
-  `--keep-build-dir` is passed to `opam switch create` and `opam install`,
-  or `OPAMKEEPBUILDDIR=true` is set (there is no persistent setting).
-  Missing sources are fetched again with `opam source`, which needs network
-  access and a version still in the repository.
+  ocaml-emcc rebuilds. opam deletes them after a build, so ocaml-emcc
+  fetches them again with `opam source` (once, they are cached in the
+  sysroot): this needs network access and a version still in the opam
+  repository. To skip the download, keep them when building the switch,
+  with `--keep-build-dir` on `opam switch create` and `opam install`, or
+  `OPAMKEEPBUILDDIR=true` (there is no persistent setting).
 - The emscripten SDK, with `emcc` in `PATH` (tested with emsdk 6.0.11).
   Standalone `.wasm` outputs need emsdk 4.0 or later (clang 19, for
   `#embed`).
