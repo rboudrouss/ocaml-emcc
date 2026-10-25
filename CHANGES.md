@@ -1,4 +1,4 @@
-## Unreleased
+## 0.3.0
 
 - OCaml 5.0 to 5.3: the `ocaml` recipe builds their runtime. They commit
   the minor heap with `mmap(MAP_FIXED)`, which emscripten lacks ("Failed
@@ -81,9 +81,9 @@
 - Recipes change the sources they build with patches (`patches/` next to
   `recipe.sh`) instead of `sed` and `perl`: ocaml, libffi, liblmdb, lmdb,
   lwt, mirage-crypto, cryptokit, secp256k1-internal. The `ocaml` ones apply
-  to the sources of every version from 4.08 to 5.5 (on 5.0 to 5.3, still
-  untested, the wasm32 build used to stop on the DATA literals). A recipe's checksum covers its patches:
-  the "recipe changed" note shows when they change.
+  to the sources of every version from 4.08 to 5.5 (on 5.0 to 5.3, the
+  wasm32 build used to stop on the DATA literals). A recipe's checksum
+  covers its patches: the "recipe changed" note shows when they change.
 
 ## 0.2.1
 
