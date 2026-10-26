@@ -6,7 +6,7 @@ main domain").  Use mprotect instead, as later versions do for Cygwin.
 
 --- a/runtime/platform.c
 +++ b/runtime/platform.c
-@@ -230,7 +230,14 @@
+@@
    return (void*)aligned_start;
  }
  

@@ -415,13 +415,16 @@ fetch_ocaml_source() {
 
 # ----------------------------------------------------------------- helpers
 
-apply_patches() { # apply_patches <dir>: apply <dir>/*.patch in order
-  local p
+# apply_patches <dir>: apply <dir>/*.patch in order.  Their hunks are placed
+# by their text, not their line numbers (tools/patch.awk): `@@` lines need
+# no numbers, and the context lines only have to tell the place apart.
+apply_patches() {
+  local p out
   [ -d "$1" ] || return 0
   for p in "$1"/*.patch; do
     [ -f "$p" ] || continue
-    log "patch $(basename "$p")"
-    patch -p1 --forward --silent < "$p" || die "patch $p failed"
+    out=$(awk -f "$OCAML_EMCC_SHARE/tools/patch.awk" "$p") || die "patch $p failed"
+    log "patch $(basename "$p")${out:+ ($out)}"
   done
 }
 

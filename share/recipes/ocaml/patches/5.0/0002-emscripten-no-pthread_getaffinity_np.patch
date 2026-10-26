@@ -6,15 +6,9 @@ it by linking.
 
 --- a/runtime/domain.c
 +++ b/runtime/domain.c
-@@ -1787,7 +1787,10 @@
- {
-   intnat n = -1;
- 
+@@
 -#if defined(HAS_GNU_GETAFFINITY_NP) || defined(HAS_BSD_GETAFFINITY_NP)
 +/* emscripten declares pthread_getaffinity_np but does not define it, which
 +   configure, testing it by compilation only, does not notice. */
 +#if (defined(HAS_GNU_GETAFFINITY_NP) || defined(HAS_BSD_GETAFFINITY_NP)) \
 +    && !defined(__EMSCRIPTEN__)
-   cpu_set_t cpuset;
- 
-   CPU_ZERO(&cpuset);

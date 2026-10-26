@@ -14,18 +14,11 @@ No effect on 64-bit targets: the intern.c part is not compiled there.
 
 --- a/runtime/intern.c
 +++ b/runtime/intern.c
-@@ -29,6 +29,8 @@
- #include "caml/fail.h"
- #include "caml/gc.h"
+@@
  #include "caml/intext.h"
 +/* ocaml-emcc: set by startup_byt.c while it reads the DATA section */
 +int caml_emcc_wrap_ints = 0;
- #include "caml/io.h"
- #include "caml/memory.h"
- #include "caml/memprof.h"
-@@ -630,6 +632,16 @@
-         v = Val_long(read32s(s));
-         break;
+@@
        case CODE_INT64:
 +#ifndef ARCH_SIXTYFOUR
 +        /* ocaml-emcc: a literal of the 64-bit bytecode beyond 31 bits keeps
@@ -37,43 +30,21 @@ No effect on 64-bit targets: the intern.c part is not compiled there.
 +          break;
 +        }
 +#endif
- #ifdef ARCH_SIXTYFOUR
-         v = Val_long((intnat) (read64u(s)));
-         break;
 --- a/runtime/startup_byt.c
 +++ b/runtime/startup_byt.c
-@@ -47,6 +47,8 @@
- #include "caml/instrtrace.h"
- #include "caml/interp.h"
+@@
  #include "caml/intext.h"
 +/* ocaml-emcc: see intern.c */
 +extern int caml_emcc_wrap_ints;
- #include "caml/io.h"
- #include "caml/memory.h"
- #include "caml/minor_gc.h"
-@@ -555,12 +557,14 @@
-   caml_stat_free(shared_libs);
-   caml_stat_free(req_prims);
-   /* Load the globals */
+@@
 +  caml_emcc_wrap_ints = 1;
    caml_seek_section(fd, &trail, "DATA");
-   chan = caml_open_descriptor_in(fd);
-   value global_data = caml_input_val(chan);
-   caml_modify_generational_global_root(&caml_global_data, global_data);
-   caml_close_channel(chan); /* this also closes fd */
+@@
    caml_stat_free(trail.section);
 +  caml_emcc_wrap_ints = 0;
-   /* Initialize system libraries */
-   caml_sys_init(exe_name, argv + pos);
-   /* Load debugging info, if b>=2 */
-@@ -644,8 +648,10 @@
-   /* Use the builtin table of primitives */
-   caml_build_primitive_table_builtin();
+@@
    /* Load the globals */
 +  caml_emcc_wrap_ints = 1;
    caml_modify_generational_global_root
      (&caml_global_data, caml_input_value_from_block(data, data_size));
 +  caml_emcc_wrap_ints = 0;
-   /* Initialize system libraries */
-   caml_sys_init(exe_name, argv);
-   /* Load debugging info, if b>=2 */

@@ -19,8 +19,7 @@
 #   5.0    patches/5.0 (commit memory with mprotect, no mmap(MAP_FIXED); no
 #          pthread_getaffinity_np, configure only compiles its test); stub
 #          archives without the "byt" suffix
-#   5.1    patches/5.1, >=5.2 patches/5.2+ (the same, with mprotect as on
-#          Cygwin)
+#   >=5.1  patches/5.1+ (the same, with mprotect as on Cygwin)
 
 SOURCE=ocaml
 
@@ -34,7 +33,7 @@ build() {
 
   apply_patches "$BASE_RECIPE_DIR/patches/all"
   apply_patches "$BASE_RECIPE_DIR/patches/$OCAML_MAJOR.x"
-  if ocaml_version_ge 5 2; then apply_patches "$BASE_RECIPE_DIR/patches/5.2+"; fi
+  if ocaml_version_ge 5 1; then apply_patches "$BASE_RECIPE_DIR/patches/5.1+"; fi
   apply_patches "$BASE_RECIPE_DIR/patches/$OCAML_MAJOR.$OCAML_MINOR"
 
   # OCaml 5 sets up an alternate signal stack per domain when POSIX signals

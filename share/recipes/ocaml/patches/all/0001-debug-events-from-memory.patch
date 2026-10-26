@@ -8,10 +8,7 @@ caml_emcc_debug_events.  NULL otherwise: the runtime behaves as before.
 
 --- a/runtime/backtrace_byt.c
 +++ b/runtime/backtrace_byt.c
-@@ -347,6 +347,12 @@
-   return trace_pos;
- }
- 
+@@
 +/* ocaml-emcc: the debug events of a program started by caml_startup_code,
 +   set by its main.c (a standalone module has no executable file to read
 +   them from).  NULL otherwise. */
@@ -19,11 +16,7 @@ caml_emcc_debug_events.  NULL otherwise: the runtime behaves as before.
 +uintnat caml_emcc_debug_events_size = 0;
 +
  /* Read the debugging info contained in the current bytecode executable. */
- 
- static void read_main_debug_info(struct debug_info *di)
-@@ -360,6 +366,14 @@
- 
-   CAMLassert(di->already_read == 0);
+@@
    di->already_read = 1;
 +
 +  if (caml_emcc_debug_events != NULL) {
@@ -33,6 +26,3 @@ caml_emcc_debug_events.  NULL otherwise: the runtime behaves as before.
 +      process_debug_events(caml_start_code, events, &di->num_events);
 +    CAMLreturn0;
 +  }
- 
-   /* At the moment, bytecode programs built with --output-complete-exe
-      do not contain any debug info.

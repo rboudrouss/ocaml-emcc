@@ -5,12 +5,6 @@ as on the BSDs (emscripten: crypto.getRandomValues).
 
 --- a/rng/unix/mc_getrandom_stubs.c
 +++ b/rng/unix/mc_getrandom_stubs.c
-@@ -40,7 +40,7 @@
-     off += (size_t)r;
-   }
- }
+@@
 -#elif (defined(__FreeBSD__) || defined(__FreeBSD_kernel__) || defined(__DragonFly__)  || defined(__OpenBSD__) || defined(__APPLE__)) || defined(__NetBSD__)
 +#elif (defined(__FreeBSD__) || defined(__FreeBSD_kernel__) || defined(__DragonFly__)  || defined(__OpenBSD__) || defined(__APPLE__)) || defined(__NetBSD__) || defined(__EMSCRIPTEN__)
- // on BSD and macOS, loop (in pieces of 256) getentropy
- #if defined(__APPLE__)
- // on macOS, getentropy is defined in sys/random.h (on BSD in unistd.h)

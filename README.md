@@ -426,7 +426,7 @@ The recipe should install a pkg-config file in `$SYSROOT/lib/pkgconfig`
 - helpers: `stub_cc file.c [flags]` (emcc with the OCaml runtime headers),
   `mklib`, `install_lib`, `install_headers`, `install_pc NAME VERSION LIBS
   [CFLAGS]`, `link_flags LIB "-lfoo"` (flags needed whenever `libLIB.a` is
-  linked), `apply_patches DIR`, `make_var DIR VAR` (value of a Makefile
+  linked), `apply_patches DIR` (see [patches](#patches)), `make_var DIR VAR` (value of a Makefile
   variable), `include_recipe NAME`, `dune_stubs PKG` (build and install the
   stub archives of a dune package from its sources, after changing them),
   `fetch_opam_version PKG VER DEST`, `host_version PCNAME HEADER MACRO...`,
@@ -435,6 +435,35 @@ The recipe should install a pkg-config file in `$SYSROOT/lib/pkgconfig`
   `$OCAML_VERSION`, `$TARGET`, `$RECIPE_DIR`, `$BASE_RECIPE_DIR` (that of
   the recipe read by `include_recipe`, where its patches are), `$NPROC`,
   `$SHARED` (target-independent: host tools, big source archives)
+
+#### Patches
+
+`apply_patches DIR` applies the `DIR/*.patch` files in order. They are
+unified diffs, but their hunks are placed by their text, not their line
+numbers: the old text of a hunk (its context and `-` lines) must occur
+exactly once in the file, and is replaced by the new one. The `@@` lines
+need no numbers, and a hunk only needs the context that tells its place
+apart, so a patch keeps applying to the versions where the code moved or
+changed around it. A hunk that matches no place, or several, stops the
+build. One whose new text is already there is skipped (a source tree
+patched before).
+
+```diff
+Commit the reserved memory with mprotect.   <- description, until `---`
+
+--- a/runtime/unix.c
++++ b/runtime/unix.c
+@@
+ }
+ 
+-#ifndef __CYGWIN__
++#if !defined(__CYGWIN__) && !defined(__EMSCRIPTEN__)
+```
+
+Here `#ifndef __CYGWIN__` occurs twice in `unix.c`, the line before it
+tells them apart. Without line counts in its `@@`, a hunk ends at the next
+`@@` or file, and its trailing empty lines are dropped. A patch made by
+`diff -u` or `git diff` works as is.
 
 ## Configuration
 
@@ -689,7 +718,7 @@ The `ocaml` recipe works around these issues:
 | ≤ 4.11  | otherlibs ignore the configure `CFLAGS` | target flags passed in `CC` |
 | 5.x     | no `sigaltstack` in emscripten ("Failed to allocate signal stack") | `ac_cv_func_sigaction=no` |
 | 5.x     | configure adds `-pthread`: runtime and stubs disagree on `caml_state` ("no domain lock held") | `PTHREAD_CFLAGS=-D_REENTRANT` given to configure, which AX_PTHREAD keeps |
-| 5.x     | minor heap committed with `mmap(MAP_FIXED)` ("Failed to create main domain") | `patches/5.0/`, `patches/5.1/`, `patches/5.2+/`: committed with `mprotect`, as on Cygwin |
+| 5.x     | minor heap committed with `mmap(MAP_FIXED)` ("Failed to create main domain") | `patches/5.0/`, `patches/5.1+/`: committed with `mprotect`, as on Cygwin |
 | 5.0     | configure only compiles its `pthread_getaffinity_np` test: undefined at link time | `patches/5.0/`: not called |
 | 5.0     | otherlibs stub archives without the `byt` suffix (5.1) | `libunix.a`, `libcamlstr.a`... |
 | ≥ 5.5   | `caml_byte_program_mode` and `caml_runtime_standard_library_default` come from the file ocamlc generates | weak definitions (`compat.c`) |
@@ -702,7 +731,7 @@ The `ocaml` recipe works around these issues:
 | all, wasm64 | stubs pass `int` dimensions to `caml_ba_alloc_dims`, read as `intnat` (stb_image: a corrupted heap) | `patches/headers/`: the installed `bigarray.h` converts each one |
 
 Patches go in `share/recipes/ocaml/patches/`: `all/`, `4.x/` or `5.x/`,
-`5.2+/`, `<major>.<minor>/` (applied in this order), and `headers/` for the
+`5.1+/`, `<major>.<minor>/` (applied in this order), and `headers/` for the
 headers installed for the stubs only. Compilers before 4.08 are not
 supported: their build has no autoconf `configure`, and their bytecode,
 marshal and runtime layouts differ from what the link step reads.

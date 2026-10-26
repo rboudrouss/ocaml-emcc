@@ -7,8 +7,7 @@ bundled by the lmdb bindings (the lmdb recipe).
 
 --- a/libraries/liblmdb/mdb.c
 +++ b/libraries/liblmdb/mdb.c
-@@ -5039,6 +5039,11 @@
- int ESECT
+@@
  mdb_env_open(MDB_env *env, const char *path, unsigned int flags, mdb_mode_t mode)
  {
 +#ifdef __EMSCRIPTEN__
@@ -16,6 +15,3 @@ bundled by the lmdb bindings (the lmdb recipe).
 +	 * reach a file mapping (a copy) */
 +	flags |= MDB_NOLOCK | MDB_WRITEMAP;
 +#endif
- 	int rc, excl = -1;
- 	MDB_name fname;
- 

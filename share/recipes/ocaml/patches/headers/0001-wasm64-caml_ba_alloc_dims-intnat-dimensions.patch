@@ -5,10 +5,7 @@ Applied to the headers installed for the stubs, once the runtime is built
 
 --- a/runtime/caml/bigarray.h
 +++ b/runtime/caml/bigarray.h
-@@ -131,4 +131,34 @@
- 
- #endif
- 
+@@
 +/* ocaml-emcc: caml_ba_alloc_dims reads its dimensions with va_arg(ap,
 +   intnat).  Stubs often pass ints (stb_image: x * y * n), which works on
 +   x86-64 (registers) and wasm32 (same size), but on wasm64 reads 8 bytes

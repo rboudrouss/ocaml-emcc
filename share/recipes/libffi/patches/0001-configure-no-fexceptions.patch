@@ -7,12 +7,7 @@ it needs none.
 
 --- a/configure
 +++ b/configure
-@@ -18699,7 +18699,7 @@
- fi
- 
+@@
  if test "x$GCC" = "xyes"; then
 -  CFLAGS="$CFLAGS -fexceptions"
 +  : # ocaml-emcc: no -fexceptions
- fi
- 
- cat > local.exp <<EOF
