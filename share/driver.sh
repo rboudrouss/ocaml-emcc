@@ -49,6 +49,15 @@ set -euo pipefail
 SYSROOT=$OCAML_EMCC_SYSROOT
 PREFIX=$OCAML_EMCC_SWITCH_PREFIX
 HOST_BIN=$PREFIX/bin
+# opam commands (opam source, opam show, opam var) act on this switch, not on
+# opam's current one: opam ignores OPAM_SWITCH_PREFIX, and only takes a
+# switch name, or the directory of a local switch.
+case $PREFIX in
+  */_opam) export OPAMSWITCH=${PREFIX%/_opam} ;;
+  *) if [ -f "$(dirname "$PREFIX")/config" ]; then
+       export OPAMROOT; OPAMROOT=$(dirname "$PREFIX"); OPAMSWITCH=$(basename "$PREFIX"); export OPAMSWITCH
+     fi ;;
+esac
 OCAML_VERSION=$("$HOST_BIN/ocamlc" -vnum)
 OCAML_MAJOR=${OCAML_VERSION%%.*}
 OCAML_MINOR=${OCAML_VERSION#*.}; OCAML_MINOR=${OCAML_MINOR%%.*}
