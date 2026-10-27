@@ -2,7 +2,8 @@
 
 `tests/run.sh [--target wasm32|wasm64]` builds each test with
 `ocaml-emcc build` (or make), runs it with node and compares the output
-with that of the native executable (or with `expected.txt`). CI
+with that of the native executable (or with `expected.txt`), in the
+current switch or in `$SWITCH`. CI
 (`.github/workflows/ci.yml`) runs the suite on OCaml 4.14 and 5.5, on both
 targets.
 
