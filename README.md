@@ -191,10 +191,6 @@ On wasm32, as with a 32-bit OCaml:
   data holding such integers fails to load
   (`input_value: integer too large`).
 - Arithmetic beyond 31 bits wraps silently (`1 lsl 40` is 256).
-- ctypes and the packages using it are rebuilt for wasm32, so that their C
-  structs have the layouts of wasm32 (on wasm64 too, see
-  [ctypes layouts](docs/internals.md#ctypes-layouts)). `build` and `link` warn about those
-  that cannot be (see [Differences from native](#differences-from-native)).
 
 ## Differences from native
 
@@ -203,11 +199,12 @@ Besides 31-bit integers on wasm32:
 - **No threads.** `Thread.create` and `Domain.spawn` fail, while `Mutex`
   and `Condition` work. lwt runs its blocking jobs (`Lwt_unix` file
   operations...) synchronously, and `Lwt_preemptive` fails.
-- **ctypes structs**, for the bindings that could not be rebuilt for the
-  target (packages built without dune): struct fields, `sizeof`, and
-  arrays are those of the 64-bit host. On wasm32, those of `long`, `size_t`
-  or pointers are wrong; on both targets, so are the structs of the libc
-  (`struct stat`). `build`, `link` and `doctor` **warn**.
+- **ctypes structs**: ctypes and the packages using it are rebuilt for the
+  target, so that their structs have its layouts (see
+  [ctypes layouts](docs/internals.md#ctypes-layouts)). Those that cannot be
+  (packages built without dune) keep the layouts of the 64-bit host, wrong
+  on wasm32 for `long`, `size_t` and pointers, and on both targets for the
+  structs of the libc (`struct stat`). `build`, `link` and `doctor` **warn**.
 - **ctypes-foreign** only finds the C symbols named by string literals of
   the program, not names computed at run time. `dlopen` accepts any file
   name, since everything is linked in.
@@ -366,8 +363,8 @@ last `-s` setting): `link-flags:`, `$OCAML_EMCC_LDFLAGS`, `--emcc-flag F`,
 then the arguments after `--`:
 
 ```sh
-ocaml-emcc build app.js -- -sMODULARIZE=1 -sEXPORT_NAME=createApp \
-  --preload-file assets@/assets -sINITIAL_MEMORY=128MB -sENVIRONMENT=web
+ocaml-emcc build app.js -- --preload-file assets@/assets \
+  -sINITIAL_MEMORY=128MB -sENVIRONMENT=web
 ```
 
 C flags for stubs and recipes come from `cflags:` and
@@ -464,9 +461,6 @@ whose struct layouts stay the host's (`link` warns), and extunix before
 0.4.4 on wasm32, whose `splice.c` is wrong on 32-bit targets.
 
 ## Next steps
-
-- ctypes-foreign on wasm64: libffi's calls stop on "Unexpected type 0"
-  (emsdk 6.0.11), see [Status](#status).
 
 - Domains: a `--threads` variant (runtime, stubs and link with `-pthread`)
   could enable `Domain.spawn`. It needs SharedArrayBuffer (COOP/COEP
