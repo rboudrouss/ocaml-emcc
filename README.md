@@ -13,7 +13,7 @@ But the program runs as bytecode, interpreted by an
 compiled by js_of_ocaml or wasm_of_ocaml, which compile OCaml itself. If your
 project is pure OCaml, or its C stubs already have JavaScript
 implementations, use those instead. ocaml-emcc is for code whose C you
-cannot or do not want to rewrite
+cannot or do not want to rewrite.
 
 ocaml-emcc is a prototype (see [Status](#status)).
 
@@ -36,12 +36,9 @@ with emcc, and writes `main.js` and `main.wasm`.
 
 - An opam switch with **OCaml 4.08 or later** (4.x or 5.x).
 - The sources of the compiler and of the packages with C stubs, which
-  ocaml-emcc rebuilds. opam deletes them after a build, so ocaml-emcc
-  fetches them again with `opam source` (once, they are cached in the
-  sysroot): this needs network access and a version still in the opam
-  repository. To skip the download, keep them when building the switch,
-  with `--keep-build-dir` on `opam switch create` and `opam install`, or
-  `OPAMKEEPBUILDDIR=true` (there is no persistent setting).
+  ocaml-emcc rebuilds. They are fetched once with `opam source` (network
+  access, a version still in the opam repository), unless the switch kept
+  them (`--keep-build-dir` or `OPAMKEEPBUILDDIR=true` when installing).
 - The emscripten SDK, with `emcc` in `PATH` (tested with emsdk 6.0.11).
   Standalone `.wasm` outputs need emsdk 4.0 or later (clang 19, for
   `#embed`).
