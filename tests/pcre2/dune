@@ -1,3 +1,0 @@
-(executable
- (name re)
- (libraries pcre2))

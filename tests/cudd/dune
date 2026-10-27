@@ -1,1 +1,9 @@
 (executable (name cu) (modes byte exe) (libraries cudd))
+
+(rule
+ (enabled_if (< %{ocaml_version} 5.0))
+ (action (copy add_part.ml.in add_part.ml)))
+
+(rule
+ (enabled_if (>= %{ocaml_version} 5.0))
+ (action (with-stdout-to add_part.ml (echo "let run () = ()\n"))))
