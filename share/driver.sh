@@ -137,12 +137,14 @@ opam_pkg_version() {
 
 # fetch_opam_source <pkg> <dest>: copy the sources of an installed package.
 # Looks, in order, at the build dir kept by opam (OPAMKEEPBUILDDIR / keep-
-# build-dir), the sources of pinned packages, then falls back to `opam source`.
+# build-dir), the sources of pinned packages, then falls back to `opam
+# source`, which applies the `patches:` of the opam file as opam does in
+# this switch.  Not at the archive opam keeps in .opam-switch/sources:
+# they are not applied there (mlcuddidl's exn_init_val_unit.diff).
 fetch_opam_source() {
   local pkg=$1 dest=$2 ver src=
   ver=$(opam_pkg_version "$pkg") || die "$pkg is not installed in $PREFIX"
   for cand in "$PREFIX/.opam-switch/build/$pkg.$ver" \
-              "$PREFIX/.opam-switch/sources/$pkg.$ver" \
               "$PREFIX/.opam-switch/sources/$pkg"; do
     if [ -d "$cand" ]; then src=$cand; break; fi
   done
