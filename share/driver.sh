@@ -958,12 +958,28 @@ wasm_archive() {
 # native build has lib<libname>.a, the C files behind its members are
 # compiled (glpk: with oldapi/lpx.c, which does not include the OCaml
 # headers); otherwise every C file that includes the OCaml headers.
+# dep_includes <pkg>: -I flags for the lib/<dep> directories of the
+# installed opam dependencies of <pkg>, where packages install the C
+# headers of their stubs (integers: ocaml_integers.h, which ctypes's
+# include).
+dep_includes() {
+  local ver d
+  ver=$(opam_pkg_version "$1") || return 0
+  for d in $(awk '/^depends: \[/ { on = 1; next } on && /^\]/ { exit }
+                  on { while (match($0, /"[^"]+"/)) { print substr($0, RSTART + 1, RLENGTH - 2); $0 = substr($0, RSTART + RLENGTH) } }' \
+               "$PREFIX/.opam-switch/packages/$1.$ver/opam" 2>/dev/null | sort -u); do
+    # (not ocaml: those of the host's runtime)
+    case $d in ocaml|dune) continue ;; esac
+    if [ -d "$PREFIX/lib/$d" ]; then echo "-I$PREFIX/lib/$d"; fi
+  done
+}
+
 run_auto() {
   local pkg=$1 lib=$2 stamp=$SYSROOT/stamps/auto-$1-$2 work=$SYSROOT/build/auto-$1
   if [ "$FORCE" = no ] && [ -f "$stamp" ] && [ "$(cut -d' ' -f1 "$stamp")" = "$(opam_pkg_version "$pkg")" ]; then return 0; fi
   local sysflags syscflags
   sysflags=$(system_deps "$pkg")
-  syscflags=$(system_cflags "$pkg")
+  syscflags="$(system_cflags "$pkg") $(dep_includes "$pkg" | tr '\n' ' ')"
   rm -rf "$work"
   fetch_opam_source "$pkg" "$work"
   cd "$work"
