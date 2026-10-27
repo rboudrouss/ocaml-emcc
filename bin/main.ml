@@ -269,6 +269,7 @@ let cmd_build args =
   let dune = dune_bin ~root and env = dune_env () in
   let target ext = Filename.concat (ctx_dir ()) (exe ^ ext) in
   let layouts = o.auto_deps in
+  if layouts then Layouts.prune ();
   let rec build_bc tries =
     let errs = Buffer.create 256 in
     let try_build ext =

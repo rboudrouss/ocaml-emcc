@@ -123,25 +123,127 @@ let packages bc =
     List.iter (fun (p, _) -> if Hashtbl.mem users p then visit p) deps;
     List.rev !order
 
-(* "<version> <ok|failed|none> ..." (driver.sh run_shadow) *)
+(* "deps=<pkg>.<version>,...": the users of ctypes [pkg] depends on, with
+   their installed versions *)
+let dep_versions pkg =
+  let users, deps = Lazy.force ctypes_users in
+  Option.value (List.assoc_opt pkg deps) ~default:[]
+  |> List.filter (Hashtbl.mem users)
+  |> List.map (fun d -> d ^ "." ^ Option.value (version d) ~default:"")
+  |> String.concat ","
+  |> ( ^ ) "deps="
+
+(* "<version> <ok|failed|none> ... [deps=...]" (driver.sh run_shadow, then
+   [record_deps]): the build of the installed version, against the
+   installed versions of its dependencies *)
 let stamp pkg =
   match read_opt (Env.sysroot_file ("stamps/shadow-" ^ pkg)) with
   | Some s -> (
       match Str_util.words (String.trim s) with
-      | v :: status :: _ when Some v = version pkg -> Some status
+      | v :: status :: rest
+        when Some v = version pkg
+             && (List.mem (dep_versions pkg) rest || dep_versions pkg = "deps=") ->
+          Some status
       | _ -> None)
   | None -> None
+
+let record_deps pkg =
+  let f = Env.sysroot_file ("stamps/shadow-" ^ pkg) in
+  match read_opt f with
+  | Some s ->
+      let oc = open_out f in
+      output_string oc (String.trim s ^ " " ^ dep_versions pkg ^ "\n");
+      close_out oc
+  | None -> ()
+
+(* The builds for the target of packages since upgraded, downgraded or
+   removed, or built against other versions of their dependencies: the
+   toolchain would find them before the switch's (ctypes 0.24's next to
+   ctypes-foreign 0.22: "inconsistent assumptions"). *)
+(* Remove the build of [pkg] for the target: its libraries and stamp. *)
+let drop pkg =
+  let dirs = Env.sysroot_file ("meta/shadow-" ^ pkg ^ ".dirs") in
+  let l = match read_opt dirs with Some s -> Str_util.words (String.map (fun c -> if c = '\n' then ' ' else c) s) | None -> [] in
+  ignore (Env.run "rm" ("-rf" :: dirs :: Env.sysroot_file ("stamps/shadow-" ^ pkg)
+                        :: List.map (fun d -> Env.sysroot_file ("lib/findlib/" ^ d)) l))
+
+let prune () =
+  let stamps = Env.sysroot_file "stamps" in
+  (try Array.to_list (Sys.readdir stamps) with Sys_error _ -> [])
+  |> List.iter (fun f ->
+         if Str_util.starts_with ~prefix:"shadow-" f then
+           let pkg = String.sub f 7 (String.length f - 7) in
+           if stamp pkg = None then drop pkg)
+
+(* [roots] and the users of ctypes they depend on, dependencies first *)
+let with_deps roots =
+  let users, deps = Lazy.force ctypes_users in
+  let seen = Hashtbl.create 16 and order = ref [] in
+  let rec visit p =
+    if not (Hashtbl.mem seen p) then (
+      Hashtbl.add seen p ();
+      List.iter (fun d -> if Hashtbl.mem users d then visit d) (Option.value (List.assoc_opt p deps) ~default:[]);
+      order := p :: !order)
+  in
+  List.iter visit roots;
+  List.rev !order
+
+(* whether [p] depends on [q], directly or not (or is [q]) *)
+let depends_on p q =
+  let _, deps = Lazy.force ctypes_users in
+  let seen = Hashtbl.create 16 in
+  let rec go p =
+    p = q
+    || (not (Hashtbl.mem seen p))
+       && (Hashtbl.add seen p ();
+           List.exists go (Option.value (List.assoc_opt p deps) ~default:[]))
+  in
+  go p
+
+(* Those of [pkgs] (dependencies first) to build for the target: those
+   without a build for this version, and those depending on one of them,
+   whose build was compiled against the previous one (zstd 0.3 takes
+   ctypes 0.20 along). *)
+let to_build pkgs =
+  List.fold_left
+    (fun acc p -> if stamp p = None || List.exists (depends_on p) acc then acc @ [ p ] else acc)
+    [] pkgs
+
+(* Build [l] (dependencies first) for the target, one by one.  A package
+   depending on one that could not be built keeps the host's build, as
+   that one does (ctypes before 0.21, built by make): the bytecode is then
+   compiled against consistent libraries, and `link` warns. *)
+let shadow l =
+  Env.log "ctypes: building %s for %s (C layouts)" (String.concat ", " l) !Env.target;
+  let failed = ref [] in
+  List.iter
+    (fun p ->
+      match List.find_opt (depends_on p) !failed with
+      | Some q ->
+          Env.log "  %s: not built for %s, as %s could not be" p !Env.target q;
+          drop p;
+          (match version p with
+          | Some v ->
+              let oc = open_out (Env.sysroot_file ("stamps/shadow-" ^ p)) in
+              output_string oc (v ^ " failed " ^ dep_versions p ^ "\n");
+              close_out oc
+          | None -> ());
+          failed := p :: !failed
+      | None ->
+          let ok = Env.driver [ "shadow"; "--force"; p ] = 0 in
+          record_deps p;
+          if (not ok) || stamp p = Some "failed" then failed := p :: !failed)
+    l;
+  if !failed <> [] then
+    Env.log "warning: could not build the %s libraries of %s" !Env.target (String.concat ", " (List.rev !failed));
+  !failed = []
 
 (* Build the missing libraries of the packages of [bc] for the target;
    whether there were any. *)
 let ensure bc =
-  match List.filter (fun p -> stamp p = None) (packages bc) with
+  match to_build (packages bc) with
   | [] -> false
-  | l ->
-      Env.log "ctypes: building %s for %s (C layouts)" (String.concat ", " l) !Env.target;
-      if Env.driver ("shadow" :: l) <> 0 then
-        Env.log "warning: could not build the %s libraries of %s" !Env.target (String.concat ", " l);
-      true
+  | l -> ignore (shadow l); true
 
 (* The opam package that installed [rel] (relative to the switch) *)
 let owner rel =
@@ -182,7 +284,7 @@ let fix_inconsistent err =
     else (
       Env.log "%s: compiled against the host's build of a library rebuilt for %s, rebuilding it too"
         (String.concat ", " pkgs) !Env.target;
-      Env.driver ("shadow" :: pkgs) = 0)
+      shadow (to_build (with_deps pkgs)))
 
 type state =
   | Rebuilt  (** the bytecode uses its build for the target *)
