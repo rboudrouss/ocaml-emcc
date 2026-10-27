@@ -405,10 +405,40 @@ wasm64 (libffi's calls stop on "Unexpected type 0" with emsdk 6.0.11). For
 0.3.0 it passed on every OCaml version from 4.08 to 5.5, and its WASI
 part with wasmtime 50. CI runs it on OCaml 4.14 and 5.5.
 
-`tests/versions.sh` also runs the tests against several versions of each
-package. The only failures due to ocaml-emcc's targets are ctypes 0.20.2,
-whose struct layouts stay the host's (`link` warns), and extunix before
-0.4.4 on wasm32, whose `splice.c` is wrong on 32-bit targets.
+### Versions of the dependencies
+
+`tests/versions.sh` installs each version of a package in turn (opam takes
+its dependents along), runs the tests about it, and puts the packages of
+the switch back. On wasm32, OCaml 4.14.2:
+
+| tests | package | versions that pass | others |
+|-------|---------|--------------------|--------|
+| `zarith` | zarith | 1.11, 1.12, 1.13, 1.14 | |
+| `mixed` | digestif | 1.1.2, 1.3.0, 1.4.1 | |
+| `sqlite` | sqlite3 | 5.0.3, 5.2.0, 5.4.2 | |
+| `zstd` | zstd | 0.4 | 0.3: the test uses later functions |
+| `gsl` | gsl | 1.24.3, 1.25.1 | 1.22.0: not installable on OCaml 4.14 |
+| `camlzip` | camlzip | 1.11, 1.13, 1.14 | |
+| `ctypes`, `cstanza` | ctypes, ctypes-foreign | 0.21.1, 0.22.0, 0.23.0, 0.24.0 | 0.20.2, built by make, cannot be rebuilt for wasm32: its layouts are the host's (`link` warns) |
+| `yaml` | yaml | 3.0.1, 3.1.0, 3.2.0 | |
+| `mcrypto` | mirage-crypto | 2.4.1 | 2.0.2, 2.2.0: the test uses later functions |
+| `lwt` | lwt | 5.6.1, 5.9.2, 6.1.2 | |
+| `cryptokit` | cryptokit | 1.21.1 | 1.20: the test uses later functions |
+| `secp` | secp256k1-internal | 0.3.1, 0.4.0 | |
+| `apron` | apron | v0.9.14, v0.9.15 | v0.9.13: does not build natively (GCC 14) |
+| `extunix` | extunix | 0.4.4 | 0.3.2, 0.4.1: `splice.c` returns a `value *` as an `off_t *`, an error on 32-bit targets |
+| `stb` | stb_image | 0.4, 0.5 | |
+| `minisat` | minisat | 0.4, 0.6 | |
+| `cudd` | mlcuddidl | 3.0.8 | 3.0.6, 3.0.7: do not build natively (GCC 14) |
+| `hacl` | hacl-star | 0.7.2 | 0.5.0, 0.6.2: the test uses later modules (`K256`) |
+| `posix` | posix-time2, -socket, -stat | 4.0.2 | 2.2.0, 3.0.0: no posix-stat |
+| `mccs` | mccs | 1.1+13, 1.1+17, 1.1+19 | |
+
+The recipes' patches (placed by their text, see [patches](docs/recipes.md#patches)) were
+also checked to apply, as GNU patch applied the previous ones, to the
+sources of every OCaml version from 4.08 to 5.5 and of lwt 5.4 to 6.1,
+mirage-crypto 0.11 to 2.4, cryptokit 1.16 to 1.21, secp256k1-internal 0.3
+and 0.4, lmdb 1.1, dune 3.12 to 3.24 and mccs 1.1+13 to 1.1+19.
 
 ## Next steps
 
