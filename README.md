@@ -192,7 +192,8 @@ On wasm32, as with a 32-bit OCaml:
   (`input_value: integer too large`).
 - Arithmetic beyond 31 bits wraps silently (`1 lsl 40` is 256).
 - ctypes and the packages using it are rebuilt for wasm32, so that their C
-  structs have the layouts of wasm32. `build` and `link` warn about those
+  structs have the layouts of wasm32 (on wasm64 too, see
+  [ctypes layouts](#ctypes-layouts)). `build` and `link` warn about those
   that cannot be (see [Differences from native](#differences-from-native)).
 
 ## Differences from native
@@ -202,10 +203,11 @@ Besides 31-bit integers on wasm32:
 - **No threads.** `Thread.create` and `Domain.spawn` fail, while `Mutex`
   and `Condition` work. lwt runs its blocking jobs (`Lwt_unix` file
   operations...) synchronously, and `Lwt_preemptive` fails.
-- **ctypes structs on wasm32**, for the bindings that could not be rebuilt
-  for wasm32 (packages built without dune): struct fields, `sizeof`, and
-  arrays of `long`, `size_t` or pointers are those of the 64-bit host.
-  `build`, `link` and `doctor` **warn**. Such bindings only work on wasm64.
+- **ctypes structs**, for the bindings that could not be rebuilt for the
+  target (packages built without dune): struct fields, `sizeof`, and
+  arrays are those of the 64-bit host. On wasm32, those of `long`, `size_t`
+  or pointers are wrong; on both targets, so are the structs of the libc
+  (`struct stat`). `build`, `link` and `doctor` **warn**.
 - **ctypes-foreign** only finds the C symbols named by string literals of
   the program, not names computed at run time. `dlopen` accepts any file
   name, since everything is linked in.
@@ -285,6 +287,8 @@ OCaml packages, built from the sources of the installed package:
 - `zarith`, `camlidl`, `mlgmpidl`
 - `apron`: the C libraries and the stubs of every domain (box, oct, polka,
   t1p, avo) in each numeric variant
+- `mlcuddidl`: the CUDD it bundles, configured for the target, and the
+  stubs camlidl generates from its `.idl` files (with m4 and sed)
 - packages whose sources need a change for wasm:
   - `mirage-crypto` (and `-ec`, `-rng`): wasm32 takes the 32-bit code, the
     cycle counter reads the high-resolution clock, entropy comes from
@@ -522,9 +526,10 @@ prog.bc: prog.ml      # -no-check-prims: our primitives only exist in libstub.a
 	ocamlfind ocamlc -package zarith,unix -linkpkg -no-check-prims prog.ml -o $@
 ```
 
-On wasm32, a bytecode that uses ctypes should be compiled against the
-packages rebuilt for wasm32 (`link` warns otherwise):
-`OCAMLFIND_CONF=<sysroot>/findlib.conf ocamlfind -toolchain wasm32 ocamlc ...`.
+A bytecode that uses ctypes should be compiled against the packages
+rebuilt for the target (`link` warns otherwise):
+`OCAMLFIND_CONF=<sysroot>/findlib.conf ocamlfind -toolchain wasm32 ocamlc ...`
+(or `-toolchain wasm64`).
 
 ## Command reference
 
@@ -639,17 +644,20 @@ argument, for instance. The arity of each call site is read from the
 bytecode (`C_CALLn`), wasm-ld reports the definitions that differ, and an
 adapter is generated for each of them.
 
-### ctypes on wasm32
+### ctypes layouts
 
 ctypes lays C types out (struct fields, `sizeof`, arrays) with sizes it
 generated when it was built (`ctypes_primitives.ml`), and bindings that
-generate their type descriptions (`Cstubs_structs`, yaml) print the
-offsets of the structs from a C program. Built on the 64-bit host, both
-are those of LP64: right for wasm64, wrong for wasm32, where `long`,
-`size_t` and pointers have 4 bytes. A 32-bit host would not do either:
-i386 aligns `double` and `int64_t` to 4 bytes in structs, wasm32 to 8.
+generate their type descriptions (`Cstubs_structs`, yaml, posix-stat)
+print the offsets of the structs from a C program. Built on the 64-bit
+host, both are those of LP64 and of the host's libc: wrong for wasm32,
+where `long`, `size_t` and pointers have 4 bytes, and for the structs of
+the libc on both targets, as emscripten's musl does not lay them out as
+glibc does (`st_size` of `struct stat` on wasm64 is glibc's `st_mtime`).
+A 32-bit host would not do either: i386 aligns `double` and `int64_t` to 4
+bytes in structs, wasm32 to 8.
 
-So on wasm32, `build` and `link` rebuild ctypes and the packages of the
+So `build` and `link` rebuild ctypes and the packages of the
 program that depend on it (found from the program's `CRCS` section and
 the opam dependencies), once per switch and package version
 (`driver.sh shadow`). Their OCaml libraries are installed in
@@ -658,11 +666,12 @@ the opam dependencies), once per switch and package version
 libraries of the switch that ocamlc finds compiled against the host's
 build of one of them (ctypes-foreign imports `Ctypes_primitives`).
 
-Each package is built with dune, in a single context on the wasm32
+Each package is built with dune, in a single context on the target's
 toolchain (without the host context of `dune -x`, whose executables dune
 would run instead): its OCaml generators are bytecode run by the host's
 `ocamlrun` with the host's stub DLLs, its C generators are compiled by
-emcc into node scripts, and dune-configurator gets the answers of wasm32.
+emcc into node scripts, and dune-configurator gets the answers of the
+target.
 
 Packages built without dune cannot be rebuilt this way. When one of them
 does not generate structs or unions (its types are constants), the host's

@@ -1,0 +1,1 @@
+(executable (name cu) (modes byte exe) (libraries cudd))

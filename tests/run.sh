@@ -65,6 +65,7 @@ secp      | sc       |            | secp256k1-internal          | wasm32 wasm64 
 sdl       | sd       |            | tsdl                        | wasm64             |
 binio     | bi       |            |                             | wasm32 wasm64 wasi |
 depgraph  | bin/main |            | depgraph                    | wasm32 wasm64      |
+cudd      | cu       |            | cudd                        | wasm32 wasm64      |
 '
 # wasi (tests/run.sh --wasi): OUT.wasm --wasi, the tests checked that way.
 # ctypes needs libffi's JavaScript functions, no WASI host has them.
