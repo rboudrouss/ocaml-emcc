@@ -297,6 +297,8 @@ OCaml packages, built from the sources of the installed package:
   - `cryptokit`: a runtime function declared with the wrong integer type traps on wasm64
   - `secp256k1-internal`: x86-64 assembly disabled
   - `lmdb`: its bundled LMDB is changed as in `liblmdb`
+  - `mccs`: its solver silences GLPK with `glp_term_out` instead of closing
+    `stdout`, whose output musl keeps and writes later
 
 #### The clang recipe
 

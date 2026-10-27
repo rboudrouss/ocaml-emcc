@@ -1,0 +1,1 @@
+(executable (name mc) (modes byte exe) (libraries mccs))

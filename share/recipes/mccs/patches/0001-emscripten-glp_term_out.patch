@@ -1,0 +1,38 @@
+emscripten: silence GLPK with glp_term_out, not by closing stdout.
+
+musl buffers what is written to a closed stdout, and writes it when fd 1
+is back (dup2): GLPK's messages ("Constructing initial basis...") would
+reach the program's output.
+
+--- a/src/glpk_solver.cpp
++++ b/src/glpk_solver.cpp
+@@
+   if (verbosity == 0) {
++#ifdef __EMSCRIPTEN__
++    glp_term_out(GLP_OFF);
++#else
+     save_stdout = dup(1);
+@@
++#endif
+   }
+   glp_init_iocp(&this->mip_params);
+@@
+     if (verbosity == 0) {
++#ifdef __EMSCRIPTEN__
++      glp_term_out(GLP_ON);
++#else
+       dup2(save_stdout, 1);
+       close(save_stdout);
++#endif
+     }
+     throw;
+@@
+   if (verbosity == 0) {
++#ifdef __EMSCRIPTEN__
++    glp_term_out(GLP_ON);
++#else
+     dup2(save_stdout, 1);
+     close(save_stdout);
++#endif
+   }
+   switch (status) {
