@@ -289,6 +289,9 @@ OCaml packages, built from the sources of the installed package:
   t1p, avo) in each numeric variant
 - `mlcuddidl`: the CUDD it bundles, configured for the target, and the
   stubs camlidl generates from its `.idl` files (with m4 and sed)
+- `hacl-star-raw`: HACL*'s portable C (cmake), and the ctypes stubs its
+  generators print, run on the host; the vectorized and Vale (x86
+  assembly) variants are not built, and trap if called
 - packages whose sources need a change for wasm:
   - `mirage-crypto` (and `-ec`, `-rng`): wasm32 takes the 32-bit code, the
     cycle counter reads the high-resolution clock, entropy comes from

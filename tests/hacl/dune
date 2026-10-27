@@ -1,0 +1,1 @@
+(executable (name hc) (modes byte exe) (libraries hacl-star))
