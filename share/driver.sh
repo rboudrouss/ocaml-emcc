@@ -920,7 +920,12 @@ dune_stubs() {
 dune_native_stubs() {
   local pkg=$1 nat=${DUNE_BDIR:-_build}/default ver a dir m c incs= dep objs only
   shift; only=" $* "
-  if [ ! -d "$nat" ]; then
+  # (dune -x also makes _build/default, with only what the target needs)
+  local missing=no x
+  [ -d "$nat" ] || missing=yes
+  for x in "$@"; do [ -n "$(find "$nat" -name "$x" 2>/dev/null | head -1)" ] || missing=yes; done
+  if [ $# -eq 0 ] && [ -z "$(find "$nat" -name 'lib*.a' 2>/dev/null | head -1)" ]; then missing=yes; fi
+  if [ $missing = yes ]; then
     log "no native build kept for $pkg: building it"
     "$HOST_BIN/dune" build --build-dir "${DUNE_BDIR:-_build}" -p "$pkg" @install >&2 || die "$pkg: native build failed"
   fi
