@@ -302,6 +302,8 @@ OCaml packages, built from the sources of the installed package:
   - `lmdb`: its bundled LMDB is changed as in `liblmdb`
   - `mccs`: its solver silences GLPK with `glp_term_out` instead of closing
     `stdout`, whose output musl keeps and writes later
+  - `ocaml-lua`: the Lua it bundles is unpacked and patched as its opam
+    file does before dune runs
 
 #### The clang recipe
 
