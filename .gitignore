@@ -10,3 +10,4 @@ tests/*/*ocaml-emcc
 *.a
 *.bc
 *.o
+tests/versions-opam*.log
