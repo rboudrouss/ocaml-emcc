@@ -275,12 +275,12 @@ A recipe is built once per switch and target, and is not rebuilt when it changes
 | `libargon2` | argon2 | reference implementation, no threads |
 | `liblmdb` | lmdb | lock-free, see [differences](#differences-from-native) |
 | `sdl2` | tsdl | emscripten's port (`-sUSE_SDL=2`) |
-| `clang` | programs embedding clang's frontend | see [below](#the-clang-recipe) |
+| `clang` | programs embedding clang's frontend | see [docs/recipes.md](docs/recipes.md#the-clang-recipe) |
 
 These recipes take the sources of the opam package
 that vendors the library if the switch has it, else
 the newest upstream release compatible with the host's library (see
-[system recipes](#system-recipes)).
+[system recipes](docs/recipes.md#system-recipes)).
 
 OCaml packages, built from the sources of the installed package:
 
@@ -304,34 +304,6 @@ OCaml packages, built from the sources of the installed package:
     `stdout`, whose output musl keeps and writes later
   - `ocaml-lua`: the Lua it bundles is unpacked and patched as its opam
     file does before dune runs
-
-#### The clang recipe
-
-`clang` builds the libraries of clang's frontend (`libclang*.a`,
-`libclang-cpp.a` and the `libLLVM*.a` they need), their headers and
-clang's resource headers. It is built for a `-lclang-cpp`,
-`-lclangFrontend`... or `-lLLVM-<major>` in a `.cma`. It needs cmake and a
-host C++ compiler (and uses ninja if available). LLVM 9.0.1, the only
-version tested, takes about 15 minutes on 4 cores.
-
-The LLVM version is `LLVM_VERSION` if a project recipe sets it (`9.0.1`, or
-a major such as `9`), else the major version of the host's `llvm-config`,
-else the newest release.
-
-It also installs two tools in `$SYSROOT/bin`, which come first in `PATH`
-during builds:
-
-- `llvm-config`, describing this installation (`--cxxflags`, `--ldflags`,
-  `--libs`...), so that configure scripts and dune rules compile against
-  the wasm LLVM.
-- `clang`, which compiles nothing but answers `-print-resource-dir` with
-  where the program will find the resource headers at run time:
-  `CLANG_RESOURCE_DIR` (default `/usr/lib/clang/<ver>`), overridden by
-  `$OCAML_EMCC_CLANG_RESOURCE_DIR`. Preload the headers there.
-
-Values that a package's `./configure` wrote into its sources stay the
-host's, such as the output of the host's `clang -print-resource-dir`:
-preload the resource headers at that path instead.
 
 ### Project recipes
 
@@ -372,109 +344,9 @@ include_recipe apron
 pre_build() { sed -i '...' apron/ap_manager.c; }
 ```
 
-#### System recipes
-
-A recipe with `SOURCE=system:NAME` describes a C library and lets
-ocaml-emcc pick its sources:
-
-1. the sources of the opam package that vendors the library, if the switch
-   has it, since that is what the native build uses
-2. otherwise the newest upstream release compatible with the host's
-   library, whose version comes from pkg-config or from the version macros
-   of its header. Compatible means the same major version by default
-   (`COMPAT=major`, or `minor`, `exact`, `latest`). Without a host
-   library, the newest release.
-
-opam fetches the release and checks its checksum when its repository knows
-that version. Otherwise the tarball is downloaded from `RELEASES` without a
-checksum, and the log says so. To pin a version, write a project recipe of
-the same name.
-
-```sh
-# share/recipes/mpfr/recipe.sh
-SOURCE=system:mpfr
-DEPENDS=gmp
-HEADER=mpfr.h                     # host version: pkg-config mpfr, else these macros
-VERSION_MACROS="MPFR_VERSION_MAJOR MPFR_VERSION_MINOR MPFR_VERSION_PATCHLEVEL"
-RELEASES=https://ftp.gnu.org/gnu/mpfr/   # directory listing mpfr-X.Y.Z.tar.*
-
-build() {
-  emconfigure ./configure --host=none --enable-static --disable-shared \
-    --with-gmp="$SYSROOT" --prefix="$SYSROOT" CFLAGS="$CFLAGS"
-  emmake make -C src && make -C src install
-}
-```
-
-Optional variables are `PKGCONFIG=`, `TARBALL=` (prefix of the tarball
-names), `COMPAT=`, `OPAM_SOURCES=` (the vendoring opam package) and `LINK=`
-(default `-lNAME`, followed by the flags of `DEPENDS`). For releases that
-are not in a directory listing, define a `releases` function printing
-`<version> <tarball url>` lines, oldest first, the `git_tag_releases` function helps:
-
-```sh
-releases() { git_tag_releases https://github.com/libffi/libffi.git v \
-  'https://github.com/libffi/libffi/releases/download/v{v}/libffi-{v}.tar.gz'; }
-```
-
-The recipe should install a pkg-config file in `$SYSROOT/lib/pkgconfig`
-(`install_pc`) when the library's build system does not: during builds,
-`pkg-config` (and dune-configurator) only sees the sysroot's libraries.
-
-#### Recipe reference
-
-- `SOURCE=`: `git:URL` (+ `REF=`), `url:TARBALL` (+ `SHA256=`), `dir:PATH`
-  (relative to the recipe), `opam:PACKAGE` (sources of an installed
-  package), `system:NAME` (see above), `fetch` (the recipe defines a
-  `fetch DEST` function), `none`
-- `DEPENDS=`: other recipes to build first
-- `LINK=`: makes the recipe a C library, built for the `-lX` it provides
-  (implied by `SOURCE=system:`)
-- `LIB_PATTERNS=`: globs of more library names the recipe is built for
-  (`clang`: `'clang* LLVM*'`)
-- `USE_CFLAGS=`: C flags its users' stubs need besides the sysroot's
-  include directory (`sdl2`: `-I$SYSROOT/include/SDL2`)
-- functions: `build` (required), `pre_build`, `releases`, `fetch`
-- helpers: `stub_cc file.c [flags]` (emcc with the OCaml runtime headers),
-  `mklib`, `install_lib`, `install_headers`, `install_pc NAME VERSION LIBS
-  [CFLAGS]`, `link_flags LIB "-lfoo"` (flags needed whenever `libLIB.a` is
-  linked), `apply_patches DIR` (see [patches](#patches)), `make_var DIR VAR` (value of a Makefile
-  variable), `include_recipe NAME`, `dune_stubs PKG` (build and install the
-  stub archives of a dune package from its sources, after changing them),
-  `fetch_opam_version PKG VER DEST`, `host_version PCNAME HEADER MACRO...`,
-  `git_tag_releases REPO TAG_PREFIX URL_TEMPLATE`, `log`, `die`
-- variables: `$EMCC`, `$CFLAGS`, `$LDFLAGS`, `$SYSROOT`, `$OCAML_INC`,
-  `$OCAML_VERSION`, `$TARGET`, `$RECIPE_DIR`, `$BASE_RECIPE_DIR` (that of
-  the recipe read by `include_recipe`, where its patches are), `$NPROC`,
-  `$SHARED` (target-independent: host tools, big source archives)
-
-#### Patches
-
-`apply_patches DIR` applies the `DIR/*.patch` files in order. They are
-unified diffs, but their hunks are placed by their text, not their line
-numbers: the old text of a hunk (its context and `-` lines) must occur
-exactly once in the file, and is replaced by the new one. The `@@` lines
-need no numbers, and a hunk only needs the context that tells its place
-apart, so a patch keeps applying to the versions where the code moved or
-changed around it. A hunk that matches no place, or several, stops the
-build. One whose new text is already there is skipped (a source tree
-patched before).
-
-```diff
-Commit the reserved memory with mprotect.   <- description, until `---`
-
---- a/runtime/unix.c
-+++ b/runtime/unix.c
-@@
- }
- 
--#ifndef __CYGWIN__
-+#if !defined(__CYGWIN__) && !defined(__EMSCRIPTEN__)
-```
-
-Here `#ifndef __CYGWIN__` occurs twice in `unix.c`, the line before it
-tells them apart. Without line counts in its `@@`, a hunk ends at the next
-`@@` or file, and its trailing empty lines are dropped. A patch made by
-`diff -u` or `git diff` works as is.
+Recipes for system C libraries, the variables, functions and helpers
+recipes can use, and how their patches are applied are described in
+[docs/recipes.md](docs/recipes.md).
 
 ## Configuration
 
@@ -664,7 +536,7 @@ the switch back. On wasm32, OCaml 4.14.2:
 | `posix` | posix-time2, -socket, -stat | 4.0.2 | 2.2.0, 3.0.0: no posix-stat |
 | `mccs` | mccs | 1.1+13, 1.1+17, 1.1+19 | |
 
-The recipes' patches (placed by their text, see [patches](#patches)) were
+The recipes' patches (placed by their text, see [patches](docs/recipes.md#patches)) were
 also checked to apply, as GNU patch applied the previous ones, to the
 sources of every OCaml version from 4.08 to 5.5 and of lwt 5.4 to 6.1,
 mirage-crypto 0.11 to 2.4, cryptokit 1.16 to 1.21, secp256k1-internal 0.3
