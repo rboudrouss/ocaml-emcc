@@ -824,10 +824,14 @@ run_shadow() {
     if ( cd "$work" && PATH=$SYSROOT/bin/path:$PATH OCAMLFIND_CONF=$SYSROOT/findlib.conf \
            CAML_LD_LIBRARY_PATH=$PREFIX/lib/stublibs:$PREFIX/lib/ocaml/stublibs \
            "$dune" build --build-dir _build.ocaml-emcc --workspace .ocaml-emcc-workspace \
-             -p "$pkg" @install > ocaml-emcc-build.log 2>&1 ); then
+             -p "$pkg" @install > ocaml-emcc-build.log 2>&1 ) \
+       && find "$work/_build.ocaml-emcc/install/default.$TARGET/lib" -name '*.cmi' | grep -q .; then
       mkdir -p "$SYSROOT/lib/findlib"
       for d in "$work/_build.ocaml-emcc/install/default.$TARGET/lib"/*; do
+        # (dune -p of a package that another build system builds installs
+        # an empty library: hacl-star-raw, built by make next to hacl-star)
         [ -d "$d" ] && [ "$(basename "$d")" != stublibs ] || continue
+        find "$d" -name '*.cmi' | grep -q . || continue
         rm -rf "$SYSROOT/lib/findlib/$(basename "$d")"
         cp -rL "$d" "$SYSROOT/lib/findlib/"
         basename "$d" >> "$dirs"
