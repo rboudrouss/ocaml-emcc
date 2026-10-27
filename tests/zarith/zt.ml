@@ -11,6 +11,7 @@ let () =
   Printf.printf "of_int64 max: %s\n" (Z.to_string (Z.of_int64 Int64.max_int));
   let q = Q.make (Z.of_int 355) (Z.of_int 113) in
   Printf.printf "Q 355/113 = %s ~ %.10f\n" (Q.to_string q) (Q.to_float q);
-  Printf.printf "hash(100!) = %d, compare = %d\n" (Z.hash f100) (Z.compare f100 (Z.succ f100));
+  (* before zarith 1.14, the hash depends on the word size: its low 30 bits do not *)
+  Printf.printf "hash(100!) = %d, compare = %d\n" (Z.hash f100 land 0x3fff_ffff) (Z.compare f100 (Z.succ f100));
   let s = Marshal.to_string f100 [] in
   Printf.printf "marshal roundtrip: %b\n" (Z.equal f100 (Marshal.from_string s 0))
