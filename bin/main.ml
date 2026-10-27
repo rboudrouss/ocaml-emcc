@@ -268,7 +268,7 @@ let cmd_build args =
      plain bytecode there (the ocamlc wrapper turns byte_complete into it). *)
   let dune = dune_bin ~root and env = dune_env () in
   let target ext = Filename.concat (ctx_dir ()) (exe ^ ext) in
-  let layouts = !Env.target = "wasm32" && o.auto_deps in
+  let layouts = o.auto_deps in
   let rec build_bc tries =
     let errs = Buffer.create 256 in
     let try_build ext =
@@ -284,12 +284,12 @@ let cmd_build args =
         | Some t -> t
         | None ->
             (* a library of the switch compiled against the host's build of
-               a package rebuilt for wasm32 (ctypes-foreign and ctypes) *)
+               a package rebuilt for the target (ctypes-foreign and ctypes) *)
             if tries > 0 && layouts && Layouts.fix_inconsistent (Buffer.contents errs) then build_bc (tries - 1)
             else Env.fail "dune could not build %s" exe)
   in
   let built = build_bc 5 in
-  (* wasm32: ctypes and its users built for wasm32 (C layouts), then the
+  (* ctypes and its users built for the target (C layouts), then the
      bytecode again, against them *)
   let built =
     if not layouts then built
@@ -297,7 +297,7 @@ let cmd_build args =
       let bc = Bytecode.parse (Filename.concat root built) in
       let installed = Layouts.ensure bc in
       if installed || List.exists (fun (_, s) -> s = Layouts.Stale) (Layouts.states bc) then (
-        Env.log "rebuilding %s against the wasm32 builds of its ctypes libraries" exe;
+        Env.log "rebuilding %s against the %s builds of its ctypes libraries" exe !Env.target;
         build_bc 5)
       else built
   in
@@ -338,16 +338,16 @@ let cmd_doctor args =
         \  -> on wasm32 they are wrapped to 31 bits when the program starts, as\n\
         \     32-bit OCaml would; fine on wasm64.\n"
         (List.length l) (Link.show_literals l));
-  if !Env.target = "wasm32" then
-    List.iter
-      (fun (p, s) ->
-        Printf.printf "C layouts of %s: %s\n" p
-          (match s with
-          | Layouts.Rebuilt -> "wasm32 (ok)"
-          | Layouts.Stale -> "WARNING: the 64-bit host's; rebuild the bytecode against its wasm32 build"
-          | Layouts.Not_rebuilt -> "WARNING: the 64-bit host's, no wasm32 build (`link` tries one; or --target wasm64)"
-          | Layouts.Unneeded -> "none computed when it was built (ok)"))
-      (Layouts.states bc);
+  List.iter
+    (fun (p, s) ->
+      let t = !Env.target in
+      Printf.printf "C layouts of %s: %s\n" p
+        (match s with
+        | Layouts.Rebuilt -> t ^ " (ok)"
+        | Layouts.Stale -> "WARNING: the 64-bit host's; rebuild the bytecode against its " ^ t ^ " build"
+        | Layouts.Not_rebuilt -> "WARNING: the 64-bit host's, no " ^ t ^ " build (`link` tries one)"
+        | Layouts.Unneeded -> "none computed when it was built (ok)"))
+    (Layouts.states bc);
   let found = ref [ Env.sysroot_file "lib/libcamlrun.a" ] in
   List.iter
     (fun d ->

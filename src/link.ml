@@ -406,10 +406,9 @@ let run o =
     Env.fail "--wasi: WASI (preview1) is 32-bit, no WASI host runs a wasm64 module.  Use --target wasm32.";
   if standalone && o.mode <> Embed then
     Env.fail "--preload and --node-fs need the JavaScript glue: not available for a standalone %s" o.output;
-  if !Env.target = "wasm32" then (
-    warn_literals bc;
-    if o.auto_deps then ignore (Layouts.ensure bc);
-    Layouts.warn ~bc_path:o.bc bc);
+  if !Env.target = "wasm32" then warn_literals bc;
+  if o.auto_deps then ignore (Layouts.ensure bc);
+  Layouts.warn ~bc_path:o.bc bc;
   let out_dir = Filename.dirname o.output in
   let base = Filename.remove_extension (Filename.basename o.output) in
   let work = Filename.concat out_dir ("." ^ base ^ ".ocaml-emcc") in

@@ -1,13 +1,14 @@
-(* wasm32: the C layouts computed when OCaml libraries were built.
+(* The C layouts computed when OCaml libraries were built.
 
    ctypes lays C types out (struct fields, sizeof, arrays) with the sizes it
    generated when it was built (ctypes_primitives.ml), and bindings that
-   generate their type descriptions (yaml) print the offsets of the structs
-   from a C program: those of the 64-bit host, which wasm64 shares but not
-   wasm32.  On wasm32, the packages of the program depending on ctypes are
-   rebuilt for the target (driver.sh shadow) into the sysroot's findlib
-   directory, which the toolchain searches before the switch, and the
-   bytecode is built against them. *)
+   generate their type descriptions (yaml, posix-stat) print the offsets of
+   the structs from a C program: those of the 64-bit host.  wasm32 has other
+   sizes (long, size_t, pointers), and both targets another libc than the
+   host (musl's struct stat is not glibc's).  So the packages of the program
+   depending on ctypes are rebuilt for the target (driver.sh shadow) into
+   the sysroot's findlib directory, which the toolchain searches before the
+   switch, and the bytecode is built against them. *)
 
 let opam_file rel = Filename.concat (Lazy.force Env.switch_prefix) (Filename.concat ".opam-switch" rel)
 
@@ -131,14 +132,15 @@ let stamp pkg =
       | _ -> None)
   | None -> None
 
-(* Build the missing wasm32 libraries of the packages of [bc]; whether
-   there were any. *)
+(* Build the missing libraries of the packages of [bc] for the target;
+   whether there were any. *)
 let ensure bc =
   match List.filter (fun p -> stamp p = None) (packages bc) with
   | [] -> false
   | l ->
-      Env.log "ctypes on wasm32: building %s for wasm32 (C layouts)" (String.concat ", " l);
-      if Env.driver ("shadow" :: l) <> 0 then Env.log "warning: could not build the wasm32 libraries of %s" (String.concat ", " l);
+      Env.log "ctypes: building %s for %s (C layouts)" (String.concat ", " l) !Env.target;
+      if Env.driver ("shadow" :: l) <> 0 then
+        Env.log "warning: could not build the %s libraries of %s" !Env.target (String.concat ", " l);
       true
 
 (* The opam package that installed [rel] (relative to the switch) *)
@@ -155,7 +157,7 @@ let owner rel =
 
 (* ocamlc's "Files A and B make inconsistent assumptions over interface X"
    (A and B quoted since 5.2): a library of the switch compiled against the
-   host's build of a package rebuilt for wasm32 (ctypes-foreign imports
+   host's build of a package rebuilt for the target (ctypes-foreign imports
    Ctypes_primitives).  Its package is rebuilt as well; whether there was
    one to rebuild. *)
 let fix_inconsistent err =
@@ -178,12 +180,12 @@ let fix_inconsistent err =
     in
     if pkgs = [] then false
     else (
-      Env.log "%s: compiled against the host's build of a library rebuilt for wasm32, rebuilding it too"
-        (String.concat ", " pkgs);
+      Env.log "%s: compiled against the host's build of a library rebuilt for %s, rebuilding it too"
+        (String.concat ", " pkgs) !Env.target;
       Env.driver ("shadow" :: pkgs) = 0)
 
 type state =
-  | Rebuilt  (** the bytecode uses its wasm32 build *)
+  | Rebuilt  (** the bytecode uses its build for the target *)
   | Stale  (** it has one, the bytecode was built against the host's *)
   | Not_rebuilt  (** it lays C types out when built, and has none *)
   | Unneeded  (** it does not lay C types out *)
@@ -210,7 +212,7 @@ let cmi_crcs files =
 let state crcs pkg =
   match stamp pkg with
   | Some "ok" ->
-      (* the wasm32 interfaces, at the same place under lib/findlib *)
+      (* the interfaces built for the target, at the same place under lib/findlib *)
       let files =
         List.filter_map
           (fun (m, f) ->
@@ -230,7 +232,9 @@ let states bc =
 
 let with_state st l = List.filter_map (fun (p, s) -> if s = st then Some p else None) l
 
-let wrong = "struct fields, sizeof, arrays of long, size_t or pointers are those of the 64-bit host"
+let wrong () =
+  if !Env.target = "wasm32" then "struct fields, sizeof, arrays of long, size_t or pointers are those of the 64-bit host"
+  else "the fields of the libc's structs are those of the host's libc"
 
 let warn ~bc_path bc =
   let l = states bc in
@@ -238,15 +242,16 @@ let warn ~bc_path bc =
   | [] -> ()
   | ps ->
       Env.log
-        "warning: %s was built against the host's %s, whose C layouts (%s) are wrong on wasm32.\n\
-        \  Their wasm32 builds are in %s: build the bytecode with them\n\
-        \  (ocaml-emcc build or ocaml-emcc dune, or ocamlfind -toolchain wasm32 with\n\
-        \  OCAMLFIND_CONF=%s), or use --target wasm64."
-        bc_path (String.concat ", " ps) wrong (Env.sysroot_file "lib/findlib") (Env.sysroot_file "findlib.conf"));
+        "warning: %s was built against the host's %s, whose C layouts (%s) are wrong on %s.\n\
+        \  Their %s builds are in %s: build the bytecode with them\n\
+        \  (ocaml-emcc build or ocaml-emcc dune, or ocamlfind -toolchain %s with\n\
+        \  OCAMLFIND_CONF=%s)."
+        bc_path (String.concat ", " ps) (wrong ()) !Env.target !Env.target (Env.sysroot_file "lib/findlib")
+        !Env.target (Env.sysroot_file "findlib.conf"));
   match with_state Not_rebuilt l with
   | [] -> ()
   | ps ->
       Env.log
-        "warning: %s could not be built for wasm32: the C layouts of their ctypes bindings\n\
-        \  (%s) are wrong on wasm32.  Use --target wasm64."
-        (String.concat ", " ps) wrong
+        "warning: %s could not be built for %s: the C layouts of their ctypes bindings\n\
+        \  (%s) are wrong there."
+        (String.concat ", " ps) !Env.target (wrong ())
