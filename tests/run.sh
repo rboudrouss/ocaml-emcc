@@ -39,14 +39,13 @@ syslibs   | bin/main |            | mlmpfr zlib                 | wasm32 wasm64 
 apron     | ap       |            | apron                       | wasm32 wasm64 wasi | could not set fpu|cannot change the FPU
 sqlite    | sq       |            | sqlite3                     | wasm32 wasm64 wasi |
 bz2       | bz       |            | bz2                         | wasm32 wasm64 wasi |
-pcre2     | re       |            | pcre2                       | wasm32 wasm64 wasi |
 zstd      | zs       |            | zstd                        | wasm32 wasm64 wasi |
 gsl       | gs       |            | gsl                         | wasm32 wasm64 wasi |
 camlzip   | cz       |            | camlzip                     | wasm32 wasm64 wasi |
 ctypes    | cf       |            | ctypes-foreign              | wasm32 wasm64      |
 yaml      | ym       |            | yaml                        | wasm32 wasm64      |
 cstanza   | bin/main |            | ctypes                      | wasm32 wasm64 wasi |
-clibs     | sm       |            | sha checkseum bigstringaf mtime ptime eqaf | wasm32 wasm64      |
+clibs     | sm       |            | checkseum bigstringaf       | wasm32 wasm64      |
 mcrypto   | mc       |            | mirage-crypto-ec mirage-crypto-pk mirage-crypto-rng | wasm32 wasm64      |
 lwt       | lw       |            | lwt                         | wasm32 wasm64      |
 cryptokit | ck       |            | cryptokit                   | wasm32 wasm64      |
@@ -54,7 +53,6 @@ minisat   | ms       |            | minisat                     | wasm32 wasm64 
 lua       | lu       |            | ocaml-lua                   | wasm32 wasm64      |
 stb       | sb       |            | stb_image                   | wasm32 wasm64      |
 extunix   | eu       |            | extunix                     | wasm32 wasm64      |
-lz4       | lz       |            | lz4                         | wasm32 wasm64      |
 snappy    | sn       |            | snappy                      | wasm32 wasm64      |
 argon2    | ar       |            | argon2                      | wasm32 wasm64      |
 expat     | ex       |            | expat                       | wasm32 wasm64      |

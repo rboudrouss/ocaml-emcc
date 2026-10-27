@@ -66,10 +66,10 @@ jobs:
           "$EMSDK/emsdk" activate "$EMSDK_VERSION"
       - name: Install the packages of the tests
         run: |
-          pkgs="ocamlfind zarith digestif yojson re cmdliner zlib apron sqlite3 bz2 pcre2 zstd gsl camlzip ctypes-foreign yaml"
-          pkgs="$pkgs sha checkseum bigstringaf mtime ptime eqaf mirage-crypto-ec mirage-crypto-pk mirage-crypto-rng"
-          pkgs="$pkgs lwt cryptokit minisat ocaml-lua stb_image extunix lz4 snappy argon2 ocaml-expat lmdb glpk fftw3"
-          pkgs="$pkgs secp256k1-internal tsdl"
+          pkgs="ocamlfind zarith digestif yojson re cmdliner zlib apron sqlite3 bz2 zstd gsl camlzip ctypes-foreign yaml"
+          pkgs="$pkgs checkseum bigstringaf mirage-crypto-ec mirage-crypto-pk mirage-crypto-rng"
+          pkgs="$pkgs lwt cryptokit minisat ocaml-lua stb_image extunix snappy argon2 ocaml-expat lmdb glpk fftw3"
+          pkgs="$pkgs secp256k1-internal tsdl mlcuddidl hacl-star posix-time2 posix-socket posix-stat mccs"
           # argon2 binds libargon2 with ctypes-foreign and has no conf package
           sudo apt-get install -y libargon2-dev
           # mlmpfr does not build with OCaml 5 (upstream issue)

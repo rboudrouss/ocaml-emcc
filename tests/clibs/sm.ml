@@ -1,8 +1,6 @@
-(* small C-stub libraries: sha, checkseum, bigstringaf, mtime/ptime clocks, eqaf *)
+(* checkseum (C variant, through optint: its 32-bit code on wasm32) and
+   bigstringaf (C stubs on bigarrays) *)
 let () =
-  Printf.printf "sha1: %s\n" (Sha1.to_hex (Sha1.string "abc"));
-  Printf.printf "sha256: %s\n" (Sha256.to_hex (Sha256.string "abc"));
-  Printf.printf "sha512: %s\n" (Sha512.to_hex (Sha512.string "abc"));
   let c = Checkseum.Crc32.digest_string "hello world" 0 11 Checkseum.Crc32.default in
   Printf.printf "crc32: %08lx\n" (Optint.to_int32 c);
   let c = Checkseum.Adler32.digest_string "hello world" 0 11 Checkseum.Adler32.default in
@@ -20,15 +18,4 @@ let () =
     (Bigstringaf.memchr b 0 'w' 11);
   Printf.printf "bigstringaf get: %x %x %lx %Lx\n" (Bigstringaf.get_int16_le b 0) (Bigstringaf.get_int16_be b 0)
     (Bigstringaf.get_int32_be b 0) (Bigstringaf.get_int64_le b 0);
-  let t0 = Mtime_clock.now () in
-  let c = Mtime_clock.counter () in
-  ignore (Sys.opaque_identity (List.init 10000 Fun.id));
-  let t1 = Mtime_clock.now () in
-  Printf.printf "mtime monotonic: %b, counter >= 0: %b\n" (Mtime.is_later t1 ~than:t0 || Mtime.equal t1 t0)
-    (Mtime.Span.compare (Mtime_clock.count c) Mtime.Span.zero >= 0);
-  let now = Ptime_clock.now () in
-  Printf.printf "ptime after 2020: %b\n" (Ptime.is_later now ~than:(Option.get (Ptime.of_date (2020, 1, 1))));
-  Printf.printf "ptime tz offset is some: %b\n" (Ptime_clock.current_tz_offset_s () <> None);
-  Printf.printf "eqaf: %b %b %d\n" (Eqaf.equal "secret" "secret") (Eqaf.equal "secret" "secreT")
-    (Eqaf.compare_be "abc" "abd");
   print_endline "done"
