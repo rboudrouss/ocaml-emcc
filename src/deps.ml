@@ -94,16 +94,23 @@ let resolve ~extra_dirs ?bc_path bc name =
 
 (* The opam package of a stub library of the sysroot built from it (by
    dune or blindly: meta/<name>.provider, and a stamp starting with the
-   version) for another version than the installed one (opam upgrade). *)
+   version; by a recipe: its stamp ends with opam=<package>) for another
+   version than the installed one (opam upgrade). *)
 let stale name f =
   let read rel = let p = Env.sysroot_file rel in if Sys.file_exists p then Some (String.trim (Bytecode.read_file p)) else None in
+  let older pkg stamp =
+    match Option.map Str_util.words (read ("stamps/" ^ stamp)), Layouts.version pkg with
+    | Some (v :: _), Some installed when v <> installed -> Some pkg
+    | _ -> None
+  in
   if f <> lib_file (Env.sysroot_file "lib") name then None
   else
     match owner_of_dll name, read ("meta/" ^ name ^ ".provider") with
-    | Some pkg, Some p when p = "dune-" ^ pkg || p = "auto-" ^ pkg -> (
-        let stamp = if p = "dune-" ^ pkg then p else p ^ "-" ^ name in
-        match Option.map Str_util.words (read ("stamps/" ^ stamp)), Layouts.version pkg with
-        | Some (v :: _), Some installed when v <> installed -> Some pkg
+    | Some pkg, Some p when p = "dune-" ^ pkg || p = "auto-" ^ pkg ->
+        older pkg (if p = "dune-" ^ pkg then p else p ^ "-" ^ name)
+    | Some pkg, Some recipe -> (
+        match Option.map Str_util.words (read ("stamps/" ^ recipe)) with
+        | Some words when List.mem ("opam=" ^ pkg) words -> older pkg recipe
         | _ -> None)
     | _ -> None
 

@@ -694,16 +694,23 @@ run_recipe() {
   local name=$1 dir stamp work sum
   stamp=$SYSROOT/stamps/$name
   sum=$(recipe_sum "$name")
-  if [ -f "$stamp" ] && [ "$FORCE" = no ]; then
+  local opkg
+  # the sources of an opam package (opam=PKG in the stamp): built again for
+  # another version of it (opam upgrade)
+  opkg=$( [ -f "$stamp" ] && tr ' ' '\n' < "$stamp" | sed -n 's/^opam=//p')
+  if [ -f "$stamp" ] && [ "$FORCE" = no ] \
+     && { [ -z "$opkg" ] || [ "$(cut -d' ' -f1 "$stamp")" = "$(opam_pkg_version "$opkg")" ]; }; then
     # not rebuilt automatically: some recipes take a while (clang)
     # (stamps written before this check have no checksum)
     grep -q "recipe=" "$stamp" && ! grep -q "recipe=$sum" "$stamp" \
       && log "note: the $name recipe changed since it was built; rebuild with: ocaml-emcc install --force $name"
     return 0
   fi
+  [ -n "$opkg" ] && [ -f "$stamp" ] && [ "$FORCE" = no ] \
+    && log "$name was built from $opkg $(cut -d' ' -f1 "$stamp"), building it again for $(opam_pkg_version "$opkg")"
   dir=$(find_recipe "$name") || die "no recipe named '$name'"
   (
-    SOURCE=none DEPENDS= SHA256= REF=
+    SOURCE=none DEPENDS= SHA256= REF= SOURCE_OPAM=
     HEADER= VERSION_MACROS= PKGCONFIG= RELEASES= TARBALL= COMPAT= OPAM_SOURCES= LINK= LIB_PATTERNS= USE_CFLAGS=
     RECIPE_DIR=$dir RECIPE_NAME=$name BASE_RECIPE_DIR=$dir
     unset -f pre_build fetch releases
@@ -714,7 +721,7 @@ run_recipe() {
     work=$SYSROOT/build/$name
     rm -rf "$work"
     case "$SOURCE" in
-      opam:*) fetch_opam_source "${SOURCE#opam:}" "$work" ;;
+      opam:*) fetch_opam_source "${SOURCE#opam:}" "$work"; SOURCE_OPAM=${SOURCE#opam:} ;;
       url:*)  fetch_url "${SOURCE#url:}" "$work" ;;
       git:*)
         local repo=${SOURCE#git:}
@@ -737,7 +744,7 @@ run_recipe() {
     build
     # a C library: system:, or another source with LINK (sdl2)
     case "$SOURCE" in system:*) record_use_flags "$name" ;; *) [ -z "$LINK" ] || record_use_flags "$name" ;; esac
-    echo "${SOURCE_VERSION:-} emcc-$EMCC_VERSION recipe=$sum" > "$stamp"
+    echo "${SOURCE_VERSION:-} emcc-$EMCC_VERSION recipe=$sum${SOURCE_OPAM:+ opam=$SOURCE_OPAM}" > "$stamp"
     log "installed $name"
   )
 }
