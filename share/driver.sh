@@ -1031,8 +1031,10 @@ run_obtain() {
   local pkg=$1 lib=$2 r
   # A recipe named after the package, unless it is a system library recipe:
   # the opam package `zlib` is the OCaml binding, not the C library.
+  # (built again if it was: the library is missing, or built for another
+  # version of the package)
   if r=$(find_recipe "$pkg") && ! grep -q '^SOURCE=system:' "$r/recipe.sh"; then
-    run_recipe "$pkg"; return
+    FORCE=yes run_recipe "$pkg"; return
   fi
   local probe=$SYSROOT/build/probe-$pkg
   rm -rf "$probe"; fetch_opam_source "$pkg" "$probe"
