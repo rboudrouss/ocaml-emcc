@@ -82,8 +82,8 @@ The most common options are `--target wasm64` (see
 [wasm32 or wasm64](#wasm32-or-wasm64)), `-O -Oz` (default `-O2`),
 `--stack-size 16MB` (default 8MB), `-l LIB` and `-L DIR` for extra
 libraries, and `--emcc-flag F`. Arguments after `--` are passed to emcc.
-All options are in the [command reference](#command-reference), and
-project defaults go in [`ocaml-emcc.conf`](#configuration).
+`ocaml-emcc help` lists all the commands and options, and project
+defaults go in [`ocaml-emcc.conf`](#configuration).
 
 ## Running
 
@@ -406,34 +406,6 @@ A bytecode that uses ctypes should be compiled against the packages
 rebuilt for the target (`link` warns otherwise):
 `OCAMLFIND_CONF=<sysroot>/findlib.conf ocamlfind -toolchain wasm32 ocamlc ...`
 (or `-toolchain wasm64`).
-
-## Command reference
-
-```
-ocaml-emcc [--target wasm32|wasm64] [--switch SW] [--sysroot DIR] [--recipes DIR] [-v] COMMAND
-  build OUT.js [--exe DIR/NAME] [LINK OPTIONS] [-- EMCC-ARGS]
-                                   everything (dune projects)
-  setup [--force]                  wasm runtime of the switch's compiler
-  install [--force] RECIPE...      build recipes
-  dune [DUNE-BUILD-ARGS]           dune build -x <target> + static stub archives
-  deps PROG.bc [-L DIR]            build the missing stub libraries
-  doctor PROG.bc [-L DIR]          stub libraries, primitives, 31-bit literals
-  link PROG.bc -o OUT.js [LINK OPTIONS] [-- EMCC-ARGS]
-  env [--cflags|--sysroot]         configuration / flags for C stubs
-
-link options (build and link):
-  -L DIR          search lib<x>.a in DIR
-  -l LIB          extra library or archive to link (repeatable)
-  --preload       bytecode in a separate .data file instead of embedded
-  --node-fs       node only: real file system access, .bc next to OUT.js
-  -O FLAG         emcc optimisation flag (default -O2)
-  --stack-size S  C stack size (default 8MB)
-  --no-deps       do not build missing stub libraries automatically
-  --wasi          OUT.wasm for a WASI host (wasm32)
-  --emcc-flag F   extra emcc link flag (repeatable)
-```
-
-`ocaml-emcc help` prints the same with more detail.
 
 ## How it works
 
