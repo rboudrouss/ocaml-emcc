@@ -82,31 +82,10 @@ The recipe should install a pkg-config file in `$SYSROOT/lib/pkgconfig`
 ## Patches
 
 `apply_patches DIR` applies the `DIR/*.patch` files in order. They are
-unified diffs, but their hunks are placed by their text, not their line
-numbers: the old text of a hunk (its context and `-` lines) must occur
-exactly once in the file, and is replaced by the new one. The `@@` lines
-need no numbers, and a hunk only needs the context that tells its place
-apart, so a patch keeps applying to the versions where the code moved or
-changed around it. A hunk that matches no place, or several, stops the
-build. One whose new text is already there is skipped (a source tree
-patched before).
-
-```diff
-Commit the reserved memory with mprotect.   <- description, until `---`
-
---- a/runtime/unix.c
-+++ b/runtime/unix.c
-@@
- }
- 
--#ifndef __CYGWIN__
-+#if !defined(__CYGWIN__) && !defined(__EMSCRIPTEN__)
-```
-
-Here `#ifndef __CYGWIN__` occurs twice in `unix.c`, the line before it
-tells them apart. Without line counts in its `@@`, a hunk ends at the next
-`@@` or file, and its trailing empty lines are dropped. A patch made by
-`diff -u` or `git diff` works as is.
+unified diffs (`diff -u`, `git diff`), but each hunk is placed by its
+text, not by line numbers: its old text must occur exactly once in the
+file, and its `@@` lines need no numbers. A hunk that matches no place, or
+several, stops the build, and one already applied is skipped.
 
 ## The clang recipe
 
