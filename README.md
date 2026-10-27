@@ -436,5 +436,6 @@ share/recipes/        ocaml (runtime + patches), C libraries (gmp, mpfr, zlib...
                       OCaml packages needing changes (zarith, apron, lwt...)
 share/tools/          ocamlc / ocamlmklib wrappers for dune -x, dune's (ctypes) patch
 share/runtime/        main.c, compat.c, dlsym.c, wasi.c, node_stdio.js
-tests/run.sh          test suite (SWITCH=<opam switch> tests/run.sh --target wasm64, --wasi)
+tests/                test suite (tests/README.md)
+docs/                 internals, recipe authoring
 ```
