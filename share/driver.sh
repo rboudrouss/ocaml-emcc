@@ -697,7 +697,7 @@ run_recipe() {
   local opkg
   # the sources of an opam package (opam=PKG in the stamp): built again for
   # another version of it (opam upgrade)
-  opkg=$( [ -f "$stamp" ] && tr ' ' '\n' < "$stamp" | sed -n 's/^opam=//p')
+  opkg=$( [ ! -f "$stamp" ] || tr ' ' '\n' < "$stamp" | sed -n 's/^opam=//p')
   if [ -f "$stamp" ] && [ "$FORCE" = no ] \
      && { [ -z "$opkg" ] || [ "$(cut -d' ' -f1 "$stamp")" = "$(opam_pkg_version "$opkg")" ]; }; then
     # not rebuilt automatically: some recipes take a while (clang)
