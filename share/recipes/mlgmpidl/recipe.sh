@@ -13,7 +13,9 @@ build() {
     [ -f "${m}_caml.c" ] && continue
     log "regenerating ${m}_caml.c with camlidl"
     [ -f Makefile.config ] || cp Makefile.config.model Makefile.config
-    make "${m}_caml.c" CAMLIDL="$HOST_BIN/camlidl" PERL=perl CAML_PREFIX="$OCAML_INC" >&2
+    # MPFR_VERSION_MAJOR: written by configure, the model does not have it
+    make "${m}_caml.c" CAMLIDL="$HOST_BIN/camlidl" PERL=perl CAML_PREFIX="$OCAML_INC" \
+      MPFR_VERSION_MAJOR="$(sed -n 's/^#define MPFR_VERSION_MAJOR *//p' "$SYSROOT/include/mpfr.h")" >&2
   done
   for m in gmp $mods; do
     stub_cc "${m}_caml.c" -I.
