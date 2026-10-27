@@ -37,12 +37,11 @@ function load(f,    line, r) {
   close(f)
 }
 
-function save(f,    i, tmp) {
-  tmp = f ".patch-tmp"
-  printf "" > tmp
-  for (i = 1; i <= nbuf; i++) print buf[i] > tmp
-  close(tmp)
-  if (system("mv -f '" tmp "' '" f "'") != 0) fail("cannot write " f)
+# in place, which keeps the file's mode (an executable configure)
+function save(f,    i) {
+  printf "" > f
+  for (i = 1; i <= nbuf; i++) print buf[i] > f
+  if (close(f) != 0) fail("cannot write " f)
 }
 
 # apply hunk number h of the current file to buf
