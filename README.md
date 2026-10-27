@@ -275,27 +275,13 @@ the newest upstream release compatible with the host's library (see
 [system recipes](docs/recipes.md#system-recipes)).
 
 OCaml packages, built from the sources of the installed package:
-
-- `zarith`, `camlidl`, `mlgmpidl`
-- `apron`: the C libraries and the stubs of every domain (box, oct, polka,
-  t1p, avo) in each numeric variant
-- `mlcuddidl`: the CUDD it bundles, configured for the target, and the
-  stubs camlidl generates from its `.idl` files (with m4 and sed)
-- `hacl-star-raw`: HACL*'s portable C (cmake), and the ctypes stubs its
-  generators print, run on the host; the vectorized and Vale (x86
-  assembly) variants are not built, and trap if called
-- packages whose sources need a change for wasm:
-  - `mirage-crypto` (and `-ec`, `-rng`): wasm32 takes the 32-bit code, the
-    cycle counter reads the high-resolution clock, entropy comes from
-    `getentropy`, no AES-NI
-  - `lwt`: blocking calls run synchronously instead of in a thread pool
-  - `cryptokit`: a runtime function declared with the wrong integer type traps on wasm64
-  - `secp256k1-internal`: x86-64 assembly disabled
-  - `lmdb`: its bundled LMDB is changed as in `liblmdb`
-  - `mccs`: its solver silences GLPK with `glp_term_out` instead of closing
-    `stdout`, whose output musl keeps and writes later
-  - `ocaml-lua`: the Lua it bundles is unpacked and patched as its opam
-    file does before dune runs
+`zarith`, `camlidl`, `mlgmpidl`, `apron` (every domain and numeric
+variant), `mlcuddidl` (its bundled CUDD, and the stubs camlidl generates),
+`hacl-star-raw` (portable C only: the vectorized and Vale variants trap if
+called), and packages whose sources need a change for wasm, described in
+their `share/recipes/<name>/` directory: `mirage-crypto` (and `-ec`,
+`-rng`), `lwt`, `cryptokit`, `secp256k1-internal`, `lmdb`, `mccs` and
+`ocaml-lua`.
 
 ### Project recipes
 
