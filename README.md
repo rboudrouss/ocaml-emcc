@@ -214,11 +214,6 @@ Besides 31-bit integers on wasm32:
 - **Floating-point rounding modes** do not exist in wasm: only
   round-to-nearest is available, so code that switches to directed rounding
   (`fesetround`) loses that guarantee.
-- **LMDB** opens databases lock-free and writes through the map
-  (`MDB_NOLOCK | MDB_WRITEMAP`): emscripten has no process-shared mutexes,
-  and its file mappings are copies.
-- **SDL2** under node only initializes the timer and events subsystems.
-  Video and audio need a web page.
 
 ## C dependencies
 
@@ -270,8 +265,8 @@ A recipe is built once per switch and target, and is not rebuilt when it changes
 | `fftw3` | fftw3 | double and single precision, no threads or SIMD |
 | `glpk` | glpk | |
 | `libargon2` | argon2 | reference implementation, no threads |
-| `liblmdb` | lmdb | lock-free, see [differences](#differences-from-native) |
-| `sdl2` | tsdl | emscripten's port (`-sUSE_SDL=2`) |
+| `liblmdb` | lmdb | `MDB_NOLOCK \| MDB_WRITEMAP`: emscripten has no process-shared mutexes, and its file mappings are copies |
+| `sdl2` | tsdl | emscripten's port (`-sUSE_SDL=2`); under node, only the timer and events subsystems |
 | `clang` | programs embedding clang's frontend | see [docs/recipes.md](docs/recipes.md#the-clang-recipe) |
 
 These recipes take the sources of the opam package
