@@ -1,4 +1,4 @@
-## Unreleased
+## 0.4.0
 
 - Recipe patches are placed by their text, not their line numbers
   (`share/tools/patch.awk`): the old text of each hunk must occur once in
