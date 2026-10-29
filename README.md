@@ -239,7 +239,7 @@ The program runs 3 to 7 times faster than interpreted (node, wasm32: fib
 workload 2.0 s -> 0.66 s, nbody 4.7 s -> 1.6 s). It is experimental, and
 for now limited to:
 
-- wasm32 and OCaml 5 switches;
+- wasm32, and OCaml 4.14 or 5 switches;
 - programs without effect handlers (`Effect.perform` stops the program);
 - deep recursion: the compiled functions run on the wasm engine's stack,
   about 1 MB in V8, where the interpreter has its own stack. Under node, the
