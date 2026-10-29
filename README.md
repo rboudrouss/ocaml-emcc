@@ -241,10 +241,13 @@ for now limited to:
 
 - wasm32 and OCaml 5 switches;
 - programs without effect handlers (`Effect.perform` stops the program);
-- non-tail recursion up to some tens of thousands of calls: the wasm
-  engine's stack (about 1 MB in V8) holds the compiled functions, where the
-  interpreter has its own stack. Exhausting it is a JavaScript
-  `RangeError`, not `Stack_overflow`;
+- deep recursion: the compiled functions run on the wasm engine's stack,
+  about 1 MB in V8, where the interpreter has its own stack. Under node, the
+  program runs in a worker thread with a stack of `$OCAML_EMCC_STACK_MB`
+  megabytes (default 1024: millions of nested calls; `0` keeps it on the
+  main thread), and running out of it is reported as an uncaught
+  `Stack_overflow`, which the program cannot catch. In browsers, the limit
+  is some tens of thousands of nested non-tail calls;
 - no backtraces, and `Marshal.Closures` is not supported.
 
 `tests/run.sh --compiled` runs the tests in this mode. On OCaml 5.4, the

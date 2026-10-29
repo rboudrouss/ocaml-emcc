@@ -62,6 +62,14 @@ adapters are generated the same way, and the C code is compiled again with
 needed at run time: nothing is embedded, preloaded or written next to the
 output.
 
+The compiled functions run on the stack of the wasm engine, about 1 MB on
+node's main thread. Under node, `share/runtime/node_stack.js` (a
+`--pre-js`) starts the same script in a worker thread with a large stack
+(`resourceLimits.stackSizeMb`), stops the main thread from instantiating
+the module (`Module.instantiateWasm`), and passes the worker's exit code
+on. A `RangeError` for the call stack is reported as an uncaught
+`Stack_overflow`.
+
 ## Standalone modules
 
 A `.wasm` without JavaScript has no file system to embed the bytecode in.
