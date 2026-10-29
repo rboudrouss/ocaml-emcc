@@ -216,7 +216,7 @@ type compiled = {
 (* PROG.bc -> PROG.c (c_of_ocaml), compiled with the runtime support of the
    generated code (camlc.h, camlc_runtime.c, which defines main), to be
    linked with libcamlrun.a: its interpreter is not used. *)
-let compile_to_c ~emcc ~flags ~work ~base ~bc bc_path =
+let compile_to_c ~emcc ~flags ~tail_calls ~work ~base ~bc bc_path =
   let cooc = c_of_ocaml () in
   let support = Filename.concat work "c_of_ocaml" in
   if not (Sys.file_exists support) then Unix.mkdir support 0o755;
@@ -227,8 +227,13 @@ let compile_to_c ~emcc ~flags ~work ~base ~bc bc_path =
   let debug = if Bytecode.section bc "DBUG" <> None then [ "--debug-info" ] else [] in
   let word_size = if !Env.target = "wasm64" then [ "--word-size"; "64" ] else [] in
   Env.run_exn cooc (debug @ word_size @ [ bc_path; "-o"; c_src ]);
-  (* -mtail-call: tail calls of the generated code (return_call) *)
-  let flags = flags @ [ "-mtail-call"; "-I" ^ support; "-Wno-incompatible-function-pointer-types" ] in
+  (* -mtail-call: tail calls of the generated code (return_call), unless
+     asyncify, which does not support them, is used: tail calls are then
+     plain calls (deep tail recursion may run out of stack) *)
+  let flags =
+    flags @ (if tail_calls then [ "-mtail-call" ] else [])
+    @ [ "-I" ^ support; "-Wno-incompatible-function-pointer-types" ]
+  in
   let support_obj = Filename.concat work "camlc_runtime.o" in
   Env.run_exn emcc (flags @ [ "-c"; Filename.concat support "camlc_runtime.c"; "-o"; support_obj ]);
   let cc extra = Env.run_exn emcc (flags @ extra @ [ "-c"; c_src; "-o"; c_obj ]) in
@@ -563,7 +568,12 @@ let run o =
   (* Same flags as the runtime (target, longjmp flavour...). *)
   let cflags = Env.manifest_flags "cflags" and ldflags = Env.manifest_flags "ldflags" in
   let compiled =
-    if o.compiled then Some (compile_to_c ~emcc ~flags:(cflags @ [ o.opt ] @ inc) ~work ~base ~bc o.bc) else None
+    if o.compiled then (
+      let asyncify f = Str_util.starts_with ~prefix:"-sASYNCIFY" f && f <> "-sASYNCIFY=0" in
+      let tail_calls = not (List.exists asyncify (ldflags @ flags_of_libs @ o.emcc_flags)) in
+      if not tail_calls then Env.log "asyncify: compiled without wasm tail calls";
+      Some (compile_to_c ~emcc ~flags:(cflags @ [ o.opt ] @ inc) ~tail_calls ~work ~base ~bc o.bc))
+    else None
   in
   if compiled = None then
     Env.run_exn emcc (cflags @ [ o.opt; main_def ] @ inc @ [ "-c"; Filename.concat (Env.share ()) "runtime/main.c"; "-o"; main_o ]);
