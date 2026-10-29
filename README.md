@@ -13,7 +13,8 @@ But the program runs as bytecode, interpreted by an
 compiled by js_of_ocaml or wasm_of_ocaml, which compile OCaml itself. If your
 project is pure OCaml, or its C stubs already have JavaScript
 implementations, use those instead. ocaml-emcc is for code whose C you
-cannot or do not want to rewrite.
+cannot or do not want to rewrite. The experimental
+[compiled mode](#compiled-mode) compiles the bytecode to C instead.
 
 ocaml-emcc is a prototype (see [Status](#status)).
 
@@ -220,6 +221,36 @@ On wasm32, as with a 32-bit OCaml:
   data holding such integers fails to load
   (`input_value: integer too large`).
 - Arithmetic beyond 31 bits wraps silently (`1 lsl 40` is 256).
+
+## Compiled mode
+
+`--compiled` (`build` and `link`) compiles the bytecode to C with
+[c_of_ocaml](https://github.com/rboudrouss/C_of_ocaml) (a fork of
+js_of_ocaml, branch `c-backend`) instead of interpreting it. The C code is
+compiled by emcc and linked with the same runtime, without its
+interpreter, and the same stub libraries:
+
+```sh
+ocaml-emcc build main.js --compiled    # c_of_ocaml in PATH, or $OCAML_EMCC_C_OF_OCAML
+```
+
+The program runs 3 to 7 times faster than interpreted (node, wasm32: fib
+2.7 s -> 0.37 s, binary trees 1.4 s -> 0.36 s, a Map and exceptions
+workload 2.0 s -> 0.66 s, nbody 4.7 s -> 1.6 s). It is experimental, and
+for now limited to:
+
+- wasm32 and OCaml 5 switches;
+- programs without effect handlers (`Effect.perform` stops the program);
+- non-tail recursion up to some tens of thousands of calls: the wasm
+  engine's stack (about 1 MB in V8) holds the compiled functions, where the
+  interpreter has its own stack. Exhausting it is a JavaScript
+  `RangeError`, not `Stack_overflow`;
+- no backtraces, and `Marshal.Closures` is not supported.
+
+`tests/run.sh --compiled` runs the tests in this mode. On OCaml 5.4, the
+ones tried so far pass (`stubs`, `zarith`, `mixed`, `gitrecipe`, `nodune`,
+`clibs`, `mcrypto`, `lwt`, `binio`), except
+`ocaml5` (effects).
 
 ## Differences from native
 

@@ -42,6 +42,26 @@
    `DLLS`/`DLPT` sections, is embedded in the module and `argv[0]` points
    to it (the `ocamlc -custom` trick), so `Sys.argv` looks native.
 
+## Compiled mode
+
+With `--compiled`, `link` (step 5 above) runs `c_of_ocaml PROG.bc -o
+PROG.c` instead of embedding the bytecode, and `c_of_ocaml --runtime-files
+DIR` for the runtime support of the generated code (`camlc.h`,
+`camlc_runtime.c`). Both are compiled with the flags of the runtime and
+linked with `libcamlrun.a` and the stub libraries, in place of `main.c`
+and the primitive table:
+`camlc_runtime.c` defines `main` and the functions of the runtime's
+`callback.c`, so that the interpreter is never linked.
+
+The generated C calls the primitives directly, declared with the arity of
+their call sites, and contains a function, never called, calling each of
+them, so that wasm-ld reports the stubs whose definition differs, as with
+the primitive table (see [signature adapters](#signature-adapters)). Their
+adapters are generated the same way, and the C code is compiled again with
+`-DNAME=ocaml_emcc_adapt__NAME` for each of them. The bytecode is not
+needed at run time: nothing is embedded, preloaded or written next to the
+output.
+
 ## Standalone modules
 
 A `.wasm` without JavaScript has no file system to embed the bytecode in.
