@@ -250,6 +250,9 @@ for now limited to:
   main thread), and running out of it is reported as an uncaught
   `Stack_overflow`, which the program cannot catch. In browsers, the limit
   is some tens of thousands of nested non-tail calls;
+- with asyncify (`-sASYNCIFY`, as raylib needs), which does not support
+  the tail calls of WebAssembly, tail calls are plain calls: long loops
+  of mutually recursive functions may run out of stack;
 - `Marshal.Closures` is not supported. Backtraces (bytecode compiled with
   `-g`, as by dune) give the locations of the raises and of the calls an
   exception goes through, but `Printexc.get_callstack` is empty.
@@ -257,7 +260,8 @@ for now limited to:
 `tests/run.sh --compiled` runs the tests in this mode. On OCaml 5.4, the
 ones tried so far pass on wasm32 and wasm64 (`stubs`, `zarith`, `mixed`,
 `ocaml5`, `gitrecipe`, `nodune`, `clibs`, `mcrypto`, `lwt`, `binio`, and
-`hello` on wasm64).
+`hello` on wasm64), and on OCaml 4.14 (wasm32) the 31 whose libraries are
+installed, `raylib` and `ctypes` included.
 
 ## Differences from native
 
