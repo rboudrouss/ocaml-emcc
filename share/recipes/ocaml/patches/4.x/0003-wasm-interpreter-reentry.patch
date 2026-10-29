@@ -1,0 +1,105 @@
+wasm: an interpreter that wasm engines optimize.
+
+wasm engines (V8, SpiderMonkey) compile a function with their optimizing
+tier for its next calls only, without on-stack replacement.  The
+interpreter, called once for the whole program, stays in the baseline tier
+(Liftoff), about twice as slow.  So it returns to its caller every
+Reentry_polls polls (function entries and loop iterations, at
+CHECK_SIGNALS), saving its registers as for an event, and is called again:
+its optimized code is used once ready.
+
+And a function that calls setjmp has each of its calls wrapped in an
+exception handler, which slows the whole interpreter down.  The setjmp
+moves to the caller, which calls the interpreter again to handle the
+exception raised by C.  The interpreter's raise_buf (and saved_pc before
+4.10) name the caller's, and its sigsetjmp tells whether it was called for
+an exception.
+
+--- a/runtime/interp.c
++++ b/runtime/interp.c
+@@
+ /* The interpreter itself */
++
++/* ocaml-emcc: see patches/4.x/0003-wasm-interpreter-reentry.patch */
++#define Reentry_polls (1 << 20)
++
++enum reentry_mode { Reentry_run, Reentry_resume, Reentry_raise };
++
++struct reentry {
++  enum reentry_mode mode;
++  struct longjmp_buffer * raise_buf;
++  volatile code_t saved_pc;
++  struct longjmp_buffer * initial_external_raise;
++  intnat initial_sp_offset;
++  struct caml__roots_block * initial_local_roots;
++};
++
++/* read by the interpreter when it starts */
++static struct reentry * caml_emcc_reentry;
++
++static __attribute__((noinline)) value interpreter(code_t prog,
++                                                   asize_t prog_size);
++
++value caml_interprete(code_t prog, asize_t prog_size)
++{
++  struct longjmp_buffer buf;
++  struct reentry reentry;
++  value res;
++
++  /* outside the loop, or V8 keeps calling the baseline code */
++  if (prog == NULL) return interpreter(prog, prog_size);
++  reentry.mode = Reentry_run;
++  reentry.raise_buf = &buf;
++  reentry.saved_pc = NULL;
++  if (sigsetjmp(buf.buf, 0)) reentry.mode = Reentry_raise;
++  do {
++    caml_emcc_reentry = &reentry;
++    res = interpreter(prog, prog_size);
++  } while (reentry.mode == Reentry_resume);
++  return res;
++}
++
++#define caml_interprete interpreter
+@@
+-  struct longjmp_buffer raise_buf;
+@@
++  struct reentry * reentry = caml_emcc_reentry;
++  int reentry_polls = Reentry_polls;
++#define raise_buf (*reentry->raise_buf)
++#define saved_pc (reentry->saved_pc)
++#undef sigsetjmp
++#define sigsetjmp(buf, savemask) (reentry->mode == Reentry_raise)
++
+   if (prog == NULL) {           /* Interpreter is initializing */
+@@
+   jumptbl_base = Jumptbl_base;
+ #endif
++  if (reentry->mode != Reentry_run) {
++    initial_local_roots = reentry->initial_local_roots;
++    initial_sp_offset = reentry->initial_sp_offset;
++    initial_external_raise = reentry->initial_external_raise;
++    goto reentry_restored;
++  }
+@@
+   caml_callback_depth++;
++  reentry->initial_local_roots = initial_local_roots;
++  reentry->initial_sp_offset = initial_sp_offset;
++  reentry->initial_external_raise = initial_external_raise;
+@@
++ reentry_restored:
+   if (sigsetjmp(raise_buf.buf, 0)) {
++    reentry->mode = Reentry_run;
+@@
+   accu = Val_int(0);
++  if (reentry->mode == Reentry_resume) {
++    reentry->mode = Reentry_run;
++    Restore_after_event;
++  }
+
+@@
+     Instruct(CHECK_SIGNALS):    /* accu not preserved */
++      if (--reentry_polls == 0) {
++        Setup_for_event;
++        reentry->mode = Reentry_resume;
++        return Val_unit;
++      }

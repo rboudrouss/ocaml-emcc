@@ -1,5 +1,12 @@
 ## Unreleased
 
+- The bytecode interpreter runs about twice as fast in node and browsers
+  (fib: 52.7 s before, 23.9 s after, 15.8 s for the native `ocamlrun`).
+  V8 optimizes a wasm function for its next calls only, so the
+  interpreter, called once for the whole program, stayed in the baseline
+  tier: it now returns to its caller every 2^20 polls and is called again.
+  Its `setjmp`, which wrapped each of its calls in an exception handler,
+  moved to that caller (`patches/4.x/` and `patches/5.x/`).
 - New recipe: `raylib` (raylib-ocaml). The raylib it vendors is built for
   raylib's `PLATFORM_WEB` (emscripten's GLFW, WebGL), linked with
   `-sASYNCIFY` so that the usual `while not (window_should_close ())`

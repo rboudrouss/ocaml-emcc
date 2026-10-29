@@ -172,6 +172,7 @@ The `ocaml` recipe works around these issues:
 | ≥ 5.5   | `caml_byte_program_mode` and `caml_runtime_standard_library_default` come from the file ocamlc generates | weak definitions (`compat.c`) |
 | ≥ 5.5   | DLL names in the bytecode start with `-` or `:` | prefix removed (`Bytecode.dlls`) |
 | all     | `sigsuspend` missing (unix) | weak stub |
+| all     | wasm engines optimize a function for its next calls only (no on-stack replacement): the interpreter, called once, stays in V8's baseline tier (Liftoff), twice as slow; and its `setjmp` wraps each of its calls in an exception handler | `patches/4.x/`, `patches/5.x/`: it returns to its caller every 2^20 polls (`CHECK_SIGNALS`) and is called again; the caller does the `setjmp` and calls it again to handle an exception raised by C |
 | all, wasm32 | `ARCH_ALIGN_DOUBLE` (`alignof(double)` is 8): float accesses through memcpy, some stubs refuse to build (gsl) | undefined, as for i686: wasm loads doubles at any alignment |
 | all     | systhreads disabled (no pthreads) | `libthreads.a` built anyway, single-threaded |
 | all, wasm32 | integer literals beyond 31 bits in the DATA section ("input_value: integer too large") | `patches/4.x/`, `patches/5.x/`: wrapped to 31 bits while DATA is read (`intern.c`, `startup_byt.c`), from the file (`caml_main`) or from memory (`caml_startup_code`, standalone modules) |
