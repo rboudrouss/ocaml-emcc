@@ -221,7 +221,7 @@ host_version() {
 # "<version> <file>" for each release in the listing, oldest first.
 release_files() {
   local prefix=$1 url=$2
-  curl -fsL "$url" 2>/dev/null \
+  curl -fsL --retry 3 "$url" 2>/dev/null \
     | grep -oE "$prefix-[0-9][0-9.]*[0-9]\.tar\.(xz|bz2|gz)" \
     | sed -E "s/^$prefix-([0-9.]*[0-9])\.tar\.(xz|bz2|gz)$/\1 \2 &/" \
     | sed -e 's/ xz / 1 /' -e 's/ bz2 / 2 /' -e 's/ gz / 3 /' \

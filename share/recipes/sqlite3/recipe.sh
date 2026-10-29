@@ -13,7 +13,7 @@ SQLITE_CFLAGS=${SQLITE_CFLAGS:-"-DSQLITE_THREADSAFE=0 -DSQLITE_ENABLE_FTS3 -DSQL
 # Tarballs are named after the version number (3.46.1 -> 3460100) and stored
 # by year: both come from the release chronology.
 releases() {
-  curl -fsL "$SQLITE_SITE/chronology.html" | awk -v site="$SQLITE_SITE" '
+  curl -fsL --retry 3 "$SQLITE_SITE/chronology.html" | awk -v site="$SQLITE_SITE" '
     /timeline/ && match($0, /[12][0-9][0-9][0-9]-[01][0-9]-[0-3][0-9]/) { y = substr($0, RSTART, 4) }
     /releaselog/ && match($0, /data-sortkey=.[0-9]+/) {
       k = substr($0, RSTART + 14, RLENGTH - 14)
