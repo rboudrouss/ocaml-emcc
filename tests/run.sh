@@ -61,6 +61,7 @@ glpk      | gl       |            | glpk                        | wasm32 wasm64 
 fftw3     | ff       |            | fftw3                       | wasm32 wasm64      |
 secp      | sc       |            | secp256k1-internal          | wasm32 wasm64      |
 sdl       | sd       |            | tsdl                        | wasm64             |
+raylib    | rl       |            | raylib                      | wasm32 wasm64      |
 binio     | bi       |            |                             | wasm32 wasm64 wasi |
 depgraph  | bin/main |            | depgraph                    | wasm32 wasm64      |
 cudd      | cu       |            | cudd                        | wasm32 wasm64      |

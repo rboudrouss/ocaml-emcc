@@ -1,0 +1,11 @@
+emscripten: on wasm64 (memory64), the pointers EM_JS functions get are
+BigInts, which stringToUTF8 cannot mix with numbers ("Cannot mix BigInt
+and other types") when InitWindow asks for the canvas id.
+
+--- a/src/c/vendor/raylib/src/platforms/rcore_web.c
++++ b/src/c/vendor/raylib/src/platforms/rcore_web.c
+@@
+     var canvasId = "#" + Module.canvas.id;
+-    stringToUTF8(canvasId, out, outSize);
++    stringToUTF8(canvasId, Number(out), outSize);
+ });

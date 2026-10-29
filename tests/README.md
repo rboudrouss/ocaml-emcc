@@ -45,6 +45,7 @@ targets.
 | `argon2`    | argon2 (ctypes-foreign, `-largon2`) + libargon2 |
 | `lmdb`      | lmdb + liblmdb: a database file, cursors, transactions |
 | `sdl`       | tsdl + sdl2: timer, events, surfaces, RWops (wasm64) |
+| `raylib`    | raylib (raylib-ocaml): its vendored raylib built for the web, ctypes structs holding pointers; images, colors, collisions, text, without a window |
 
 They pass on both targets, except `hello` (it checks 63-bit ints on
 purpose) and `sdl` (not tried on wasm32 yet), which are wasm64 only, and

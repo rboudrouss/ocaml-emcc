@@ -123,6 +123,38 @@ gives the arguments and receives the output:
 - `--preload` moves the bytecode to a separate `main.data`, loaded next to
   the page (under node, relative to the current directory).
 
+### raylib in a browser
+
+A game using [raylib-ocaml](https://github.com/tjammer/raylib-ocaml) builds
+as is, with the usual loop:
+
+```ocaml
+let () =
+  Raylib.init_window 800 450 "game";
+  Raylib.set_target_fps 60;
+  while not (Raylib.window_should_close ()) do
+    Raylib.begin_drawing ();
+    Raylib.clear_background Raylib.Color.raywhite;
+    Raylib.draw_text "Hello from OCaml" 190 200 20 Raylib.Color.darkgray;
+    Raylib.end_drawing ()
+  done;
+  Raylib.close_window ()
+```
+
+```sh
+ocaml-emcc build game.html            # emscripten's page, with a canvas
+```
+
+The `raylib` recipe builds the raylib that the package vendors for
+raylib's `PLATFORM_WEB`: emscripten's GLFW (`-sUSE_GLFW=3`) and WebGL, so
+the window is the page's canvas (`Module.canvas` in a page of your own),
+and there is no window under node. `window_should_close` gives the browser
+a frame (`emscripten_sleep`), which the recipe links with `-sASYNCIFY`
+for. `-- -sJSPI` replaces it with a smaller build (no instrumentation of
+the interpreter), for browsers with JSPI. emcc warns that ASYNCIFY is not
+compatible with `-fwasm-exceptions`, but OCaml exceptions work, raised from
+OCaml or from C, and leaving the loop.
+
 ### WASI
 
 ```sh
@@ -277,8 +309,8 @@ variant), `mlcuddidl` (its bundled CUDD, and the stubs camlidl generates),
 `hacl-star-raw` (portable C only: the vectorized and Vale variants trap if
 called), and packages whose sources need a change for wasm, described in
 their `share/recipes/<name>/` directory: `mirage-crypto` (and `-ec`,
-`-rng`), `lwt`, `cryptokit`, `secp256k1-internal`, `lmdb`, `mccs` and
-`ocaml-lua`.
+`-rng`), `lwt`, `cryptokit`, `secp256k1-internal`, `lmdb`, `mccs`,
+`ocaml-lua` and `raylib` (see [raylib in a browser](#raylib-in-a-browser)).
 
 ### Project recipes
 
