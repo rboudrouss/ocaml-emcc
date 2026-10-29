@@ -2,7 +2,7 @@
 # Build every test project natively and with ocaml-emcc, run both, compare.
 #   tests/run.sh [--target wasm32|wasm64] [test...]   (default: wasm32)
 #   tests/run.sh --wasi [test...]      OUT.wasm --wasi, run by wasmtime (or node's WASI)
-#   tests/run.sh --compiled [test...]  compiled to C by c_of_ocaml (wasm32, OCaml 5)
+#   tests/run.sh --compiled [test...]  compiled to C by c_of_ocaml (OCaml >= 4.14)
 #   SWITCH=bench tests/run.sh          (another opam switch)
 set -u
 cd "$(dirname "$0")"; TESTS_DIR=$PWD

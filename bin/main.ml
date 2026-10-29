@@ -25,7 +25,7 @@ link options (build and link):
   --wasi          OUT.wasm for a WASI host (wasmtime, node:wasi...): files,
                   clocks, sleep... on WASI instead of emscripten's JS (wasm32)
   --compiled      compile the bytecode to C with c_of_ocaml instead of
-                  interpreting it (faster; wasm32, OCaml >= 4.14, no effects)
+                  interpreting it (faster; OCaml >= 4.14)
   --emcc-flag F   extra emcc link flag (repeatable); also everything after
                   `--`, $OCAML_EMCC_LDFLAGS and `link-flags:` in ocaml-emcc.conf
 
