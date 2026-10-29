@@ -307,7 +307,7 @@ More directories can be added with `--recipes DIR` or
 A project recipe can also **refine** a builtin one: `include_recipe NAME`
 reads the next recipe of that name, after the project's variables are set,
 and an optional `pre_build` function runs before its `build`, to patch the
-sources. [MOPSA](https://gitlab.com/rboudrouss/mopsa-analyzer-32-bit/-/tree/ocaml-emcc?ref_type=heads) pins clang 9 and patches apron this way:
+sources. [MOPSA](https://github.com/rboudrouss/mopsa-emcc/tree/ocaml-emcc) pins clang 9 and patches apron this way:
 
 ```sh
 # emcc-recipes/clang/recipe.sh
