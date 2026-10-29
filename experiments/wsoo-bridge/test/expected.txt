@@ -1,0 +1,19 @@
+add 42
+pair <pi> 6.28
+sum 10
+range 0,1,2,3,4
+Failure boom
+Invalid_argument from C
+counter 12
+fill zzzz
+apply 21
+apply2 7
+Mine 5 through C
+mul64 123456789000
+area 7
+Circle 1.5
+Poly of 2 points
+Empty
+six 21
+named Mine 9
+1M calls: 10528
