@@ -225,7 +225,8 @@ let compile_to_c ~emcc ~flags ~work ~base bc_path =
   let c_src = Filename.concat work (base ^ ".c") and c_obj = Filename.concat work (base ^ ".o") in
   Env.log "compiling %s to C (c_of_ocaml)" (Filename.basename bc_path);
   Env.run_exn cooc [ bc_path; "-o"; c_src ];
-  let flags = flags @ [ "-I" ^ support; "-Wno-incompatible-function-pointer-types" ] in
+  (* -mtail-call: tail calls of the generated code (return_call) *)
+  let flags = flags @ [ "-mtail-call"; "-I" ^ support; "-Wno-incompatible-function-pointer-types" ] in
   let support_obj = Filename.concat work "camlc_runtime.o" in
   Env.run_exn emcc (flags @ [ "-c"; Filename.concat support "camlc_runtime.c"; "-o"; support_obj ]);
   let cc extra = Env.run_exn emcc (flags @ extra @ [ "-c"; c_src; "-o"; c_obj ]) in
