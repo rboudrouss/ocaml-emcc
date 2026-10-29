@@ -2,15 +2,17 @@
 # Build every test project natively and with ocaml-emcc, run both, compare.
 #   tests/run.sh [--target wasm32|wasm64] [test...]   (default: wasm32)
 #   tests/run.sh --wasi [test...]      OUT.wasm --wasi, run by wasmtime (or node's WASI)
+#   tests/run.sh --compiled [test...]  compiled to C by c_of_ocaml (wasm32, OCaml 5)
 #   SWITCH=bench tests/run.sh          (another opam switch)
 set -u
 cd "$(dirname "$0")"; TESTS_DIR=$PWD
 . ./env.sh
-TARGET=wasm32 WASI=no
+TARGET=wasm32 WASI=no COMPILED=
 while [ $# -gt 0 ]; do
   case $1 in
     --target) TARGET=$2; shift 2 ;;
     --wasi) WASI=yes; shift ;;
+    --compiled) COMPILED=--compiled; shift ;;
     *) break ;;
   esac
 done
@@ -97,8 +99,8 @@ while IFS='|' read -r name target args pkgs targets differ; do
   (
     set -e
     cd "$name"; rm -rf out; mkdir -p out
-    js="out/$(basename "$target").js" flags=
-    if [ $WASI = yes ]; then js="out/$(basename "$target").wasm" flags=--wasi; fi
+    js="out/$(basename "$target").js" flags=$COMPILED
+    if [ $WASI = yes ]; then js="out/$(basename "$target").wasm" flags="--wasi $COMPILED"; fi
     if [ -f Makefile ] && [ ! -f dune-project ]; then
       make clean >/dev/null; make OCAML_EMCC="$OE_ROOT/_build/default/bin/main.exe" LINK_FLAGS="$flags" "$js" 2>&1
     else
@@ -119,5 +121,5 @@ while IFS='|' read -r name target args pkgs targets differ; do
     echo "FAIL $name (see tests/$name/out.log, out/diff.txt, out/wasm.err)"; fail=$((fail+1))
   fi
 done <<< "$TESTS"
-echo "switch $(basename "$OPAM_SWITCH_PREFIX") (OCaml $(ocamlc -vnum)), target $TARGET_COL: $pass passed, $fail failed, $skip skipped"
+echo "switch $(basename "$OPAM_SWITCH_PREFIX") (OCaml $(ocamlc -vnum)), target $TARGET_COL${COMPILED:+ (compiled)}: $pass passed, $fail failed, $skip skipped"
 [ $fail -eq 0 ]
