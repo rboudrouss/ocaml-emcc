@@ -240,7 +240,9 @@ workload 2.0 s -> 0.66 s, nbody 4.7 s -> 1.6 s). It is experimental, and
 for now limited to:
 
 - wasm32, and OCaml 4.14 or 5 switches;
-- programs without effect handlers (`Effect.perform` stops the program);
+- effect handlers work (CPS versions of the functions which may perform
+  an effect, used only under a handler), but an effect cannot be
+  performed through a callback from C (`Effect.Unhandled`);
 - deep recursion: the compiled functions run on the wasm engine's stack,
   about 1 MB in V8, where the interpreter has its own stack. Under node, the
   program runs in a worker thread with a stack of `$OCAML_EMCC_STACK_MB`
@@ -253,9 +255,8 @@ for now limited to:
   exception goes through, but `Printexc.get_callstack` is empty.
 
 `tests/run.sh --compiled` runs the tests in this mode. On OCaml 5.4, the
-ones tried so far pass (`stubs`, `zarith`, `mixed`, `gitrecipe`, `nodune`,
-`clibs`, `mcrypto`, `lwt`, `binio`), except
-`ocaml5` (effects).
+ones tried so far pass (`stubs`, `zarith`, `mixed`, `ocaml5`, `gitrecipe`,
+`nodune`, `clibs`, `mcrypto`, `lwt`, `binio`).
 
 ## Differences from native
 
