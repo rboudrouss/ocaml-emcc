@@ -2,7 +2,7 @@
 
 - Compiled mode (experimental): `--compiled` (`build`, `link`) compiles
   the bytecode to C with c_of_ocaml instead of interpreting it, 3 to 7
-  times faster in node (wasm32, OCaml 4.14 or 5). The stubs
+  times faster in node (wasm32 and wasm64, OCaml 4.14 or 5). The stubs
   get the same signature adapters. `tests/run.sh --compiled` runs the tests
   that way.
 - The bytecode interpreter runs about twice as fast in node and browsers

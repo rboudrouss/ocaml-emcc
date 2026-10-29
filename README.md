@@ -239,7 +239,7 @@ The program runs 3 to 7 times faster than interpreted (node, wasm32: fib
 workload 2.0 s -> 0.66 s, nbody 4.7 s -> 1.6 s). It is experimental, and
 for now limited to:
 
-- wasm32, and OCaml 4.14 or 5 switches;
+- OCaml 4.14 or 5 switches (wasm32 and wasm64);
 - effect handlers work (CPS versions of the functions which may perform
   an effect, used only under a handler), but an effect cannot be
   performed through a callback from C (`Effect.Unhandled`);
@@ -255,8 +255,9 @@ for now limited to:
   exception goes through, but `Printexc.get_callstack` is empty.
 
 `tests/run.sh --compiled` runs the tests in this mode. On OCaml 5.4, the
-ones tried so far pass (`stubs`, `zarith`, `mixed`, `ocaml5`, `gitrecipe`,
-`nodune`, `clibs`, `mcrypto`, `lwt`, `binio`).
+ones tried so far pass on wasm32 and wasm64 (`stubs`, `zarith`, `mixed`,
+`ocaml5`, `gitrecipe`, `nodune`, `clibs`, `mcrypto`, `lwt`, `binio`, and
+`hello` on wasm64).
 
 ## Differences from native
 
