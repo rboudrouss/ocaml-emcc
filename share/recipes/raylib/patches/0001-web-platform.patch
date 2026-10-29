@@ -76,16 +76,10 @@ for dllraylib.so.
   (enabled_if
 -  (or
 -   (= %{system} netbsd)
--   (= %{system} freebsd)
--   (= %{system} openbsd)
--   (= %{system} bsd)
--   (= %{system} bsd_elf)))
 +  (and
 +   (= %{context_name} default)
 +   (or
-+    (= %{system} netbsd)
-+    (= %{system} freebsd)
-+    (= %{system} openbsd)
-+    (= %{system} bsd)
-+    (= %{system} bsd_elf))))
-  (deps
++   (= %{system} netbsd)
+@@
+-   (= %{system} bsd_elf)))
++   (= %{system} bsd_elf))))
