@@ -13,10 +13,10 @@ But the program runs as bytecode, interpreted by an
 compiled by js_of_ocaml or wasm_of_ocaml, which compile OCaml itself. If your
 project is pure OCaml, or its C stubs already have JavaScript
 implementations, use those instead. ocaml-emcc is for code whose C you
-cannot or do not want to rewrite. The experimental
-[compiled mode](#compiled-mode) compiles the bytecode to C instead.
+cannot or do not want to rewrite.
 
-ocaml-emcc is a prototype (see [Status](#status)).
+There is an experimental
+[compiled mode](#compiled-mode) that approaches wasm_of_ocaml performances by compiling the bytecode to C before running emscripten.
 
 ## Quick start
 
@@ -224,48 +224,46 @@ On wasm32, as with a 32-bit OCaml:
 
 ## Compiled mode
 
-`--compiled` (`build` and `link`) compiles the bytecode to C with
-[c_of_ocaml](https://github.com/rboudrouss/C_of_ocaml) (a fork of
-js_of_ocaml, branch `c-backend`) instead of interpreting it. The C code is
-compiled by emcc and linked with the same runtime, without its
-interpreter, and the same stub libraries:
+By default, ocaml-emcc runs the bytecode on an interpreter. With
+`--compiled` (for `build` and `link`), it compiles the bytecode to C
+instead, with [c_of_ocaml](https://github.com/rboudrouss/C_of_ocaml), a
+fork of js_of_ocaml. emcc then compiles this C code
+and links it with the usual runtime, minus its interpreter, and the usual
+stub libraries:
 
 ```sh
 ocaml-emcc build main.js --compiled    # c_of_ocaml in PATH, or $OCAML_EMCC_C_OF_OCAML
 ```
 
-The program runs 3 to 7 times faster than interpreted (node, wasm32: fib
-2.7 s -> 0.37 s, binary trees 1.4 s -> 0.36 s, a Map and exceptions
-workload 2.0 s -> 0.66 s, nbody 4.7 s -> 1.6 s). It is experimental, and
-for now limited to:
+This mode works with OCaml 4.14 and 5, on wasm32 and wasm64. It is still
+experimental, but it is usually worth it. Programs run 2 to 5 times faster
+in node, and up to 19 times faster on floating-point code such as nbody.
+Their `.wasm` is 2 to 8 times smaller, since it contains neither the
+interpreter nor the bytecode. There is little to gain when the program
+spends its time in C stubs, such as digestif's hash functions. Linking
+takes about 1.5 times longer, to compile the generated C.
 
-- OCaml 4.14 or 5 switches (wasm32 and wasm64);
-- effect handlers work (CPS versions of the functions which may perform
-  an effect, used only under a handler), but an effect cannot be
-  performed through a callback from C (`Effect.Unhandled`);
-- deep recursion: the compiled functions run on the wasm engine's stack,
-  about 1 MB in V8, where the interpreter has its own stack. Under node, the
-  program runs in a worker thread with a stack of `$OCAML_EMCC_STACK_MB`
-  megabytes (default 1024: millions of nested calls; `0` keeps it on the
-  main thread), and running out of it is reported as an uncaught
-  `Stack_overflow`, which the program cannot catch. In browsers, the limit
-  is some tens of thousands of nested non-tail calls;
-- with asyncify (`-sASYNCIFY`, as raylib needs), which does not support
-  the tail calls of WebAssembly, tail calls are plain calls: long loops
-  of mutually recursive functions may run out of stack. If this causes
-  problems, use JSPI instead (`-- -sJSPI`, see raylib above): it keeps the
-  tail calls, and the build is smaller (raylib test: 2.6 MB instead of
-  4.1 MB). It needs a browser with JSPI, or node 24 with
-  `--experimental-wasm-jspi`;
-- `Marshal.Closures` is not supported. Backtraces (bytecode compiled with
-  `-g`, as by dune) give the locations of the raises and of the calls an
-  exception goes through, but `Printexc.get_callstack` is empty.
+Limitations:
 
-`tests/run.sh --compiled` runs the tests in this mode. On OCaml 5.4, the
-ones tried so far pass on wasm32 and wasm64 (`stubs`, `zarith`, `mixed`,
-`ocaml5`, `gitrecipe`, `nodune`, `clibs`, `mcrypto`, `lwt`, `binio`, and
-`hello` on wasm64), and on OCaml 4.14 (wasm32) the 31 whose libraries are
-installed, `raylib` and `ctypes` included.
+- **Stack depth.** The compiled code runs on the stack of the wasm engine,
+  whereas the interpreter has a stack of its own. Under node, the program
+  therefore runs in a worker thread with a stack of `$OCAML_EMCC_STACK_MB`
+  megabytes, 1024 by default, which allows millions of nested calls (`0`
+  keeps it on the main thread and saves about 40 ms at startup). Running
+  out of it is an uncaught `Stack_overflow`. In browsers, the limit is some
+  tens of thousands of nested calls.
+- **Asyncify.** Tail calls rely on those of WebAssembly, which asyncify
+  does not support: with `-sASYNCIFY`, as the raylib recipe links, they
+  become ordinary calls, and a long loop of mutually recursive functions
+  may run out of stack. If you run into this, link with JSPI instead
+  (`-- -sJSPI`, see [raylib in a browser](#raylib-in-a-browser)), which
+  keeps tail calls and gives a smaller build, but needs a browser that
+  supports it, or node 24 with `--experimental-wasm-jspi`.
+- **Effects** cannot be performed across a callback from C: they raise
+  `Effect.Unhandled`, as with js_of_ocaml.
+- **`Marshal.Closures`** is not supported.
+- **Backtraces** work (bytecode compiled with `-g`, as dune does), but
+  `Printexc.get_callstack` returns an empty call stack.
 
 ## Differences from native
 
@@ -481,7 +479,9 @@ hacl-star, mccs, sdl...) and compares their output under node with that
 of the native executable. It passes on both targets, except `ctypes` on
 wasm64 (libffi's calls stop on "Unexpected type 0" with emsdk 6.0.11). For
 0.3.0 it passed on every OCaml version from 4.08 to 5.5, and its WASI
-part with wasmtime 50. CI runs it on OCaml 4.14 and 5.5.
+part with wasmtime 50. CI runs it on OCaml 4.14 and 5.5. In compiled mode
+(`tests/run.sh --compiled`), it passes on OCaml 4.14 (wasm32) and 5.4
+(wasm32 and wasm64).
 
 ### Versions of the dependencies
 
@@ -544,7 +544,7 @@ share/driver.sh       recipe driver
 share/recipes/        ocaml (runtime + patches), C libraries (gmp, mpfr, zlib...),
                       OCaml packages needing changes (zarith, apron, lwt...)
 share/tools/          ocamlc / ocamlmklib wrappers for dune -x, dune's (ctypes) patch
-share/runtime/        main.c, compat.c, dlsym.c, wasi.c, node_stdio.js
+share/runtime/        main.c, compat.c, dlsym.c, wasi.c, node_stdio.js, node_stack.js
 tests/                test suite (tests/README.md)
 docs/                 internals, recipe authoring
 ```

@@ -47,11 +47,19 @@
 With `--compiled`, `link` (step 5 above) runs `c_of_ocaml PROG.bc -o
 PROG.c` instead of embedding the bytecode, and `c_of_ocaml --runtime-files
 DIR` for the runtime support of the generated code (`camlc.h`,
-`camlc_runtime.c`). Both are compiled with the flags of the runtime and
-linked with `libcamlrun.a` and the stub libraries, in place of `main.c`
-and the primitive table:
-`camlc_runtime.c` defines `main` and the functions of the runtime's
-`callback.c`, so that the interpreter is never linked.
+`camlc_runtime.c`). On wasm64, c_of_ocaml gets `--word-size 64`, for
+63-bit integers. Both C files are compiled with the flags of the runtime
+and linked with `libcamlrun.a` and the stub libraries, in place of
+`main.c` and the primitive table. `camlc_runtime.c` defines `main` and the
+functions of the runtime's `callback.c`, so that the interpreter is never
+linked.
+
+The C code is compiled with `-mtail-call`, so that its tail calls are
+tail calls of WebAssembly. Asyncify does not support them: when the link
+flags contain `-sASYNCIFY` and not `-sJSPI`, ocaml-emcc leaves the flag
+out, and tail calls become ordinary calls. The link exports `malloc` and
+`free`, as the file system of the interpreter does, since the JavaScript
+code of some stubs (libffi, for ctypes) calls them.
 
 The generated C calls the primitives directly, declared with the arity of
 their call sites, and contains a function, never called, calling each of
