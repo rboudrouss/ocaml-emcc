@@ -248,7 +248,9 @@ for now limited to:
   main thread), and running out of it is reported as an uncaught
   `Stack_overflow`, which the program cannot catch. In browsers, the limit
   is some tens of thousands of nested non-tail calls;
-- no backtraces, and `Marshal.Closures` is not supported.
+- `Marshal.Closures` is not supported. Backtraces (bytecode compiled with
+  `-g`, as by dune) give the locations of the raises and of the calls an
+  exception goes through, but `Printexc.get_callstack` is empty.
 
 `tests/run.sh --compiled` runs the tests in this mode. On OCaml 5.4, the
 ones tried so far pass (`stubs`, `zarith`, `mixed`, `gitrecipe`, `nodune`,

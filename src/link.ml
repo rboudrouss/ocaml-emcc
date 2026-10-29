@@ -217,14 +217,16 @@ type compiled = {
 (* PROG.bc -> PROG.c (c_of_ocaml), compiled with the runtime support of the
    generated code (camlc.h, camlc_runtime.c, which defines main), to be
    linked with libcamlrun.a: its interpreter is not used. *)
-let compile_to_c ~emcc ~flags ~work ~base bc_path =
+let compile_to_c ~emcc ~flags ~work ~base ~bc bc_path =
   let cooc = c_of_ocaml () in
   let support = Filename.concat work "c_of_ocaml" in
   if not (Sys.file_exists support) then Unix.mkdir support 0o755;
   Env.run_exn cooc [ "--runtime-files"; support ];
   let c_src = Filename.concat work (base ^ ".c") and c_obj = Filename.concat work (base ^ ".o") in
   Env.log "compiling %s to C (c_of_ocaml)" (Filename.basename bc_path);
-  Env.run_exn cooc [ bc_path; "-o"; c_src ];
+  (* backtraces when the bytecode has debug information (ocamlc -g) *)
+  let debug = if Bytecode.section bc "DBUG" <> None then [ "--debug-info" ] else [] in
+  Env.run_exn cooc (debug @ [ bc_path; "-o"; c_src ]);
   (* -mtail-call: tail calls of the generated code (return_call) *)
   let flags = flags @ [ "-mtail-call"; "-I" ^ support; "-Wno-incompatible-function-pointer-types" ] in
   let support_obj = Filename.concat work "camlc_runtime.o" in
@@ -561,7 +563,7 @@ let run o =
   (* Same flags as the runtime (target, longjmp flavour...). *)
   let cflags = Env.manifest_flags "cflags" and ldflags = Env.manifest_flags "ldflags" in
   let compiled =
-    if o.compiled then Some (compile_to_c ~emcc ~flags:(cflags @ [ o.opt ] @ inc) ~work ~base o.bc) else None
+    if o.compiled then Some (compile_to_c ~emcc ~flags:(cflags @ [ o.opt ] @ inc) ~work ~base ~bc o.bc) else None
   in
   if compiled = None then
     Env.run_exn emcc (cflags @ [ o.opt; main_def ] @ inc @ [ "-c"; Filename.concat (Env.share ()) "runtime/main.c"; "-o"; main_o ]);
