@@ -1,3 +1,18 @@
+## Unreleased
+
+- New recipe: `raylib` (raylib-ocaml). The raylib it vendors is built for
+  raylib's `PLATFORM_WEB` (emscripten's GLFW, WebGL), linked with
+  `-sASYNCIFY` so that the usual `while not (window_should_close ())`
+  loop runs in a browser (`-- -sJSPI` replaces it). Test: `raylib`.
+- The placeholder `dll<name>.so` of a wasm stub archive defines its C
+  functions (aborting if called): a (ctypes) generator linked against a
+  library of its package with stubs could not start ("unknown C
+  primitive").
+- The shadow build of a package installing many `.cmi` files (raylib) was
+  reported as failed: `find | grep -q`, under `pipefail`, failed when
+  `find` was killed by SIGPIPE. The same in the check for wasm archives.
+- `-cclib "-l X"` is read as `-lX`.
+
 ## 0.4.0
 
 - Recipe patches are placed by their text, not their line numbers
