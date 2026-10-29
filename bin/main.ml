@@ -24,6 +24,8 @@ link options (build and link):
   --no-deps       do not build missing stub libraries automatically
   --wasi          OUT.wasm for a WASI host (wasmtime, node:wasi...): files,
                   clocks, sleep... on WASI instead of emscripten's JS (wasm32)
+  --compiled      compile the bytecode to C with c_of_ocaml instead of
+                  interpreting it (faster; wasm32, OCaml 5, no effects)
   --emcc-flag F   extra emcc link flag (repeatable); also everything after
                   `--`, $OCAML_EMCC_LDFLAGS and `link-flags:` in ocaml-emcc.conf
 
@@ -156,7 +158,7 @@ let cmd_dune args =
 let default_link_opts : Link.opts =
   {
     bc = ""; output = ""; lib_dirs = []; libs = []; emcc_flags = []; mode = Link.Embed;
-    opt = "-O2"; stack_size = "8MB"; auto_deps = true; check = true; wasi = false;
+    opt = "-O2"; stack_size = "8MB"; auto_deps = true; check = true; wasi = false; compiled = false;
   }
 
 (* Options shared by `link` and `build`; [extra] handles command-specific
@@ -173,6 +175,7 @@ let parse_link_opts ?(extra = fun _ -> None) args =
     | "--stack-size" :: s :: rest -> go { o with stack_size = s } pos rest
     | "--no-deps" :: rest -> go { o with auto_deps = false } pos rest
     | "--wasi" :: rest -> go { o with wasi = true } pos rest
+    | "--compiled" :: rest -> go { o with compiled = true } pos rest
     | "--emcc-flag" :: f :: rest -> go { o with emcc_flags = o.emcc_flags @ [ f ] } pos rest
     | "--" :: rest -> ({ o with emcc_flags = o.emcc_flags @ rest }, List.rev pos)
     | l -> (
