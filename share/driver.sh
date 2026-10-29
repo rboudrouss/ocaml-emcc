@@ -955,7 +955,8 @@ dune_native_stubs() {
 # wasm_archive <lib.a>: whether its (first) object is a wasm one.
 wasm_archive() {
   local m
-  m=$(ar t "$1" 2>/dev/null | grep -m1 '\.o$') || return 0
+  # (sed reads all of it: ar killed by SIGPIPE would fail the pipeline)
+  m=$(ar t "$1" 2>/dev/null | grep '\.o$' | sed -n 1p) || return 0
   [ "$(ar p "$1" "$m" | head -c 4 | od -An -tx1 | tr -d ' \n')" = 0061736d ]
 }
 
