@@ -256,7 +256,9 @@ let cclib_flags ~auto_deps ~dirs bc_path =
   if not (Sys.file_exists file) then []
   else
     let seen = Hashtbl.create 16 in
-    Str_util.words (String.map (fun c -> if c = '\n' || c = '\t' then ' ' else c) (Compat.read_file file))
+    (* `-l X` as well as `-lX` (raylib: -cclib "-l GL") *)
+    let rec join = function "-l" :: x :: l -> ("-l" ^ x) :: join l | x :: l -> x :: join l | [] -> [] in
+    join (Str_util.words (String.map (fun c -> if c = '\n' || c = '\t' then ' ' else c) (Compat.read_file file)))
     |> Compat.concat_map (fun f ->
            if Hashtbl.mem seen f then []
            else (
