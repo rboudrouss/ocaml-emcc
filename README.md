@@ -252,7 +252,11 @@ for now limited to:
   is some tens of thousands of nested non-tail calls;
 - with asyncify (`-sASYNCIFY`, as raylib needs), which does not support
   the tail calls of WebAssembly, tail calls are plain calls: long loops
-  of mutually recursive functions may run out of stack;
+  of mutually recursive functions may run out of stack. If this causes
+  problems, use JSPI instead (`-- -sJSPI`, see raylib above): it keeps the
+  tail calls, and the build is smaller (raylib test: 2.6 MB instead of
+  4.1 MB). It needs a browser with JSPI, or node 24 with
+  `--experimental-wasm-jspi`;
 - `Marshal.Closures` is not supported. Backtraces (bytecode compiled with
   `-g`, as by dune) give the locations of the raises and of the calls an
   exception goes through, but `Printexc.get_callstack` is empty.
