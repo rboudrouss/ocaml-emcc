@@ -638,10 +638,14 @@ let run o =
   let defaults =
     if standalone then defaults else defaults @ [ "--pre-js"; Filename.concat (Env.share ()) "runtime/node_stdio.js" ]
   in
-  (* compiled code runs on the wasm engine's stack: a large one under node *)
+  (* compiled code runs on the wasm engine's stack: a large one under node.
+     malloc and free are exported, as with the interpreter (whose file
+     system needs them), for the JS code of the stubs (libffi...). *)
   let defaults =
     if standalone || compiled = None then defaults
-    else defaults @ [ "--pre-js"; Filename.concat (Env.share ()) "runtime/node_stack.js" ]
+    else
+      defaults
+      @ [ "--pre-js"; Filename.concat (Env.share ()) "runtime/node_stack.js"; "-sEXPORTED_FUNCTIONS=_main,_malloc,_free" ]
   in
   (* WASI: no emscripten imports at all (PURE_WASI: memory growth without
      telling JS), and the standard exception handling instructions
