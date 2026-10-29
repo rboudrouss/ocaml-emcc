@@ -569,8 +569,14 @@ let run o =
   let cflags = Env.manifest_flags "cflags" and ldflags = Env.manifest_flags "ldflags" in
   let compiled =
     if o.compiled then (
+      (* JSPI (-sJSPI, or the older -sASYNCIFY=2) supports them, and takes
+         precedence over asyncify *)
+      let all = ldflags @ flags_of_libs @ o.emcc_flags in
+      let jspi f =
+        f = "-sJSPI" || f = "-sJSPI=1" || f = "-sASYNCIFY=2"
+      in
       let asyncify f = Str_util.starts_with ~prefix:"-sASYNCIFY" f && f <> "-sASYNCIFY=0" in
-      let tail_calls = not (List.exists asyncify (ldflags @ flags_of_libs @ o.emcc_flags)) in
+      let tail_calls = List.exists jspi all || not (List.exists asyncify all) in
       if not tail_calls then Env.log "asyncify: compiled without wasm tail calls";
       Some (compile_to_c ~emcc ~flags:(cflags @ [ o.opt ] @ inc) ~tail_calls ~work ~base ~bc o.bc))
     else None
