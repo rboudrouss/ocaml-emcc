@@ -465,6 +465,7 @@ the switch back. On wasm32, OCaml 4.14.2:
 | `hacl` | hacl-star | 0.7.2 | 0.5.0, 0.6.2: the test uses later modules (`K256`) |
 | `posix` | posix-time2, -socket, -stat | 4.0.2 | 2.2.0, 3.0.0: no posix-stat |
 | `mccs` | mccs | 1.1+13, 1.1+17, 1.1+19 | |
+| `raylib` | raylib | 2.2.2, 2.3.0 | |
 
 The recipes' patches (placed by their text, see [patches](docs/recipes.md#patches)) were
 also checked to apply, as GNU patch applied the previous ones, to the
