@@ -1,0 +1,26 @@
+#!/bin/sh
+# placeholder-dll <dll.so> <wasm objects or archives>...
+#
+# The dll<name>.so standing for a wasm stub archive, which emscripten cannot
+# make shared: a host shared object, because ocamlc parses the ELF of every
+# -dllib when it links a bytecode executable.  `ocaml-emcc link` never reads
+# it, it maps dll<name> back to lib<name>.a.
+#
+# Each C function of the objects is defined in it, aborting if called: a
+# bytecode the build runs on the host (the generators of a (ctypes) stanza,
+# linked against a library of the package that has stubs) gets its
+# primitives resolved when it starts.  If that does not compile (a function
+# named like one of the libc's declared below), an empty shared object.
+
+out=$1; shift
+cc=${OCAML_EMCC_HOST_CC:-cc}
+src=$out.c
+{
+  echo 'int dprintf(int, const char *, ...); void abort(void);'
+  printf '%s\n' 'static void placeholder(const char *f) { dprintf(2, "%s: a wasm C function, not callable on the host\n", f); abort(); }'
+  [ $# -eq 0 ] || emnm --defined-only -g "$@" 2>/dev/null | awk '$2 == "T" { print $3 }' | sort -u \
+    | sed 's/.*/void &(void) { placeholder("&"); }/'
+} > "$src"
+$cc -shared -fPIC -w -x c -o "$out" "$src" 2>/dev/null \
+  || printf '' | $cc -shared -x c -o "$out" - 2>/dev/null || : > "$out"
+rm -f "$src"

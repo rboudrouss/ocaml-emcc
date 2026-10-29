@@ -91,7 +91,7 @@ if [ -n "$out" ]; then
     for l in $(printf '%s\n' "$info" | sed -n 's/^Extra dynamically-loaded libraries: *//p'); do
       l=${l#-l}
       if [ ! -f "$d/dll$l.so" ] && [ -f "$d/lib$l.a" ]; then
-        printf '' | ${OCAML_EMCC_HOST_CC:-cc} -shared -x c -o "$d/dll$l.so" - 2>/dev/null || { : > "$d/dll$l.so"; } 2>/dev/null || true
+        sh "$(dirname "$0")/placeholder-dll" "$d/dll$l.so" "$d/lib$l.a" 2>/dev/null || true
       fi
     done
   done

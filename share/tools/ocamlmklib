@@ -3,10 +3,8 @@
 #
 # Only the C side of ocamlmklib is emulated: it builds lib<name>.a with emar
 # from the given objects.  Shared libraries do not exist under emscripten, so
-# when dll<name>.so is expected (no -custom) a placeholder is written: an
-# empty host shared object, because ocamlc parses the ELF of every -dllib
-# when it links a bytecode executable.  `ocaml-emcc link` never reads it, it
-# maps dll<name> back to lib<name>.a.
+# when dll<name>.so is expected (no -custom) a placeholder is written (see
+# placeholder-dll).
 #
 # OCaml objects (.cmo/.cmx/.cma...) are forwarded to the host ocamlmklib, so
 # that `ocamlmklib -o foo foo.cmo foo.o` style invocations still produce the
@@ -63,8 +61,8 @@ if [ -n "$objs" ]; then
   # shellcheck disable=SC2086
   $EMAR rcs "${cdir}lib$cbase.a" $objs
   if [ "$custom" = no ]; then
-    dll="${cdir}dll$cbase.so"
-    printf '' | ${OCAML_EMCC_HOST_CC:-cc} -shared -x c -o "$dll" - 2>/dev/null || : > "$dll"
+    # shellcheck disable=SC2086
+    sh "$(dirname "$0")/placeholder-dll" "${cdir}dll$cbase.so" $objs
   fi
 fi
 
