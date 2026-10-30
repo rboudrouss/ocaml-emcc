@@ -72,9 +72,9 @@ let ensure_setup () =
   if not (Env.toolchain_ready ()) then (
     Env.log "no wasm runtime yet for this switch and target, building it (once)";
     Recipe.install "ocaml")
-  else if Env.manifest "toolchain" <> Some Env.toolchain_version then (
+  else if Env.manifest "toolchain" <> Some Wrappers.version then (
     Env.log "updating the toolchain wrappers of %s" (Env.sysroot ());
-    if Driver.run [ "toolchain" ] <> 0 then Env.fail "toolchain update failed")
+    Wrappers.write ())
 
 (* `requires:` of ocaml-emcc.conf (no-op once built: recipes are stamped) *)
 let ensure_requires () =
@@ -401,6 +401,7 @@ let cmd_internal = function
   | [ "fetch-opam-version"; pkg; v; dest ] -> if not (Source.opam_version pkg v dest) then exit 1
   | "host-version" :: pc :: header :: macros -> (
       match Source.host_version pc header macros with Some v -> print_endline v | None -> exit 1)
+  | [ "toolchain" ] -> Wrappers.write ()
   | [ "dune-stubs"; pkg; provider ] ->
       if not (Stubs.dune_stubs ~dir:(Sys.getcwd ()) ~provider pkg) then exit 1
   | [ "version-match"; want ] ->

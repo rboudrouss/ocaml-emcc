@@ -7,7 +7,6 @@
 #                                            dependencies built and its
 #                                            sources fetched
 #   driver.sh releases <recipe>             its `releases` function
-#   driver.sh toolchain                     the toolchain's wrapper scripts
 #
 # Environment (set by the `ocaml-emcc` CLI):
 #   OCAML_EMCC_SHARE         share directory (recipes/, tools/, runtime/)
@@ -266,167 +265,9 @@ include_recipe() {
 
 # --------------------------------------------------------------- toolchain
 
-# Wrapper scripts with the paths baked in, plus the findlib toolchain that
-# makes `dune build -x wasm32` work.
-# Bumped whenever write_toolchain changes: the CLI then regenerates it in
-# existing sysroots (cheap: the runtime is not rebuilt).  Keep in sync with
-# Env.toolchain_version.
-TOOLCHAIN_VERSION=10
-
-write_toolchain() {
-  local tool host_conf cc=$SYSROOT/bin/emcc-$TARGET
-  # The C compiler dune is given: emcc with the target (and stub standard)
-  # flags built in.  Some packages replace dune's :standard C flags with
-  # their own (mlmpfr's (flags (:include c_flags.sexp))), which would drop
-  # -m64 and friends.
-  # -pthread (lwt's configuration adds it) is dropped: the program is
-  # single-threaded, and with it emcc compiles `caml_state` as a real
-  # thread-local variable, which the runtime's is not (see the ocaml recipe).
-  # The headers and libraries of the sysroot come last (after the package's
-  # own): dune-configurator's C tests only get the C flags, not -I.  Those
-  # of the host in CPATH and friends would come before them (the host's
-  # ffi.h for ctypes-foreign): the environment loses them.
-  # The C standard is left out for C++ (snappy's stubs: -x c++), which
-  # clang refuses with -std=gnu23.
-  # An executable (-o X.exe, or without extension) is a program the build
-  # runs: ctypes' type generators print the layouts of the target's structs.
-  # It becomes a node script (the wasm inside, real files) dune can run,
-  # with the node of emscripten's configuration (memory64 for wasm64): the
-  # one in PATH can be older.
-  local node
-  node=$("$EMSDK_BIN/em-config" NODE_JS 2>/dev/null | sed -e "s/^\['//" -e "s/'.*//")
-  cat > "$cc" <<EOF
-#!/bin/sh
-unset CPATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH LIBRARY_PATH
-link=-L'$SYSROOT/lib' std='$STUB_STD' prev= exe=
-for a; do
-  shift
-  case \$a in -c|-E|-S|-M|-MM) link= ;; -xc++*|*.cc|*.cpp|*.cxx|*.C) std= ;; esac
-  case \$prev\$a in -xc++*) std= ;; esac
-  [ "\$prev" = -o ] && case \${a##*/} in *.exe) exe=1 ;; *.*) exe= ;; *) exe=1 ;; esac
-  prev=\$a
-  [ "\$a" = -pthread ] || set -- "\$@" "\$a"
-done
-[ -n "\$link" ] && [ -n "\$exe" ] && set -- "\$@" -sEXECUTABLE='${node:-1}' -sSINGLE_FILE=1 -sEXIT_RUNTIME=1 -sNODERAWFS=1
-exec '$EMCC' $TARGET_FLAGS \$std -idirafter '$SYSROOT/include' \$link "\$@"
-EOF
-  chmod +x "$cc"
-  for tool in ocamlc ocamlmklib; do
-    cat > "$SYSROOT/bin/$tool" <<EOF
-#!/bin/sh
-OCAML_EMCC_HOST_BIN='$HOST_BIN'
-OCAML_EMCC_SYSROOT='$SYSROOT'
-OCAML_EMCC_CFLAGS='$BASE_CFLAGS'
-OCAML_EMCC_EMCC='$cc'
-EMAR='$EMAR'
-PATH='$EMSDK_BIN':\$PATH
-export OCAML_EMCC_HOST_BIN OCAML_EMCC_SYSROOT OCAML_EMCC_CFLAGS OCAML_EMCC_EMCC EMAR PATH
-exec sh '$OCAML_EMCC_SHARE/tools/$tool' "\$@"
-EOF
-    chmod +x "$SYSROOT/bin/$tool"
-  done
-  # The other tools dune looks for next to the toolchain's ocamlc (rules
-  # using %{ocaml}, %{bin:ocamllex}...) are the host's.  Not ocamlopt: see
-  # below.
-  for tool in ocaml ocamllex ocamlyacc ocamlobjinfo ocamlcp ocamlmktop ocamlprof; do
-    if [ -x "$HOST_BIN/$tool" ]; then ln -sf "$HOST_BIN/$tool" "$SYSROOT/bin/$tool"; fi
-  done
-  # put first in dune's PATH: rules running `ocamlmklib` directly
-  mkdir -p "$SYSROOT/bin/path"
-  ln -sf ../ocamlmklib "$SYSROOT/bin/path/ocamlmklib"
-  ln -sf ../ocamlmklib "$SYSROOT/bin/path/ocamlmklib.opt"
-  # and pkg-config (dune-configurator): the rules of the wasm context only
-  # see the wasm libraries of the sysroot, not the host's (lmdb would take
-  # the host's liblmdb instead of its own copy).  Those of the host context
-  # get the host's pkg-config.
-  local pc
-  for pc in pkg-config pkgconf; do
-    cat > "$SYSROOT/bin/path/$pc" <<EOF
-#!/bin/sh
-case \$PWD/ in
-  */default.$TARGET/*) # also in dune's sandboxes (_build/.sandbox/<hash>/)
-    PKG_CONFIG_LIBDIR='$SYSROOT/lib/pkgconfig' PKG_CONFIG_PATH=
-    export PKG_CONFIG_LIBDIR PKG_CONFIG_PATH ;;
-esac
-self='$SYSROOT/bin/path' IFS=:
-for d in \$PATH; do
-  [ "\$d" = "\$self" ] && continue
-  [ -x "\$d/$pc" ] && exec "\$d/$pc" "\$@"
-done
-echo "$pc: not found" >&2; exit 127
-EOF
-    chmod +x "$SYSROOT/bin/path/$pc"
-  done
-  # and llvm-config, for the same reason: dune rules running it (a package
-  # configured on the host) get the wasm LLVM of the clang recipe in the
-  # wasm context.  clang too, but only for what the recipe's clang
-  # answers (-print-resource-dir, --version): it compiles nothing.
-  local tool_name
-  for tool_name in llvm-config clang; do
-    cat > "$SYSROOT/bin/path/$tool_name" <<EOF
-#!/bin/sh
-case \$PWD/ in
-  */default.$TARGET/*)
-    if [ -x '$SYSROOT/bin/$tool_name' ]; then
-      case $tool_name:\$1 in llvm-config:*|clang:-print-resource-dir|clang:--version) exec '$SYSROOT/bin/$tool_name' "\$@" ;; esac
-    elif [ $tool_name = llvm-config ]; then
-      echo "llvm-config: no wasm LLVM for $TARGET yet, build it with: ocaml-emcc install clang" >&2; exit 1
-    fi ;;
-esac
-self='$SYSROOT/bin/path' IFS=:
-for d in \$PATH; do
-  [ "\$d" = "\$self" ] && continue
-  [ -x "\$d/$tool_name" ] && exec "\$d/$tool_name" "\$@"
-done
-echo "$tool_name: not found" >&2; exit 127
-EOF
-    chmod +x "$SYSROOT/bin/path/$tool_name"
-  done
-  local findlib_path
-  host_conf=$("$HOST_BIN/ocamlfind" printconf conf 2>/dev/null || echo "$PREFIX/lib/findlib.conf")
-  findlib_path=$("$HOST_BIN/ocamlfind" printconf path 2>/dev/null | paste -sd: - || true)
-  [ -n "$findlib_path" ] || findlib_path="$PREFIX/lib"
-  mkdir -p "$SYSROOT/findlib.conf.d"
-  if [ -f "$host_conf" ]; then
-    # destdir and path may be relative to the file (destdir=".", path="./ocaml:."
-    # since ocamlfind 1.9.9): the copy gets absolute ones
-    sed -e "s|^destdir *=.*|destdir=\"$("$HOST_BIN/ocamlfind" printconf destdir 2>/dev/null || echo "$PREFIX/lib")\"|" \
-        -e "s|^path *=.*|path=\"$findlib_path\"|" "$host_conf" > "$SYSROOT/findlib.conf"
-  else # switch without ocamlfind
-    printf 'destdir="%s"\npath="%s"\n' "$PREFIX/lib" "$findlib_path" > "$SYSROOT/findlib.conf"
-  fi
-  # dune reads tools of the host context from this file too, and a variable
-  # only defined for a predicate (ocamlmklib(wasm64)) reads as "" there.
-  for tool in ocamlc ocamlmklib ocamldep ocamldoc; do
-    grep -q "^$tool *=" "$SYSROOT/findlib.conf" || echo "$tool=\"$tool\"" >> "$SYSROOT/findlib.conf"
-  done
-  # No ocamlopt entry at all: dune then looks for it next to the toolchain's
-  # ocamlc ($SYSROOT/bin), finds nothing and treats the wasm context as
-  # bytecode-only (there is no native wasm backend).  The host context finds
-  # it next to the host ocamlc as usual.
-  sed -i '/^ocamlopt *=/d' "$SYSROOT/findlib.conf"
-  local t=$TARGET
-  cat > "$SYSROOT/findlib.conf.d/$t.conf" <<EOF
-path($t) = "$SYSROOT/lib/findlib:$findlib_path"
-destdir($t) = "$SYSROOT/lib/findlib"
-stdlib($t) = "$("$HOST_BIN/ocamlc" -where)"
-ocamlc($t) = "$SYSROOT/bin/ocamlc"
-ocamlmklib($t) = "$SYSROOT/bin/ocamlmklib"
-ocamldep($t) = "$HOST_BIN/ocamldep"
-ocamldoc($t) = "$HOST_BIN/ocamldoc"
-EOF
-  mkdir -p "$SYSROOT/lib/findlib"
-  cat > "$SYSROOT/manifest" <<EOF
-toolchain=$TOOLCHAIN_VERSION
-ocaml_version=$OCAML_VERSION
-target=$TARGET
-cflags=$BASE_CFLAGS
-ldflags=$LDFLAGS
-emcc_version=$EMCC_VERSION
-emcc=$EMCC
-host_bin=$HOST_BIN
-EOF
-}
+# write_toolchain: the wrapper scripts and the findlib toolchain of the
+# sysroot (Wrappers), for the ocaml recipe once the runtime is built.
+write_toolchain() { "$OCAML_EMCC_EXE" internal toolchain; }
 
 # ----------------------------------------------------------------- recipes
 
@@ -494,6 +335,5 @@ case "$cmd" in
   describe)     describe_recipe "$1" ;;
   build)        build_recipe "$@" ;;
   releases)     releases_of "$1" ;;
-  toolchain)    write_toolchain ;;
-  *) die "usage: driver.sh describe|build|releases|toolchain ..." ;;
+  *) die "usage: driver.sh describe|build|releases ..." ;;
 esac

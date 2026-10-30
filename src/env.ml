@@ -181,8 +181,4 @@ let manifest key =
            | Some i when String.sub l 0 i = key -> Some (String.sub l (i + 1) (String.length l - i - 1))
            | _ -> None)
 
-(* Version of the wrappers/findlib files written by `driver.sh toolchain`
-   (TOOLCHAIN_VERSION there). *)
-let toolchain_version = "10"
-
 let manifest_flags key = Option.fold ~none:[] ~some:Str_util.words (manifest key)
