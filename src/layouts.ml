@@ -6,7 +6,7 @@
    the structs from a C program: those of the 64-bit host.  wasm32 has other
    sizes (long, size_t, pointers), and both targets another libc than the
    host (musl's struct stat is not glibc's).  So the packages of the program
-   depending on ctypes are rebuilt for the target (driver.sh shadow) into
+   depending on ctypes are rebuilt for the target (Shadow) into
    the sysroot's findlib directory, which the toolchain searches before the
    switch, and the bytecode is built against them. *)
 
@@ -77,7 +77,7 @@ let dep_versions pkg =
   |> String.concat ","
   |> ( ^ ) "deps="
 
-(* "<version> <ok|failed|none> ... [deps=...]" (driver.sh run_shadow, then
+(* "<version> <ok|failed|none> ... [deps=...]" (Shadow.build, then
    [record_deps]): the build of the installed version, against the
    installed versions of its dependencies *)
 let stamp pkg =
@@ -163,7 +163,7 @@ let shadow l =
           | None -> ());
           failed := p :: !failed
       | None ->
-          let ok = Driver.run [ "shadow"; "--force"; p ] = 0 in
+          let ok = try Shadow.build ~force:true p; true with Env.Failed -> false in
           record_deps p;
           if (not ok) || stamp p = Some "failed" then failed := p :: !failed)
     l;

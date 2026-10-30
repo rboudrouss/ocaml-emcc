@@ -70,10 +70,10 @@ let release_files prefix listing =
   let is_v c = (c >= '0' && c <= '9') || c = '.' in
   let is_digit c = c >= '0' && c <= '9' in
   let rec scan acc i =
-    match Str_util.find (String.sub listing i (n - i)) key with
+    match Str_util.find_from listing i key with
     | None -> acc
     | Some k ->
-        let a = i + k + String.length key in
+        let a = k + String.length key in
         let j = ref a in
         while !j < n && is_v listing.[!j] do incr j done;
         (* <version>.tar.<ext>: the version ends with a digit *)

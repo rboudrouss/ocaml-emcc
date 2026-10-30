@@ -97,9 +97,8 @@ let cmd_install args =
 
 (* dune's (ctypes) stanza links its generators natively only, which the wasm
    context cannot (no ocamlopt, ocaml/dune#13650): a project using it is
-   built by a patched dune (driver.sh patched_dune). *)
-let patched_dune =
-  lazy (match Driver.output [ "patched-dune" ] with Some d -> d | None -> Env.fail "could not build the patched dune")
+   built by a patched dune (Stubs.patched_dune). *)
+let patched_dune = lazy (Stubs.patched_dune ())
 
 let uses_ctypes_stanza root =
   match Compat.read_file (Filename.concat root "dune-project") with
@@ -402,12 +401,14 @@ let cmd_internal = function
   | [ "fetch-opam-version"; pkg; v; dest ] -> if not (Source.opam_version pkg v dest) then exit 1
   | "host-version" :: pc :: header :: macros -> (
       match Source.host_version pc header macros with Some v -> print_endline v | None -> exit 1)
+  | [ "dune-stubs"; pkg; provider ] ->
+      if not (Stubs.dune_stubs ~dir:(Sys.getcwd ()) ~provider pkg) then exit 1
   | [ "version-match"; want ] ->
       let lines = String.split_on_char '\n' (Compat.input_all stdin) |> List.filter (( <> ) "") in
       List.iter print_endline (Source.version_match want lines)
   | _ -> die_usage ()
 
-let () =
+let main () =
   let args = global (List.tl (Array.to_list Sys.argv)) in
   (match args with
   | "internal" :: _ ->
@@ -430,3 +431,5 @@ let () =
   | "internal" :: args -> cmd_internal args
   | ("help" | "-h" | "--help") :: _ -> print_string usage
   | _ -> die_usage ()
+
+let () = try main () with Env.Failed -> exit 1

@@ -176,7 +176,7 @@ build() {
   # libraries for `llvm-config --libs`: the LLVM ones that were built
   for a in build/lib/libLLVM*.a; do a=$(basename "$a" .a); libs="$libs -l${a#lib}"; done
   link_flags clang-cpp "${libs# }"
-  # what a package using the recipe links (see system_deps)
+  # what a package using the recipe links (see Stubs.system_deps)
   LINK="-lclang-cpp$libs"
   cat > "$SYSROOT/bin/llvm-config" <<EOF
 #!/bin/sh

@@ -23,9 +23,17 @@ let files dir =
   in
   List.sort compare (walk "")
 
+(* The first 16 hex digits of the SHA-256 of [s] *)
+let checksum s =
+  let tmp = Filename.temp_file "ocaml-emcc" ".sum" in
+  Compat.write_file tmp s;
+  let out = Env.capture "sha256sum" [ tmp ] in
+  Sys.remove tmp;
+  match out with Some s when String.length s >= 16 -> String.sub s 0 16 | _ -> Env.fail "sha256sum failed"
+
 (* Checksum of every recipe named [name] along the path (a recipe may
    include the next one): its recipe.sh, then its other files (patches...).
-   The first 16 hex digits of a SHA-256, as recorded in the stamps. *)
+   As recorded in the stamps. *)
 let sum ?(path = Env.recipes_path ()) name =
   let b = Buffer.create 4096 in
   List.iter
@@ -37,13 +45,7 @@ let sum ?(path = Env.recipes_path ()) name =
           (fun f -> if f <> "recipe.sh" then Buffer.add_string b (Compat.read_file (Filename.concat dir f)))
           (files dir)))
     path;
-  let tmp = Filename.temp_file "ocaml-emcc" ".sum" in
-  Compat.write_file tmp (Buffer.contents b);
-  let out = Env.output_of "sha256sum" [ tmp ] in
-  Sys.remove tmp;
-  match out with
-  | Some s when String.length s >= 16 -> String.sub s 0 16
-  | _ -> Env.fail "sha256sum failed"
+  checksum (Buffer.contents b)
 
 (* The value assigned to [var] on a line of [s] starting with VAR=, quotes
    stripped (up to the closing one): LIB_PATTERNS='clang* LLVM*' *)

@@ -5,7 +5,11 @@ let verbose = ref false
 
 let log fmt = Printf.ksprintf (fun s -> Printf.eprintf "\027[1;34m[ocaml-emcc]\027[0m %s\n%!" s) fmt
 
-let fail fmt = Printf.ksprintf (fun s -> Printf.eprintf "\027[1;31m[ocaml-emcc]\027[0m %s\n%!" s; exit 1) fmt
+(* Raised by [fail], once the message is shown: the CLI exits with 1, a
+   caller may carry on (Layouts.shadow) *)
+exception Failed
+
+let fail fmt = Printf.ksprintf (fun s -> Printf.eprintf "\027[1;31m[ocaml-emcc]\027[0m %s\n%!" s; raise Failed) fmt
 
 let getenv_opt v = match Sys.getenv_opt v with Some "" | None -> None | s -> s
 
@@ -21,10 +25,25 @@ let merged_env = function
 
 (* [out]: where its stdout goes (stderr for commands whose own stdout is a
    result) *)
-let run ?env ?(out = Unix.stdout) prog args =
+(* [cwd]: the directory it runs in *)
+let spawn ?cwd prog args env inp out err =
+  let here = Sys.getcwd () in
+  Option.iter Sys.chdir cwd;
+  Fun.protect ~finally:(fun () -> Sys.chdir here)
+    (fun () -> Unix.create_process_env prog (Array.of_list (prog :: args)) env inp out err)
+
+let run ?env ?cwd ?(out = Unix.stdout) prog args =
   if !verbose then log "%s" (Compat.quote_command prog args);
   let env = merged_env env in
-  let pid = Unix.create_process_env prog (Array.of_list (prog :: args)) env Unix.stdin out Unix.stderr in
+  let pid = spawn ?cwd prog args env Unix.stdin out Unix.stderr in
+  match snd (Unix.waitpid [] pid) with Unix.WEXITED c -> c | _ -> 255
+
+(* Like [run], its stdout and stderr written to [file] *)
+let run_logged ?env ?cwd file prog args =
+  if !verbose then log "%s > %s" (Compat.quote_command prog args) file;
+  let fd = Unix.openfile file [ Unix.O_WRONLY; Unix.O_CREAT; Unix.O_TRUNC ] 0o644 in
+  let pid = spawn ?cwd prog args (merged_env env) Unix.stdin fd fd in
+  Unix.close fd;
   match snd (Unix.waitpid [] pid) with Unix.WEXITED c -> c | _ -> 255
 
 (* Like [run], stderr captured (and returned) instead of shown. *)
@@ -39,8 +58,8 @@ let run_capture_stderr ?env prog args =
   Sys.remove tmp;
   (code, err)
 
-let run_exn ?env ?out prog args =
-  let c = run ?env ?out prog args in
+let run_exn ?env ?cwd ?out prog args =
+  let c = run ?env ?cwd ?out prog args in
   if c <> 0 then fail "command failed (exit %d): %s" c (Compat.quote_command prog args)
 
 let output_of prog args =
@@ -50,15 +69,16 @@ let output_of prog args =
   | Unix.WEXITED 0 -> Some (String.trim s)
   | _ -> None
 
-(* stdout of a command if it succeeds, its stderr discarded *)
-let capture ?env prog args =
+(* stdout of a command if it succeeds, its stderr discarded unless
+   [errors] *)
+let capture ?env ?cwd ?(errors = false) prog args =
   if !verbose then log "%s" (Compat.quote_command prog args);
   let tmp = Filename.temp_file "ocaml-emcc" ".out" in
   let fd = Unix.openfile tmp [ Unix.O_WRONLY; Unix.O_TRUNC ] 0o600 in
-  let null = Unix.openfile "/dev/null" [ Unix.O_WRONLY ] 0 in
-  let pid = Unix.create_process_env prog (Array.of_list (prog :: args)) (merged_env env) Unix.stdin fd null in
+  let err = if errors then Unix.stderr else Unix.openfile "/dev/null" [ Unix.O_WRONLY ] 0 in
+  let pid = spawn ?cwd prog args (merged_env env) Unix.stdin fd err in
   Unix.close fd;
-  Unix.close null;
+  if not errors then Unix.close err;
   let code = match snd (Unix.waitpid [] pid) with Unix.WEXITED c -> c | _ -> 255 in
   let out = Compat.read_file tmp in
   Sys.remove tmp;

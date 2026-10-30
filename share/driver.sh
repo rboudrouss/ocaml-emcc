@@ -7,17 +7,7 @@
 #                                            dependencies built and its
 #                                            sources fetched
 #   driver.sh releases <recipe>             its `releases` function
-#   driver.sh install-dune [--force] <opam-package>
-#                                            rebuild the C stubs of a dune
-#                                            package with the wasm32 toolchain
-#   driver.sh shadow [--force] <opam-package>...
-#                                            its OCaml libraries built for the
-#                                            target (ctypes: C layouts)
-#   driver.sh patched-dune                   path of a dune building the
-#                                            (ctypes) stanza for the target
-#   driver.sh auto [--force] <opam-package> <lib-name>
-#                                            compile every OCaml stub file of
-#                                            a package into lib<lib-name>.a
+#   driver.sh toolchain                     the toolchain's wrapper scripts
 #
 # Environment (set by the `ocaml-emcc` CLI):
 #   OCAML_EMCC_SHARE         share directory (recipes/, tools/, runtime/)
@@ -107,19 +97,10 @@ ocaml_version_ge() { # ocaml_version_ge 4 14
   [ "$OCAML_MAJOR" -gt "$1" ] || { [ "$OCAML_MAJOR" -eq "$1" ] && [ "$OCAML_MINOR" -ge "$2" ]; }
 }
 
-# Installed version of an opam package in the switch.
-opam_pkg_version() {
-  local d
-  for d in "$PREFIX/.opam-switch/packages/$1".*; do
-    [ -d "$d" ] && { basename "$d" | sed "s/^$1\.//"; return 0; }
-  done
-  return 1
-}
-
 # ----------------------------------------------------------------- sources
 #
 # The sources of a recipe are fetched by the CLI (Source), before `build`.
-# These helpers, for recipes and the code below, run it.
+# These helpers, for recipes, run it.
 
 # fetch_opam_source <pkg> <dest>: copy the sources of an installed package
 # (opam's kept build dir, else `opam source`).
@@ -194,26 +175,6 @@ record_use_flags() {
     # shellcheck disable=SC2086
     printf '%s\n' $flags | { grep -vx -- "-l$l" || true; } | paste -sd' ' - > "$SYSROOT/meta/$l.link"
   done
-}
-
-# The system libraries <pkg> uses for which a recipe exists (Syslib.recipes)
-system_recipes_of() { "$OCAML_EMCC_EXE" internal system-recipes "$1"; }
-
-# The C flags of the system recipes <pkg> uses (once built).
-system_cflags() {
-  local r
-  for r in $(system_recipes_of "$1"); do cat "$SYSROOT/meta/$r.usecflags" 2>/dev/null || true; done | paste -sd' ' -
-}
-
-# Build the system recipes <pkg> needs; prints the link flags they require.
-system_deps() {
-  local r flags=
-  for r in $(system_recipes_of "$1"); do
-    log "$1 uses the system library $r: building the $r recipe"
-    run_recipe "$r" >&2 || die "$1: the $r recipe failed"
-    flags="$flags $(cat "$SYSROOT/meta/$r.uselink" 2>/dev/null)"
-  done
-  echo "$flags"
 }
 
 # ----------------------------------------------------------------- helpers
@@ -469,17 +430,6 @@ EOF
 
 # ----------------------------------------------------------------- recipes
 
-FORCE=no
-
-# run_recipe <name>: build the recipe unless its stamp says it is built
-# (Recipe.install).  Its dependencies are built first.
-run_recipe() {
-  local force=
-  [ "$FORCE" = no ] || force=--force
-  # shellcheck disable=SC2086
-  "$OCAML_EMCC_EXE" internal install $force "$1"
-}
-
 # The variables a recipe may set, and the functions it may define.
 RECIPE_VARS="SOURCE SHA256 REF DEPENDS HEADER VERSION_MACROS PKGCONFIG RELEASES TARBALL COMPAT OPAM_SOURCES LINK LIB_PATTERNS USE_CFLAGS"
 
@@ -533,314 +483,17 @@ build_recipe() {
 # releases <name>: the output of the recipe's `releases` function
 releases_of() { ( load_recipe "$1"; releases ) }
 
-# Rebuild a dune package's foreign stubs with `dune build -x wasm32`.
-run_dune_package() {
-  local pkg=$1 stamp=$SYSROOT/stamps/dune-$1 work=$SYSROOT/build/dune-$1
-  if [ "$FORCE" = no ] && [ -f "$stamp" ] && [ "$(cut -d' ' -f1 "$stamp")" = "$(opam_pkg_version "$pkg")" ]; then return 0; fi
-  rm -rf "$work"
-  fetch_opam_source "$pkg" "$work"
-  ( cd "$work" && dune_stubs "$pkg" "dune-$pkg" ) || die "$pkg: no C archive built"
-  echo "$SOURCE_VERSION emcc-$EMCC_VERSION" > "$stamp"
-}
-
-# patched_dune: a dune whose (ctypes) stanza links its generators as custom
-# bytecode in a context without ocamlopt, as dune does for ppx drivers and
-# cinaps (tools/dune/*.patch); the stock one links them natively only
-# (ocaml/dune#13650), which the target's toolchain cannot.  Built from the
-# sources of the switch's dune, once per version and patch; prints its path.
-patched_dune() {
-  local ver sum bin=$SYSROOT/libexec/dune stamp=$SYSROOT/stamps/patched-dune work=$SYSROOT/build/patched-dune
-  ver=$(opam_pkg_version dune) || die "dune is not installed in $PREFIX"
-  sum=$(cat "$OCAML_EMCC_SHARE"/tools/dune/*.patch | sha256sum | cut -c1-16)
-  if [ -x "$bin" ] && [ "$(cat "$stamp" 2>/dev/null)" = "$ver patch=$sum" ]; then echo "$bin"; return 0; fi
-  rm -rf "$work"
-  fetch_opam_source dune "$work"
-  log "building dune $ver, its (ctypes) stanza patched for the target's toolchain"
-  ( cd "$work" && rm -rf _build _boot && apply_patches "$OCAML_EMCC_SHARE/tools/dune" \
-      && PATH=$HOST_BIN:$PATH make release > build.log 2>&1 ) \
-    || { tail -n 20 "$work/build.log" >&2 2>/dev/null; die "could not build the patched dune (log: $work/build.log)"; }
-  mkdir -p "$(dirname "$bin")"
-  cp "$work/_build/install/default/bin/dune" "$bin"
-  echo "$ver patch=$sum" > "$stamp"
-  rm -rf "$work"
-  echo "$bin"
-}
-
-# dune_for <dir>: the dune that builds the package in <dir>, patched_dune's
-# if it uses the (ctypes) stanza.
-dune_for() {
-  if grep -rqE '\(using[[:space:]]+ctypes' --include=dune-project --exclude-dir='_build*' "$1"; then patched_dune
-  else echo "$HOST_BIN/dune"; fi
-}
-
-# shadow <opam-package>: the OCaml libraries of a package, built for the
-# target and installed in $SYSROOT/lib/findlib, which the toolchain searches
-# before the switch.  For ctypes and its users: ctypes lays C types out with
-# the sizes it generated when it was built (ctypes_primitives.ml), and
-# bindings generating their type descriptions (Cstubs_structs, dune's
-# (ctypes) stanza) print the offsets of the structs from a C program: on the
-# host, those of LP64.  The build has a single context on the target's
-# toolchain, without the host context of `dune -x`, whose executables dune
-# would run instead: OCaml generators are bytecode run by the host ocamlrun
-# (with the host's stub DLLs), C ones are compiled by emcc and run by node
-# (see write_toolchain), dune-configurator gets the target's answers.
-# The stamp records the package version and the outcome: ok (installed),
-# failed (it lays C types out when built, and could not be rebuilt), none
-# (it does not: the host's build is kept).  Rebuilt when the package
-# changes version.
-run_shadow() {
-  local pkg=$1 stamp=$SYSROOT/stamps/shadow-$1 work=$SYSROOT/build/shadow-$1 dirs=$SYSROOT/meta/shadow-$1.dirs
-  local ver status layouts=no d dune
-  ver=$(opam_pkg_version "$pkg") || die "$pkg is not installed in $PREFIX"
-  if [ "$FORCE" = no ] && [ -f "$stamp" ] && [ "$(cut -d' ' -f1 "$stamp")" = "$ver" ]; then return 0; fi
-  # the libraries of the previous version
-  if [ -f "$dirs" ]; then
-    while IFS= read -r d; do [ -n "$d" ] && rm -rf "${SYSROOT:?}/lib/findlib/$d"; done < "$dirs"
-    rm -f "$dirs"
-  fi
-  rm -rf "$work"
-  fetch_opam_source "$pkg" "$work"
-  # generated type descriptions, with structs or unions (`seal`): zstd's
-  # only have constants
-  if grep -rqE 'Cstubs_structs|Cstubs\.Types|type_description' --include='*.ml' --include=dune --exclude-dir='_build*' "$work" 2>/dev/null \
-     && grep -rqw seal --include='*.ml' --exclude-dir='_build*' "$work" 2>/dev/null; then
-    layouts=yes
-  fi
-  status=none; [ $layouts = yes ] && status=failed
-  if [ -f "$work/dune-project" ]; then
-    dune=$(dune_for "$work")
-    FORCE=no system_deps "$pkg" >/dev/null
-    log "building the OCaml libraries of $pkg for $TARGET (C layouts of $TARGET)"
-    printf '(lang dune 3.0)\n(context (default (name default.%s) (toolchain %s)))\n' "$TARGET" "$TARGET" > "$work/.ocaml-emcc-workspace"
-    if ( cd "$work" && PATH=$SYSROOT/bin/path:$PATH OCAMLFIND_CONF=$SYSROOT/findlib.conf \
-           CAML_LD_LIBRARY_PATH=$PREFIX/lib/stublibs:$PREFIX/lib/ocaml/stublibs \
-           "$dune" build --build-dir _build.ocaml-emcc --workspace .ocaml-emcc-workspace \
-             -p "$pkg" @install > ocaml-emcc-build.log 2>&1 ) \
-       && find "$work/_build.ocaml-emcc/install/default.$TARGET/lib" -name '*.cmi' -print -quit | grep -q .; then
-      mkdir -p "$SYSROOT/lib/findlib"
-      for d in "$work/_build.ocaml-emcc/install/default.$TARGET/lib"/*; do
-        # (dune -p of a package that another build system builds installs
-        # an empty library: hacl-star-raw, built by make next to hacl-star)
-        [ -d "$d" ] && [ "$(basename "$d")" != stublibs ] || continue
-        find "$d" -name '*.cmi' -print -quit | grep -q . || continue
-        rm -rf "$SYSROOT/lib/findlib/$(basename "$d")"
-        cp -rL "$d" "$SYSROOT/lib/findlib/"
-        basename "$d" >> "$dirs"
-        log "  $SYSROOT/lib/findlib/$(basename "$d")"
-      done
-      status=ok
-    elif [ $layouts = yes ]; then
-      tail -n 30 "$work/ocaml-emcc-build.log" >&2
-      log "$pkg: could not be built for $TARGET (log: $work/ocaml-emcc-build.log)"
-    else
-      log "  not built for $TARGET, which it does not need: no structs in its generated types"
-    fi
-  fi
-  echo "$ver $status emcc-$EMCC_VERSION" > "$stamp"
-}
-
 # dune_stubs <opam-package> [<provider>]: in the sources of a dune package
 # (the current directory), build its stub archives with `dune build -x` and
-# install them, with the link flags of the system libraries it uses.  Also
-# for recipes that patch a package before (`SOURCE=opam:PKG`, see
-# mirage-crypto).
-dune_stubs() {
-  local pkg=$1 provider=${2:-$RECIPE_NAME}
-  [ -f "$SYSROOT/findlib.conf.d/$TARGET.conf" ] || run_recipe ocaml
-  local sysflags
-  sysflags=$(system_deps "$pkg")
-  log "building the C stubs of $pkg with dune -x $TARGET"
-  # The kept _build may be another tool's (lmdb is built with ocamlbuild,
-  # whose _build/install is a file): dune gets its own then.
-  DUNE_BDIR=_build
-  if [ -e _build ] && ! [ -d _build/default ] && ! [ -e _build/.lock ]; then DUNE_BDIR=_build.dune; fi
-  local a l found=no archives dune
-  dune=$(dune_for .)
-  if PATH=$SYSROOT/bin/path:$PATH OCAMLFIND_CONF=$SYSROOT/findlib.conf \
-       "$dune" build --build-dir "$DUNE_BDIR" -x "$TARGET" -p "$pkg" @install >&2; then
-    archives=$(find "$DUNE_BDIR/default.$TARGET" -name 'lib*.a' ! -path '*/.*')
-    # Archives made by a rule of the package with its own build system
-    # (ocaml-lua: `make` in the vendored Lua) hold host objects.  Those of
-    # stubs (with their dllX.so) are rebuilt, the others were intermediate.
-    local host= wasm= b
-    while IFS= read -r a; do
-      [ -n "$a" ] || continue
-      if wasm_archive "$a"; then wasm="$wasm$a"$'\n'; continue; fi
-      b=$(basename "$a" .a)
-      if [ -f "$(dirname "$a")/dll${b#lib}.so" ]; then host="$host $b.a"
-      else log "  $b.a: host objects, not a stub archive: ignored"; fi
-    done <<< "$archives"
-    archives=$wasm
-    if [ -n "$host" ]; then
-      log "host objects in${host}: compiling the C files of the native build instead"
-      # shellcheck disable=SC2086
-      archives="$archives$(dune_native_stubs "$pkg" $host)"
-    fi
-  else
-    log "dune -x $TARGET failed: compiling the C files of the native build instead"
-    archives=$(dune_native_stubs "$pkg")
-  fi
-  while IFS= read -r a; do
-    [ -n "$a" ] || continue
-    l=$(basename "$a" .a | sed 's/^lib//')
-    install_lib "$a"; provides "$provider" "$l"; found=yes
-    [ -z "${sysflags// }" ] || link_flags "$l" "${sysflags# }"
-    log "  $(basename "$a")"
-  done <<< "$archives"
-  [ $found = yes ] || { log "  (no C archive produced)"; return 1; }
-}
-
-# Fallback of run_dune_package, for what dune cannot cross-compile, and for
-# the archives of `dune -x` holding host objects (see dune_stubs).  Each
-# stub archive of the native build ($DUNE_BDIR/default, see dune_stubs; kept
-# by OPAMKEEPBUILDDIR, else built here) is rebuilt with emcc from the C
-# files behind its members: hand-written stubs, vendored C, and the C that
-# ctypes generated (architecture independent).  The stubs' own C flags are
-# not known: only -I flags are given (the file's directory and its source
-# directory, the headers of the opam packages it depends on, those of the
-# system recipes).
-#   dune_native_stubs <pkg> [<libX.a>...]   (default: every archive)
-# Prints the wasm archives.
-dune_native_stubs() {
-  local pkg=$1 nat=${DUNE_BDIR:-_build}/default ver a dir m c incs= dep objs only
-  shift; only=" $* "
-  # (dune -x also makes _build/default, with only what the target needs)
-  local missing=no x
-  [ -d "$nat" ] || missing=yes
-  for x in "$@"; do [ -n "$(find "$nat" -name "$x" 2>/dev/null | head -1)" ] || missing=yes; done
-  if [ $# -eq 0 ] && [ -z "$(find "$nat" -name 'lib*.a' 2>/dev/null | head -1)" ]; then missing=yes; fi
-  if [ $missing = yes ]; then
-    log "no native build kept for $pkg: building it"
-    "$HOST_BIN/dune" build --build-dir "${DUNE_BDIR:-_build}" -p "$pkg" @install >&2 || die "$pkg: native build failed"
-  fi
-  ver=$(opam_pkg_version "$pkg")
-  for dep in $(grep -oE '"[a-z0-9_-]+"' "$PREFIX/.opam-switch/packages/$pkg.$ver/opam" 2>/dev/null | tr -d '"' | sort -u); do
-    [ "$dep" != ocaml ] && compgen -G "$PREFIX/lib/$dep/*.h" >/dev/null && incs="$incs -I$PREFIX/lib/$dep"
-  done
-  incs="$incs $(system_cflags "$pkg")"
-  mkdir -p _wasm_stubs
-  while IFS= read -r a; do
-    [ "$only" = "  " ] || [[ "$only" == *" $(basename "$a") "* ]] || continue
-    dir=$(dirname "$a"); objs=()
-    for m in $(ar t "$a"); do
-      c=$dir/${m%.o}.c
-      # (include_subdirs): the sources are in subdirectories
-      [ -f "$c" ] || c=$(find "$dir" -name "${m%.o}.c" ! -path '*/.*' | head -1)
-      [ -f "$c" ] || die "$pkg: no C source for $m (in $a)"
-      # shellcheck disable=SC2086
-      stub_cc "$c" -I"$(dirname "$c")" -I"$dir" -I"${dir#"$nat"/}" $incs >&2 || die "$pkg: cannot compile $c"
-      objs+=("$PWD/${c%.c}.o")
-    done
-    ( cd _wasm_stubs && mklib "$(basename "$a" .a | sed 's/^lib//')" "${objs[@]}" )
-    echo "_wasm_stubs/$(basename "$a")"
-  done < <(find "$nat" -name 'lib*.a' ! -path '*/.*')
-}
-
-# wasm_archive <lib.a>: whether its (first) object is a wasm one.
-wasm_archive() {
-  local m
-  # (sed reads all of it: ar killed by SIGPIPE would fail the pipeline)
-  m=$(ar t "$1" 2>/dev/null | grep '\.o$' | sed -n 1p) || return 0
-  [ "$(ar p "$1" "$m" | head -c 4 | od -An -tx1 | tr -d ' \n')" = 0061736d ]
-}
-
-# Last resort for packages with neither a recipe nor dune.  If the kept
-# native build has lib<libname>.a, the C files behind its members are
-# compiled (glpk: with oldapi/lpx.c, which does not include the OCaml
-# headers); otherwise every C file that includes the OCaml headers.
-# dep_includes <pkg>: -I flags for the lib/<dep> directories of the
-# installed opam dependencies of <pkg>, where packages install the C
-# headers of their stubs (integers: ocaml_integers.h, which ctypes's
-# include).
-dep_includes() {
-  local ver d
-  ver=$(opam_pkg_version "$1") || return 0
-  for d in $(awk '/^depends: \[/ { on = 1; next } on && /^\]/ { exit }
-                  on { while (match($0, /"[^"]+"/)) { print substr($0, RSTART + 1, RLENGTH - 2); $0 = substr($0, RSTART + RLENGTH) } }' \
-               "$PREFIX/.opam-switch/packages/$1.$ver/opam" 2>/dev/null | sort -u); do
-    # (not ocaml: those of the host's runtime)
-    case $d in ocaml|dune) continue ;; esac
-    if [ -d "$PREFIX/lib/$d" ]; then echo "-I$PREFIX/lib/$d"; fi
-  done
-}
-
-run_auto() {
-  local pkg=$1 lib=$2 stamp=$SYSROOT/stamps/auto-$1-$2 work=$SYSROOT/build/auto-$1
-  if [ "$FORCE" = no ] && [ -f "$stamp" ] && [ "$(cut -d' ' -f1 "$stamp")" = "$(opam_pkg_version "$pkg")" ]; then return 0; fi
-  local sysflags syscflags
-  sysflags=$(system_deps "$pkg")
-  syscflags="$(system_cflags "$pkg") $(dep_includes "$pkg" | tr '\n' ' ')"
-  rm -rf "$work"
-  fetch_opam_source "$pkg" "$work"
-  cd "$work"
-  local files= objs=() f native
-  native=$(find . -name "lib$lib.a" | head -1)
-  if [ -n "$native" ] && files=$(archive_sources "$native"); then
-    log "  the C files of the native lib$lib.a"
-  else
-    # _build: the copies of the sources in the kept native build (ocamlbuild,
-    # topkg), only used when the stubs are nowhere else (generated)
-    files=$(grep -rlE '#include *[<"]caml/' --include='*.c' --exclude-dir=_build . || true)
-    [ -n "$files" ] || files=$(grep -rlE '#include *[<"]caml/' --include='*.c' . || true)
-  fi
-  [ -n "$files" ] || die "$pkg: no OCaml stub found"
-  for f in $files; do
-    log "  emcc $f"
-    # shellcheck disable=SC2086
-    stub_cc "$f" -I"$(dirname "$f")" -I"$(dirname "${native:-.}")" $syscflags || die "$pkg: cannot compile $f"
-    objs+=("${f%.c}.o")
-  done
-  mklib "$lib" "${objs[@]}"
-  install_lib "lib$lib.a"
-  provides "auto-$pkg" "$lib"
-  [ -z "${sysflags// }" ] || link_flags "$lib" "${sysflags# }"
-  echo "$SOURCE_VERSION emcc-$EMCC_VERSION" > "$stamp"
-}
-
-# archive_sources <lib.a>: the C file of each member of a host archive, the
-# one outside _build first; fails if one has none.
-archive_sources() {
-  local m c
-  for m in $(ar t "$1" 2>/dev/null | grep '\.o$'); do
-    c=$(find . -name "${m%.o}.c" ! -path '*/_build/*' | head -1)
-    [ -n "$c" ] || c=$(find . -name "${m%.o}.c" | head -1)
-    [ -n "$c" ] || return 1
-    echo "$c"
-  done
-}
-
-# obtain <opam-package> <lib-name>: get lib<lib-name>.a by the best available
-# means: a recipe named after the package (level 3), the package's own dune
-# rules (level 1), or blind compilation of its stubs (level 2 fallback).
-run_obtain() {
-  local pkg=$1 lib=$2 r
-  # A recipe named after the package, unless it is a system library recipe:
-  # the opam package `zlib` is the OCaml binding, not the C library.
-  # (built again if it was: the library is missing, or built for another
-  # version of the package)
-  if r=$(find_recipe "$pkg") && ! grep -q '^SOURCE=system:' "$r/recipe.sh"; then
-    FORCE=yes run_recipe "$pkg"; return
-  fi
-  local probe=$SYSROOT/build/probe-$pkg
-  rm -rf "$probe"; fetch_opam_source "$pkg" "$probe"
-  if [ -f "$probe/dune-project" ]; then
-    rm -rf "$probe"; run_dune_package "$pkg"
-  else
-    rm -rf "$probe"; run_auto "$pkg" "$lib"
-  fi
-}
+# install them (Stubs.dune_stubs).  For recipes that patch a package before
+# (`SOURCE=opam:PKG`, see mirage-crypto).
+dune_stubs() { "$OCAML_EMCC_EXE" internal dune-stubs "$1" "${2:-$RECIPE_NAME}"; }
 
 cmd=${1:-}; shift || true
-if [ "${1:-}" = --force ]; then FORCE=yes; shift; fi
 case "$cmd" in
   describe)     describe_recipe "$1" ;;
   build)        build_recipe "$@" ;;
   releases)     releases_of "$1" ;;
-  install-dune) run_dune_package "$1" ;;
-  shadow)       for p in "$@"; do run_shadow "$p"; done ;;
-  patched-dune) patched_dune ;;
-  auto)         run_auto "$1" "$2" ;;
-  obtain)       run_obtain "$1" "$2" ;;
   toolchain)    write_toolchain ;;
-  *) die "usage: driver.sh describe|build|install-dune|shadow|patched-dune|auto|obtain|toolchain ..." ;;
+  *) die "usage: driver.sh describe|build|releases|toolchain ..." ;;
 esac

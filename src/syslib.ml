@@ -6,10 +6,10 @@ let conf_packages opam =
   let n = String.length opam in
   let ok c = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c = '_' || c = '-' in
   let rec go acc i =
-    match Str_util.find (String.sub opam i (n - i)) "\"conf-" with
+    match Str_util.find_from opam i "\"conf-" with
     | None -> acc
     | Some k ->
-        let a = i + k + 1 in
+        let a = k + 1 in
         let j = ref (a + 5) in
         while !j < n && ok opam.[!j] do incr j done;
         let acc = if !j < n && opam.[!j] = '"' && !j > a + 5 then String.sub opam a (!j - a) :: acc else acc in
