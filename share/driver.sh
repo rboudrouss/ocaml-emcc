@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Recipe driver for ocaml-emcc: reads recipes and runs their `build`.  The
 # CLI decides what to build (stamps, DEPENDS) and fetches the sources
-# (src/recipe.ml, src/source.ml).
+# (src/recipes/).
 #
 #   driver.sh describe <recipe>             the variables of a recipe
 #   driver.sh build <recipe> <result> [<version>]
