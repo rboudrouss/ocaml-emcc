@@ -24,7 +24,8 @@
 #   OCAML_EMCC_SWITCH_PREFIX opam switch prefix providing the host compiler
 #   OCAML_EMCC_SYSROOT       where wasm artifacts are installed
 #   OCAML_EMCC_TARGET        wasm32 (default) or wasm64
-#   OCAML_EMCC_OPT           optimisation flag for C code (default -O2)
+#   OCAML_EMCC_BASE_CFLAGS, OCAML_EMCC_TARGET_FLAGS, OCAML_EMCC_STUB_STD
+#                            C flags (see Toolchain)
 #   OCAML_EMCC_RECIPES_PATH  extra ':'-separated recipe directories (optional,
 #                            searched before the builtin ones)
 #   OCAML_EMCC_EXTRA_CFLAGS  extra C flags for recipes (optional)
@@ -51,7 +52,8 @@
 
 set -euo pipefail
 
-: "${OCAML_EMCC_SHARE:?}" "${OCAML_EMCC_SWITCH_PREFIX:?}" "${OCAML_EMCC_SYSROOT:?}" "${OCAML_EMCC_EXE:?}"
+: "${OCAML_EMCC_SHARE:?}" "${OCAML_EMCC_SWITCH_PREFIX:?}" "${OCAML_EMCC_SYSROOT:?}" "${OCAML_EMCC_EXE:?}" \
+  "${OCAML_EMCC_BASE_CFLAGS:?}" "${OCAML_EMCC_TARGET_FLAGS:?}"
 
 SYSROOT=$OCAML_EMCC_SYSROOT
 PREFIX=$OCAML_EMCC_SWITCH_PREFIX
@@ -72,43 +74,17 @@ OCAML_INC=$SYSROOT/lib/ocaml
 NPROC=$(nproc 2>/dev/null || echo 2)
 RECIPES_PATH="${OCAML_EMCC_RECIPES_PATH:+$OCAML_EMCC_RECIPES_PATH:}$OCAML_EMCC_SHARE/recipes"
 
-# Target.  wasm32 runs the host's 64-bit bytecode with 31-bit ints; wasm64
-# (memory64) matches its semantics exactly (see README).
 TARGET=${OCAML_EMCC_TARGET:-wasm32}
-case "$TARGET" in
-  wasm64) TARGET_FLAGS="-m64" ;;
-  wasm32) TARGET_FLAGS="" ;;
-  *) echo "ocaml-emcc: unknown target $TARGET" >&2; exit 1 ;;
-esac
-# Every piece of C code (runtime, stubs, C libraries) must agree on these.
-#  -fno-strict-overflow  pointer arithmetic may wrap: stops LLVM from folding
-#                        negative offsets (Tag_val, Hd_val: p[-8]) into the
-#                        unsigned offset of wasm64 loads, which traps.
-#  -sSUPPORT_LONGJMP=wasm  OCaml raises exceptions from C with longjmp; the
-#                        wasm EH implementation avoids routing every call made
-#                        by the interpreter through JS invoke_* trampolines.
-#  -fwasm-exceptions     C++ exceptions with the same wasm EH instructions
-#                        (minisat); emscripten's JS ones cannot be thrown
-#                        with SUPPORT_LONGJMP=wasm.  No effect on C code.
-TARGET_FLAGS="$TARGET_FLAGS -fno-strict-overflow -sSUPPORT_LONGJMP=wasm -fwasm-exceptions"
-OPT=${OCAML_EMCC_OPT:--O2}
-# BASE_CFLAGS is what the toolchain wrappers and the link step record; extra
-# flags are added on top at each use (recipes here, stubs in tools/ocamlc).
-BASE_CFLAGS="$OPT -fno-strict-aliasing -fwrapv $TARGET_FLAGS"
+# The flags every piece of C code agrees on (Toolchain).  BASE_CFLAGS is what
+# the toolchain wrappers and the link step record; extra flags are added on
+# top at each use (recipes here, stubs in tools/ocamlc).
+TARGET_FLAGS=$OCAML_EMCC_TARGET_FLAGS
+BASE_CFLAGS=$OCAML_EMCC_BASE_CFLAGS
 export CFLAGS="$BASE_CFLAGS ${OCAML_EMCC_EXTRA_CFLAGS:-}"
 export CXXFLAGS="$CFLAGS"
 export LDFLAGS="$TARGET_FLAGS"
-# The C standard of the host compiler, when newer than emcc's default
-# (gnu17): stub sources generated at build time follow it (ctypes writes
-# `bool`, a keyword only since C23, the default of gcc >= 15).
-host_c_std() {
-  local cc v
-  cc=$("$HOST_BIN/ocamlc" -config-var c_compiler 2>/dev/null) || cc=cc
-  # shellcheck disable=SC2086
-  v=$(printf '__STDC_VERSION__\n' | $cc -x c -E -P - 2>/dev/null | tr -dc 0-9)
-  if [ "${v:-0}" -ge 202311 ]; then echo -std=gnu23; fi
-}
-STUB_STD=$(host_c_std)
+# the C standard of the host compiler, when newer than emcc's default
+STUB_STD=$OCAML_EMCC_STUB_STD
 # Flags to compile OCaml stubs against the wasm32 runtime headers.
 STUB_CFLAGS="$CFLAGS $STUB_STD -I$OCAML_INC -I$SYSROOT/include -D_FILE_OFFSET_BITS=64"
 

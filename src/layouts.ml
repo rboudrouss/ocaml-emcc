@@ -163,7 +163,7 @@ let shadow l =
           | None -> ());
           failed := p :: !failed
       | None ->
-          let ok = Env.driver [ "shadow"; "--force"; p ] = 0 in
+          let ok = Driver.run [ "shadow"; "--force"; p ] = 0 in
           record_deps p;
           if (not ok) || stamp p = Some "failed" then failed := p :: !failed)
     l;

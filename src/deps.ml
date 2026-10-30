@@ -111,7 +111,7 @@ let stale name f =
    since): the runtime is built again. *)
 let obtain pkg name =
   if pkg = "ocaml" then Recipe.install ~force:(Stamp.read "ocaml" <> None) "ocaml"
-  else if Env.driver [ "obtain"; pkg; name ] <> 0 then Env.fail "could not build lib%s.a (package %s)" name pkg
+  else if Driver.run [ "obtain"; pkg; name ] <> 0 then Env.fail "could not build lib%s.a (package %s)" name pkg
 
 (* The recipe of the C library lib<name>.a (-lgmp, -lz...), if any. *)
 let lib_recipe name = Recipe.lib_recipe name

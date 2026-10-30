@@ -74,7 +74,7 @@ let ensure_setup () =
     Recipe.install "ocaml")
   else if Env.manifest "toolchain" <> Some Env.toolchain_version then (
     Env.log "updating the toolchain wrappers of %s" (Env.sysroot ());
-    if Env.driver [ "toolchain" ] <> 0 then Env.fail "toolchain update failed")
+    if Driver.run [ "toolchain" ] <> 0 then Env.fail "toolchain update failed")
 
 (* `requires:` of ocaml-emcc.conf (no-op once built: recipes are stamped) *)
 let ensure_requires () =
@@ -99,7 +99,7 @@ let cmd_install args =
    context cannot (no ocamlopt, ocaml/dune#13650): a project using it is
    built by a patched dune (driver.sh patched_dune). *)
 let patched_dune =
-  lazy (match Env.driver_output [ "patched-dune" ] with Some d -> d | None -> Env.fail "could not build the patched dune")
+  lazy (match Driver.output [ "patched-dune" ] with Some d -> d | None -> Env.fail "could not build the patched dune")
 
 let uses_ctypes_stanza root =
   match Compat.read_file (Filename.concat root "dune-project") with
@@ -118,7 +118,7 @@ let dune_env () =
   ("OCAMLFIND_CONF=" ^ Env.sysroot_file "findlib.conf")
   :: List.map
        (fun kv -> if Str_util.starts_with ~prefix:"PATH=" kv then "PATH=" ^ bin_path ^ ":" ^ String.sub kv 5 (String.length kv - 5) else kv)
-       (Env.driver_env ())
+       (Driver.env ())
 
 let ctx_dir () = "_build/default." ^ !Env.target
 

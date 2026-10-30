@@ -104,7 +104,7 @@ let lib_recipe ?(path = Env.recipes_path ()) x =
 (* The variables of the recipe [name] (driver.sh describe): SOURCE,
    DEPENDS, LINK... *)
 let describe name =
-  match Env.driver_output [ "describe"; name ] with
+  match Driver.output [ "describe"; name ] with
   | None -> Env.fail "could not read the %s recipe" name
   | Some out ->
       String.split_on_char '\000' out
@@ -172,7 +172,7 @@ let fetch vars name work =
   | "system" ->
       let releases =
         if List.mem "releases" (Str_util.words (var "FUNCTIONS")) then
-          match Env.driver_output [ "releases"; name ] with
+          match Driver.output [ "releases"; name ] with
           | Some out -> Some (List.filter (( <> ) "") (String.split_on_char '\n' out))
           | None -> Env.fail "%s: its releases function failed" name
         else None
@@ -199,7 +199,7 @@ let rec install ?(force = false) name =
       Source.sh "mkdir" [ "-p"; Filename.dirname work ];
       let version = fetch vars name work in
       let result = Filename.temp_file "ocaml-emcc" ".result" in
-      let code = Env.driver ([ "build"; name; result ] @ Option.to_list version) in
+      let code = Driver.run ([ "build"; name; result ] @ Option.to_list version) in
       let lines = String.split_on_char '\n' (Compat.read_file result) in
       Sys.remove result;
       if code <> 0 then Env.fail "the %s recipe failed" name;
