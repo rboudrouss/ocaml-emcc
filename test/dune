@@ -1,0 +1,3 @@
+(test
+ (name main)
+ (libraries ocaml_emcc unix))

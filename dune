@@ -1,4 +1,4 @@
-(dirs bin src share)
+(dirs bin src share test)
 
 (install
  (section share)
