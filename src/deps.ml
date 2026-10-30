@@ -64,16 +64,7 @@ let find_lib dirs name =
   Compat.find_map (fun d -> let f = lib_file d name in if Sys.file_exists f then Some f else None) dirs
 
 (* opam package that installed lib/stublibs/dll<name>.so *)
-let owner_of_dll name =
-  let dir = Filename.concat (Lazy.force Env.switch_prefix) ".opam-switch/install" in
-  let needle = Printf.sprintf "\"lib/stublibs/dll%s.so\"" name in
-  if not (Sys.file_exists dir) then None
-  else
-    Sys.readdir dir |> Array.to_list
-    |> List.filter (fun f -> Filename.check_suffix f ".changes")
-    |> Compat.find_map (fun f ->
-           let s = Bytecode.read_file (Filename.concat dir f) in
-           if Str_util.find s needle <> None then Some (Filename.chop_suffix f ".changes") else None)
+let owner_of_dll name = Switch.owner (Printf.sprintf "lib/stublibs/dll%s.so" name)
 
 (* Libraries built by the `ocaml` recipe. *)
 let compiler_libs = [ "camlrun"; "unix"; "camlstr"; "camlruntime_events"; "unixbyt"; "camlstrbyt"; "camlruntime_eventsbyt"; "threads"; "threadsbyt" ]
@@ -99,7 +90,7 @@ let resolve ~extra_dirs ?bc_path bc name =
 let stale name f =
   let read rel = let p = Env.sysroot_file rel in if Sys.file_exists p then Some (String.trim (Bytecode.read_file p)) else None in
   let older pkg stamp =
-    match Option.map Str_util.words (read ("stamps/" ^ stamp)), Layouts.version pkg with
+    match Option.map Str_util.words (read ("stamps/" ^ stamp)), Switch.version pkg with
     | Some (v :: _), Some installed when v <> installed -> Some pkg
     | _ -> None
   in

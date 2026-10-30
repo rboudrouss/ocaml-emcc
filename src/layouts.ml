@@ -10,79 +10,26 @@
    the sysroot's findlib directory, which the toolchain searches before the
    switch, and the bytecode is built against them. *)
 
-let opam_file rel = Filename.concat (Lazy.force Env.switch_prefix) (Filename.concat ".opam-switch" rel)
-
 let read_opt f = if Sys.file_exists f then Some (Compat.read_file f) else None
-
-(* installed opam packages: name -> version *)
-let installed =
-  lazy
-    (let tbl = Hashtbl.create 256 in
-     (try Sys.readdir (opam_file "packages") with Sys_error _ -> [||])
-     |> Array.iter (fun e ->
-            match String.index_opt e '.' with
-            | Some i -> Hashtbl.replace tbl (String.sub e 0 i) (String.sub e (i + 1) (String.length e - i - 1))
-            | None -> ());
-     tbl)
-
-let version pkg = Hashtbl.find_opt (Lazy.force installed) pkg
-
-(* The `name: [...]` field of an opam file (lists of packages hold no ']') *)
-let opam_field s name =
-  let key = name ^ ": [" in
-  let start =
-    if Str_util.starts_with ~prefix:key s then Some 0
-    else Option.map (fun i -> i + 1) (Str_util.find s ("\n" ^ key))
-  in
-  match start with
-  | None -> ""
-  | Some i -> (
-      let i = i + String.length key in
-      match String.index_from_opt s i ']' with Some j -> String.sub s i (j - i) | None -> "")
-
-(* The "name" {filter} entries of a list of packages (formulas: their
-   operators are skipped) *)
-let entries s =
-  let n = String.length s in
-  let rec go acc i =
-    match String.index_from_opt s i '"' with
-    | None -> List.rev acc
-    | Some a -> (
-        match String.index_from_opt s (a + 1) '"' with
-        | None -> List.rev acc
-        | Some b ->
-            let name = String.sub s (a + 1) (b - a - 1) in
-            let j = ref (b + 1) in
-            while !j < n && (s.[!j] = ' ' || s.[!j] = '\n') do incr j done;
-            if !j < n && s.[!j] = '{' then
-              let e = Option.value (String.index_from_opt s !j '}') ~default:(n - 1) in
-              go ((name, String.sub s !j (e - !j + 1)) :: acc) (e + 1)
-            else go ((name, "") :: acc) (b + 1))
-  in
-  go [] 0
 
 (* The installed packages of the depends and depopts of [pkg] (optional
    dependencies matter once installed), not those for tests, documentation
    or development. *)
 let deps pkg =
-  match version pkg with
+  match Switch.opam pkg with
   | None -> []
-  | Some v -> (
-      match read_opt (opam_file (Printf.sprintf "packages/%s.%s/opam" pkg v)) with
-      | None -> []
-      | Some s ->
-          let dev f = List.exists (fun w -> Str_util.find f w <> None) [ "with-test"; "with-doc"; "with-dev-setup" ] in
-          entries (opam_field s "depends" ^ " " ^ opam_field s "depopts")
-          |> List.filter_map (fun (d, f) ->
-                 if d <> pkg && Hashtbl.mem (Lazy.force installed) d && not (dev f) then Some d else None)
-          |> List.sort_uniq compare)
+  | Some s ->
+      let dev f = List.exists (fun w -> Str_util.find f w <> None) [ "with-test"; "with-doc"; "with-dev-setup" ] in
+      Switch.entries (Switch.opam_field s "depends" ^ " " ^ Switch.opam_field s "depopts")
+      |> List.filter_map (fun (d, f) -> if d <> pkg && Switch.is_installed d && not (dev f) then Some d else None)
+      |> List.sort_uniq compare
 
 (* ctypes and the packages depending on it, directly or not *)
 let ctypes_users =
   lazy
     (let users = Hashtbl.create 16 in
-     if version "ctypes" <> None then Hashtbl.replace users "ctypes" ();
-     let pkgs = Hashtbl.fold (fun p _ acc -> p :: acc) (Lazy.force installed) [] |> List.sort compare in
+     if Switch.is_installed "ctypes" then Hashtbl.replace users "ctypes" ();
+     let pkgs = Hashtbl.fold (fun p _ acc -> p :: acc) (Lazy.force Switch.installed) [] |> List.sort compare in
      let deps = List.map (fun p -> (p, deps p)) pkgs in
      let rec fix () =
        let added =
@@ -98,12 +45,9 @@ let ctypes_users =
 
 (* The interfaces [pkg] installed: (module, path relative to the switch) *)
 let cmis pkg =
-  match read_opt (opam_file ("install/" ^ pkg ^ ".changes")) with
-  | None -> []
-  | Some s ->
-      String.split_on_char '"' s
-      |> List.filter (fun f -> Str_util.starts_with ~prefix:"lib/" f && Filename.check_suffix f ".cmi")
-      |> List.map (fun f -> (String.capitalize_ascii (Filename.chop_suffix (Filename.basename f) ".cmi"), f))
+  Switch.lib_files pkg
+  |> List.filter (fun f -> Filename.check_suffix f ".cmi")
+  |> List.map (fun f -> (String.capitalize_ascii (Filename.chop_suffix (Filename.basename f) ".cmi"), f))
 
 (* The packages depending on ctypes (and ctypes) whose modules [bc] links,
    dependencies first. *)
@@ -129,7 +73,7 @@ let dep_versions pkg =
   let users, deps = Lazy.force ctypes_users in
   Option.value (List.assoc_opt pkg deps) ~default:[]
   |> List.filter (Hashtbl.mem users)
-  |> List.map (fun d -> d ^ "." ^ Option.value (version d) ~default:"")
+  |> List.map (fun d -> d ^ "." ^ Option.value (Switch.version d) ~default:"")
   |> String.concat ","
   |> ( ^ ) "deps="
 
@@ -141,7 +85,7 @@ let stamp pkg =
   | Some s -> (
       match Str_util.words (String.trim s) with
       | v :: status :: rest
-        when Some v = version pkg
+        when Some v = Switch.version pkg
              && (List.mem (dep_versions pkg) rest || dep_versions pkg = "deps=") ->
           Some status
       | _ -> None)
@@ -222,7 +166,7 @@ let shadow l =
       | Some q ->
           Env.log "  %s: not built for %s, as %s could not be" p !Env.target q;
           drop p;
-          (match version p with
+          (match Switch.version p with
           | Some v ->
               let oc = open_out (Env.sysroot_file ("stamps/shadow-" ^ p)) in
               output_string oc (v ^ " failed " ^ dep_versions p ^ "\n");
@@ -245,18 +189,6 @@ let ensure bc =
   | [] -> false
   | l -> ignore (shadow l); true
 
-(* The opam package that installed [rel] (relative to the switch) *)
-let owner rel =
-  let dir = opam_file "install" in
-  let needle = "\"" ^ rel ^ "\"" in
-  (try Array.to_list (Sys.readdir dir) with Sys_error _ -> [])
-  |> List.sort compare
-  |> Compat.find_map (fun f ->
-         if not (Filename.check_suffix f ".changes") then None
-         else if Str_util.find (Compat.read_file (Filename.concat dir f)) needle <> None then
-           Some (Filename.chop_suffix f ".changes")
-         else None)
-
 (* ocamlc's "Files A and B make inconsistent assumptions over interface X"
    (A and B quoted since 5.2): a library of the switch compiled against the
    host's build of a package rebuilt for the target (ctypes-foreign imports
@@ -274,7 +206,7 @@ let fix_inconsistent err =
       List.filter_map
         (fun w ->
           if Str_util.starts_with ~prefix:lib w then
-            owner (String.sub w (String.length prefix) (String.length w - String.length prefix))
+            Switch.owner (String.sub w (String.length prefix) (String.length w - String.length prefix))
           else None)
         words
       |> List.sort_uniq compare
