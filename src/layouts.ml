@@ -81,23 +81,15 @@ let dep_versions pkg =
    [record_deps]): the build of the installed version, against the
    installed versions of its dependencies *)
 let stamp pkg =
-  match read_opt (Env.sysroot_file ("stamps/shadow-" ^ pkg)) with
-  | Some s -> (
-      match Str_util.words (String.trim s) with
-      | v :: status :: rest
-        when Some v = Switch.version pkg
-             && (List.mem (dep_versions pkg) rest || dep_versions pkg = "deps=") ->
-          Some status
-      | _ -> None)
-  | None -> None
+  match Stamp.read ("shadow-" ^ pkg) with
+  | Some (v :: status :: rest)
+    when Some v = Switch.version pkg && (List.mem (dep_versions pkg) rest || dep_versions pkg = "deps=") ->
+      Some status
+  | _ -> None
 
 let record_deps pkg =
-  let f = Env.sysroot_file ("stamps/shadow-" ^ pkg) in
-  match read_opt f with
-  | Some s ->
-      let oc = open_out f in
-      output_string oc (String.trim s ^ " " ^ dep_versions pkg ^ "\n");
-      close_out oc
+  match Stamp.read ("shadow-" ^ pkg) with
+  | Some fields -> Stamp.write ("shadow-" ^ pkg) (fields @ [ dep_versions pkg ])
   | None -> ()
 
 (* The builds for the target of packages since upgraded, downgraded or
@@ -108,12 +100,11 @@ let record_deps pkg =
 let drop pkg =
   let dirs = Env.sysroot_file ("meta/shadow-" ^ pkg ^ ".dirs") in
   let l = match read_opt dirs with Some s -> Str_util.words (String.map (fun c -> if c = '\n' then ' ' else c) s) | None -> [] in
-  ignore (Env.run "rm" ("-rf" :: dirs :: Env.sysroot_file ("stamps/shadow-" ^ pkg)
+  ignore (Env.run "rm" ("-rf" :: dirs :: Stamp.file ("shadow-" ^ pkg)
                         :: List.map (fun d -> Env.sysroot_file ("lib/findlib/" ^ d)) l))
 
 let prune () =
-  let stamps = Env.sysroot_file "stamps" in
-  (try Array.to_list (Sys.readdir stamps) with Sys_error _ -> [])
+  Stamp.names ()
   |> List.iter (fun f ->
          if Str_util.starts_with ~prefix:"shadow-" f then
            let pkg = String.sub f 7 (String.length f - 7) in
@@ -168,9 +159,7 @@ let shadow l =
           drop p;
           (match Switch.version p with
           | Some v ->
-              let oc = open_out (Env.sysroot_file ("stamps/shadow-" ^ p)) in
-              output_string oc (v ^ " failed " ^ dep_versions p ^ "\n");
-              close_out oc
+              Stamp.write ("shadow-" ^ p) [ v; "failed"; dep_versions p ]
           | None -> ());
           failed := p :: !failed
       | None ->

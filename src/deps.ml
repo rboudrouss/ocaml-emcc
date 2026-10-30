@@ -90,8 +90,8 @@ let resolve ~extra_dirs ?bc_path bc name =
 let stale name f =
   let read rel = let p = Env.sysroot_file rel in if Sys.file_exists p then Some (String.trim (Bytecode.read_file p)) else None in
   let older pkg stamp =
-    match Option.map Str_util.words (read ("stamps/" ^ stamp)), Switch.version pkg with
-    | Some (v :: _), Some installed when v <> installed -> Some pkg
+    match Stamp.read stamp, Switch.version pkg with
+    | Some fields, Some installed when Stamp.version fields <> installed -> Some pkg
     | _ -> None
   in
   if f <> lib_file (Env.sysroot_file "lib") name then None
@@ -100,8 +100,8 @@ let stale name f =
     | Some pkg, Some p when p = "dune-" ^ pkg || p = "auto-" ^ pkg ->
         older pkg (if p = "dune-" ^ pkg then p else p ^ "-" ^ name)
     | Some pkg, Some recipe -> (
-        match Option.map Str_util.words (read ("stamps/" ^ recipe)) with
-        | Some words when List.mem ("opam=" ^ pkg) words -> older pkg recipe
+        match Stamp.read recipe with
+        | Some fields when Stamp.field "opam" fields = Some pkg -> older pkg recipe
         | _ -> None)
     | _ -> None
 
@@ -112,7 +112,7 @@ let stale name f =
 let obtain pkg name =
   let code =
     if pkg = "ocaml" then
-      Env.driver ([ "install" ] @ (if Sys.file_exists (Env.sysroot_file "stamps/ocaml") then [ "--force" ] else []) @ [ "ocaml" ])
+      Env.driver ([ "install" ] @ (if Stamp.read "ocaml" <> None then [ "--force" ] else []) @ [ "ocaml" ])
     else Env.driver [ "obtain"; pkg; name ]
   in
   if code <> 0 then Env.fail "could not build lib%s.a (package %s)" name pkg
