@@ -45,3 +45,28 @@ let run () =
   Check.string_opt "lib_recipe: not a C library" None (lib "zarith");
   Check.string_opt "lib_recipe: none" None (lib "cjson");
   Check.bool "glob" true (Recipe.glob "a*b?" "axxbc" && not (Recipe.glob "a*b" "ab c"))
+
+let show = function
+  | Recipe.Built n -> "Built " ^ Option.value n ~default:"-"
+  | Recipe.Build w -> "Build " ^ Option.value w ~default:"-"
+
+let decisions () =
+  let installed = function "zarith" -> "1.14" | _ -> "" in
+  let decide ?(force = false) stamp = Recipe.decide ~force ~sum:"abc" ~installed "r" (Option.map Stamp.parse stamp) in
+  let check = Check.equal show in
+  check "no stamp" (Recipe.Build None) (decide None);
+  check "built" (Recipe.Built None) (decide (Some "1.0 emcc-4 recipe=abc"));
+  check "forced" (Recipe.Build None) (decide ~force:true (Some "1.0 emcc-4 recipe=abc"));
+  check "old stamp, no checksum" (Recipe.Built None) (decide (Some "1.0 emcc-4"));
+  check "changed recipe: noted only"
+    (Recipe.Built (Some "note: the r recipe changed since it was built; rebuild with: ocaml-emcc install --force r"))
+    (decide (Some "1.0 emcc-4 recipe=def"));
+  check "same opam version" (Recipe.Built None) (decide (Some "1.14 emcc-4 recipe=abc opam=zarith"));
+  check "opam upgrade"
+    (Recipe.Build (Some "r was built from zarith 1.13, building it again for 1.14"))
+    (decide (Some "1.13 emcc-4 recipe=abc opam=zarith"));
+  check "opam package removed"
+    (Recipe.Build (Some "r was built from gone 1.0, building it again for "))
+    (decide (Some "1.0 emcc-4 recipe=abc opam=gone"))
+
+let run () = run (); decisions ()

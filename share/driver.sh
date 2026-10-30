@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Recipe driver for ocaml-emcc.
 #
-#   driver.sh install [--force] <recipe>...   build + install recipes
+#   driver.sh describe <recipe>             the variables of a recipe
+#   driver.sh build <recipe> <result>       build + install a recipe, its
+#                                            dependencies built
 #   driver.sh install-dune [--force] <opam-package>
 #                                            rebuild the C stubs of a dune
 #                                            package with the wasm32 toolchain
@@ -654,49 +656,48 @@ EOF
 
 FORCE=no
 
-# Checksum of every recipe named <name> along the recipe path (a recipe may
-# include the next one): its recipe.sh, then its other files (patches...).
-recipe_sum() {
-  local IFS=: d
-  for d in $RECIPES_PATH; do
-    [ -f "$d/$1/recipe.sh" ] || continue
-    cat "$d/$1/recipe.sh"
-    find "$d/$1" -type f ! -path "$d/$1/recipe.sh" -print0 | LC_ALL=C sort -z | xargs -0r cat
-  done | sha256sum | cut -c1-16
+# run_recipe <name>: build the recipe unless its stamp says it is built
+# (Recipe.install).  Its dependencies are built first.
+run_recipe() {
+  local force=
+  [ "$FORCE" = no ] || force=--force
+  # shellcheck disable=SC2086
+  "$OCAML_EMCC_EXE" internal install $force "$1"
 }
 
-run_recipe() {
-  local name=$1 dir stamp work sum
-  stamp=$SYSROOT/stamps/$name
-  sum=$(recipe_sum "$name")
-  local opkg
-  # the sources of an opam package (opam=PKG in the stamp): built again for
-  # another version of it (opam upgrade)
-  opkg=$( [ ! -f "$stamp" ] || tr ' ' '\n' < "$stamp" | sed -n 's/^opam=//p')
-  if [ -f "$stamp" ] && [ "$FORCE" = no ] \
-     && { [ -z "$opkg" ] || [ "$(cut -d' ' -f1 "$stamp")" = "$(opam_pkg_version "$opkg")" ]; }; then
-    # not rebuilt automatically: some recipes take a while (clang)
-    # (stamps written before this check have no checksum)
-    grep -q "recipe=" "$stamp" && ! grep -q "recipe=$sum" "$stamp" \
-      && log "note: the $name recipe changed since it was built; rebuild with: ocaml-emcc install --force $name"
-    return 0
-  fi
-  [ -n "$opkg" ] && [ -f "$stamp" ] && [ "$FORCE" = no ] \
-    && log "$name was built from $opkg $(cut -d' ' -f1 "$stamp"), building it again for $(opam_pkg_version "$opkg")"
-  dir=$(find_recipe "$name") || die "no recipe named '$name'"
+# The variables a recipe may set, and the functions it may define.
+RECIPE_VARS="SOURCE SHA256 REF DEPENDS HEADER VERSION_MACROS PKGCONFIG RELEASES TARBALL COMPAT OPAM_SOURCES LINK LIB_PATTERNS USE_CFLAGS"
+
+# load_recipe <name>: read the recipe in the current shell
+load_recipe() {
+  local dir v
+  dir=$(find_recipe "$1") || die "no recipe named '$1'"
+  for v in $RECIPE_VARS; do eval "$v="; done
+  SOURCE=none
+  RECIPE_DIR=$dir RECIPE_NAME=$1 BASE_RECIPE_DIR=$dir
+  unset -f pre_build fetch releases
+  # shellcheck disable=SC1091
+  . "$dir/recipe.sh"
+}
+
+# describe <name>: the variables of the recipe, NAME=value NUL-terminated
+describe_recipe() {
+  ( load_recipe "$1"
+    local v
+    for v in $RECIPE_VARS; do printf '%s=%s\0' "$v" "${!v}"; done )
+}
+
+# build_recipe <name> <result>: build and install the recipe (its
+# dependencies are built); writes the version of its sources and emcc's in
+# <result>, for its stamp.
+build_recipe() {
+  local name=$1 result=$2
   (
-    SOURCE=none DEPENDS= SHA256= REF= SOURCE_OPAM=
-    HEADER= VERSION_MACROS= PKGCONFIG= RELEASES= TARBALL= COMPAT= OPAM_SOURCES= LINK= LIB_PATTERNS= USE_CFLAGS=
-    RECIPE_DIR=$dir RECIPE_NAME=$name BASE_RECIPE_DIR=$dir
-    unset -f pre_build fetch releases
-    # shellcheck disable=SC1091
-    . "$dir/recipe.sh"
-    local d
-    for d in $DEPENDS; do FORCE=no run_recipe "$d"; done
-    work=$SYSROOT/build/$name
+    load_recipe "$name"
+    local work=$SYSROOT/build/$name
     rm -rf "$work"
     case "$SOURCE" in
-      opam:*) fetch_opam_source "${SOURCE#opam:}" "$work"; SOURCE_OPAM=${SOURCE#opam:} ;;
+      opam:*) fetch_opam_source "${SOURCE#opam:}" "$work" ;;
       url:*)  fetch_url "${SOURCE#url:}" "$work" ;;
       git:*)
         local repo=${SOURCE#git:}
@@ -719,7 +720,7 @@ run_recipe() {
     build
     # a C library: system:, or another source with LINK (sdl2)
     case "$SOURCE" in system:*) record_use_flags "$name" ;; *) [ -z "$LINK" ] || record_use_flags "$name" ;; esac
-    echo "${SOURCE_VERSION:-} emcc-$EMCC_VERSION recipe=$sum${SOURCE_OPAM:+ opam=$SOURCE_OPAM}" > "$stamp"
+    printf '%s\n%s\n' "${SOURCE_VERSION:-}" "$EMCC_VERSION" > "$result"
     log "installed $name"
   )
 }
@@ -1024,12 +1025,13 @@ run_obtain() {
 cmd=${1:-}; shift || true
 if [ "${1:-}" = --force ]; then FORCE=yes; shift; fi
 case "$cmd" in
-  install)      for r in "$@"; do run_recipe "$r"; done ;;
+  describe)     describe_recipe "$1" ;;
+  build)        build_recipe "$1" "$2" ;;
   install-dune) run_dune_package "$1" ;;
   shadow)       for p in "$@"; do run_shadow "$p"; done ;;
   patched-dune) patched_dune ;;
   auto)         run_auto "$1" "$2" ;;
   obtain)       run_obtain "$1" "$2" ;;
   toolchain)    write_toolchain ;;
-  *) die "usage: driver.sh install|install-dune|shadow|patched-dune|auto|obtain|toolchain ..." ;;
+  *) die "usage: driver.sh describe|build|install-dune|shadow|patched-dune|auto|obtain|toolchain ..." ;;
 esac

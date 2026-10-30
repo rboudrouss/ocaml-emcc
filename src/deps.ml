@@ -110,17 +110,13 @@ let stale name f =
    library of the compiler missing from a built runtime (libthreads.a, built
    since): the runtime is built again. *)
 let obtain pkg name =
-  let code =
-    if pkg = "ocaml" then
-      Env.driver ([ "install" ] @ (if Stamp.read "ocaml" <> None then [ "--force" ] else []) @ [ "ocaml" ])
-    else Env.driver [ "obtain"; pkg; name ]
-  in
-  if code <> 0 then Env.fail "could not build lib%s.a (package %s)" name pkg
+  if pkg = "ocaml" then Recipe.install ~force:(Stamp.read "ocaml" <> None) "ocaml"
+  else if Env.driver [ "obtain"; pkg; name ] <> 0 then Env.fail "could not build lib%s.a (package %s)" name pkg
 
 (* The recipe of the C library lib<name>.a (-lgmp, -lz...), if any. *)
 let lib_recipe name = Recipe.lib_recipe name
 
-let install_recipe r = if Env.driver [ "install"; r ] <> 0 then Env.fail "the %s recipe failed" r
+let install_recipe r = Recipe.install r
 
 (* Extra link flags recorded by recipes (e.g. zarith -> -lgmp). *)
 let link_flags name =

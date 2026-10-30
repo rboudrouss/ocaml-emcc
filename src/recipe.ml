@@ -98,3 +98,70 @@ let lib_recipe ?(path = Env.recipes_path ()) x =
                 | s when is_lib s && matches name s -> Some name
                 | _ -> None
                 | exception Sys_error _ -> None))
+
+(* ------------------------------------------------------------- install *)
+
+(* The variables of the recipe [name] (driver.sh describe): SOURCE,
+   DEPENDS, LINK... *)
+let describe name =
+  match Env.driver_output [ "describe"; name ] with
+  | None -> Env.fail "could not read the %s recipe" name
+  | Some out ->
+      String.split_on_char '\000' out
+      |> List.filter_map (fun kv ->
+             match String.index_opt kv '=' with
+             | Some i -> Some (String.sub kv 0 i, String.sub kv (i + 1) (String.length kv - i - 1))
+             | None -> None)
+
+let var vars v = Option.value (List.assoc_opt v vars) ~default:""
+
+(* The opam package whose sources a recipe builds (SOURCE=opam:PKG) *)
+let opam_package vars =
+  let s = var vars "SOURCE" in
+  if Str_util.starts_with ~prefix:"opam:" s then Some (String.sub s 5 (String.length s - 5)) else None
+
+type decision = Built of string option  (** a note to show *) | Build of string option  (** why *)
+
+(* Whether the recipe [name] is to be built, from its [stamp]: once built,
+   it is not built again, unless [force]d, or it was built from the
+   sources of an opam package (opam=PKG) since upgraded.  A recipe changed
+   since ([sum]) is only noted: some take a while (clang).  [installed]: the
+   version of an opam package in the switch ("" if none). *)
+let decide ~force ~sum ~installed name stamp =
+  match stamp with
+  | Some fields when not force -> (
+      match Stamp.field "opam" fields with
+      | Some p when installed p <> Stamp.version fields ->
+          Build (Some (Printf.sprintf "%s was built from %s %s, building it again for %s" name p (Stamp.version fields) (installed p)))
+      | _ ->
+          (* (stamps written before checksums were recorded have none) *)
+          Built
+            (match Stamp.field "recipe" fields with
+            | Some s when s <> sum ->
+                Some (Printf.sprintf "note: the %s recipe changed since it was built; rebuild with: ocaml-emcc install --force %s" name name)
+            | _ -> None))
+  | _ -> Build None
+
+(* Build and install the recipe [name] unless it is built, its DEPENDS
+   first (not forced) *)
+let rec install ?(force = false) name =
+  let sum = sum name in
+  let installed p = Option.value (Switch.version p) ~default:"" in
+  match decide ~force ~sum ~installed name (Stamp.read name) with
+  | Built note -> Option.iter (Env.log "%s") note
+  | Build why ->
+      Option.iter (Env.log "%s") why;
+      if find name = None then Env.fail "no recipe named '%s'" name;
+      let vars = describe name in
+      List.iter (install ~force:false) (Str_util.words (var vars "DEPENDS"));
+      let result = Filename.temp_file "ocaml-emcc" ".result" in
+      let code = Env.driver [ "build"; name; result ] in
+      let lines = String.split_on_char '\n' (Compat.read_file result) in
+      Sys.remove result;
+      if code <> 0 then Env.fail "the %s recipe failed" name;
+      let source_version, emcc_version =
+        match lines with v :: e :: _ -> (v, e) | _ -> Env.fail "the %s recipe did not complete" name
+      in
+      Stamp.write name
+        ([ source_version; "emcc-" ^ emcc_version; "recipe=" ^ sum ]
+        @ match opam_package vars with Some p -> [ "opam=" ^ p ] | None -> [])

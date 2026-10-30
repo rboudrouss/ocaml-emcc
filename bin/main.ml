@@ -71,7 +71,7 @@ let force args = match args with "--force" :: rest -> (true, rest) | _ -> (false
 let ensure_setup () =
   if not (Env.toolchain_ready ()) then (
     Env.log "no wasm runtime yet for this switch and target, building it (once)";
-    if Env.driver [ "install"; "ocaml" ] <> 0 then Env.fail "setup failed")
+    Recipe.install "ocaml")
   else if Env.manifest "toolchain" <> Some Env.toolchain_version then (
     Env.log "updating the toolchain wrappers of %s" (Env.sysroot ());
     if Env.driver [ "toolchain" ] <> 0 then Env.fail "toolchain update failed")
@@ -81,17 +81,17 @@ let ensure_requires () =
   ensure_setup ();
   match (Project.get ()).requires with
   | [] -> ()
-  | rs -> if Env.driver ("install" :: rs) <> 0 then Env.fail "could not build %s" (String.concat " " rs)
+  | rs -> List.iter (fun r -> Recipe.install r) rs
 
 let cmd_setup args =
   let f, _ = force args in
-  exit (Env.driver ([ "install" ] @ (if f then [ "--force" ] else []) @ [ "ocaml" ]))
+  Recipe.install ~force:f "ocaml"
 
 let cmd_install args =
   let f, recipes = force args in
   if recipes = [] then die_usage ();
   ensure_setup ();
-  exit (Env.driver ([ "install" ] @ (if f then [ "--force" ] else []) @ recipes))
+  List.iter (Recipe.install ~force:f) recipes
 
 (* ------------------------------------------------------------------ dune *)
 
@@ -395,6 +395,9 @@ let cmd_env = function
 (* Commands run by driver.sh, for what is done in OCaml *)
 let cmd_internal = function
   | [ "system-recipes"; pkg ] -> List.iter print_endline (Syslib.recipes pkg)
+  | "install" :: args ->
+      let f, recipes = force args in
+      List.iter (Recipe.install ~force:f) recipes
   | _ -> die_usage ()
 
 let () =
