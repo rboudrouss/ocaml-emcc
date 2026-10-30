@@ -18,6 +18,9 @@
   raylib's `PLATFORM_WEB` (emscripten's GLFW, WebGL), linked with
   `-sASYNCIFY` so that the usual `while not (window_should_close ())`
   loop runs in a browser (`-- -sJSPI` replaces it). Test: `raylib`.
+  raylib-ocaml's master after 2.3.0 builds it for the web itself: the
+  recipe's patch for it only applies to the releases before, and now
+  builds from fresh sources too (it ran host helpers it did not depend on).
 - The placeholder `dll<name>.so` of a wasm stub archive defines its C
   functions (aborting if called): a (ctypes) generator linked against a
   library of its package with stubs could not start ("unknown C

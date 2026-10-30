@@ -149,9 +149,10 @@ ocaml-emcc build game.html            # emscripten's page, with a canvas
 The `raylib` recipe builds the raylib that the package vendors for
 raylib's `PLATFORM_WEB`: emscripten's GLFW (`-sUSE_GLFW=3`) and WebGL, so
 the window is the page's canvas (`Module.canvas` in a page of your own),
-and there is no window under node. `window_should_close` gives the browser
-a frame (`emscripten_sleep`), which the recipe links with `-sASYNCIFY`
-for. `-- -sJSPI` replaces it with a smaller build (no instrumentation of
+and there is no window under node (raylib-ocaml's master after 2.3.0
+does it itself for a wasm target, the recipe patches the releases before).
+`window_should_close` gives the browser a frame (`emscripten_sleep`),
+which the recipe links with `-sASYNCIFY` for. `-- -sJSPI` replaces it with a smaller build (no instrumentation of
 the interpreter), for browsers with JSPI. emcc warns that ASYNCIFY is not
 compatible with `-fwasm-exceptions`, but OCaml exceptions work, raised from
 OCaml or from C, and leaving the loop.
@@ -511,7 +512,7 @@ the switch back. On wasm32, OCaml 4.14.2:
 | `hacl` | hacl-star | 0.7.2 | 0.5.0, 0.6.2: the test uses later modules (`K256`) |
 | `posix` | posix-time2, -socket, -stat | 4.0.2 | 2.2.0, 3.0.0: no posix-stat |
 | `mccs` | mccs | 1.1+13, 1.1+17, 1.1+19 | |
-| `raylib` | raylib | 2.2.2, 2.3.0 | |
+| `raylib` | raylib | 2.2.2, 2.3.0, master (bd831de) | |
 
 The recipes' patches (placed by their text, see [patches](docs/recipes.md#patches)) were
 also checked to apply, as GNU patch applied the previous ones, to the
