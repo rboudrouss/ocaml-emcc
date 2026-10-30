@@ -6,7 +6,8 @@ with the host's compiler and its X11 backend.  PLATFORM_WEB uses
 emscripten's GLFW and WebGL instead, compiled by the context's %{cc}
 (the target's flags, -sMEMORY64 on wasm64).  ocamlmklib is the
 toolchain's: libraylib.a from the wasm objects, and a host placeholder
-for dllraylib.so.
+for dllraylib.so.  The helpers are the host's (%{exe:...}, outside
+no-infer so that dune builds them).
 
 --- a/src/c/dune
 +++ b/src/c/dune
@@ -35,21 +36,20 @@ for dllraylib.so.
 + (deps
 +  (source_tree vendor/raylib)
 +  enable_formats.patch
-+  hotfixes.patch
-+  apply_patch.exe
-+  chmodx.exe)
++  hotfixes.patch)
 + (action
-+  (no-infer
-+   (progn
-+    (run ./chmodx.exe vendor/raylib/src/config.h)
-+    (run ./apply_patch.exe enable_formats.patch)
-+    (run ./chmodx.exe vendor/raylib/src/platforms/rcore_desktop_glfw.c)
-+    (run ./chmodx.exe vendor/raylib/src/raudio.c)
-+    (run ./apply_patch.exe hotfixes.patch)
-+    (system
-+     "make -C vendor/raylib/src PLATFORM=PLATFORM_WEB RAYLIB_LIBTYPE=STATIC CC='%{cc}' AR=emar")
-+    (system "ocamlmklib -o raylib vendor/raylib/src/*.o")
-+    (system "rm vendor/raylib/src/libraylib.web.a")))))
++  (progn
++   (run %{exe:chmodx.exe} vendor/raylib/src/config.h)
++   (run %{exe:apply_patch.exe} enable_formats.patch)
++   (run %{exe:chmodx.exe} vendor/raylib/src/platforms/rcore_desktop_glfw.c)
++   (run %{exe:chmodx.exe} vendor/raylib/src/raudio.c)
++   (run %{exe:apply_patch.exe} hotfixes.patch)
++   (no-infer
++    (progn
++     (system
++      "make -C vendor/raylib/src PLATFORM=PLATFORM_WEB RAYLIB_LIBTYPE=STATIC CC='%{cc}' AR=emar")
++     (system "ocamlmklib -o raylib vendor/raylib/src/*.o")
++     (system "rm vendor/raylib/src/libraylib.web.a"))))))
 +
  (rule
   (alias build-raylib)
