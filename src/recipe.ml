@@ -142,6 +142,46 @@ let decide ~force ~sum ~installed name stamp =
             | _ -> None))
   | _ -> Build None
 
+(* Copy the sources of the recipe [name] to [work]: their version, None
+   for SOURCE=fetch (the recipe's own `fetch`, run by driver.sh build) *)
+let fetch vars name work =
+  let var = var vars in
+  let s = var "SOURCE" in
+  let kind, arg =
+    match String.index_opt s ':' with
+    | Some i -> (String.sub s 0 i, String.sub s (i + 1) (String.length s - i - 1))
+    | None -> (s, "")
+  in
+  match kind with
+  | "opam" -> Some (Source.opam_source arg work)
+  | "url" -> Some (Source.url ~sha256:(var "SHA256") arg work)
+  | "git" ->
+      let repo, ref_ =
+        match String.rindex_opt arg '#' with
+        | Some i -> (String.sub arg 0 i, String.sub arg (i + 1) (String.length arg - i - 1))
+        | None -> (arg, var "REF")
+      in
+      Some (Source.git repo ref_ work)
+  | "dir" ->
+      let d =
+        if Filename.is_relative arg then Filename.concat (Option.get (find name)) arg else arg
+      in
+      Source.copy d work;
+      Some (Filename.basename d)
+  | "ocaml" -> Some (Source.ocaml work)
+  | "system" ->
+      let releases =
+        if List.mem "releases" (Str_util.words (var "FUNCTIONS")) then
+          match Env.driver_output [ "releases"; name ] with
+          | Some out -> Some (List.filter (( <> ) "") (String.split_on_char '\n' out))
+          | None -> Env.fail "%s: its releases function failed" name
+        else None
+      in
+      Some (Source.system ~var ~releases arg work)
+  | "fetch" -> None
+  | "none" -> Source.sh "mkdir" [ "-p"; work ]; Some ""
+  | _ -> Env.fail "%s: bad SOURCE '%s'" name s
+
 (* Build and install the recipe [name] unless it is built, its DEPENDS
    first (not forced) *)
 let rec install ?(force = false) name =
@@ -154,8 +194,12 @@ let rec install ?(force = false) name =
       if find name = None then Env.fail "no recipe named '%s'" name;
       let vars = describe name in
       List.iter (install ~force:false) (Str_util.words (var vars "DEPENDS"));
+      let work = Env.sysroot_file (Filename.concat "build" name) in
+      Source.remove work;
+      Source.sh "mkdir" [ "-p"; Filename.dirname work ];
+      let version = fetch vars name work in
       let result = Filename.temp_file "ocaml-emcc" ".result" in
-      let code = Env.driver [ "build"; name; result ] in
+      let code = Env.driver ([ "build"; name; result ] @ Option.to_list version) in
       let lines = String.split_on_char '\n' (Compat.read_file result) in
       Sys.remove result;
       if code <> 0 then Env.fail "the %s recipe failed" name;

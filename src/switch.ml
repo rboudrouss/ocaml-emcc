@@ -79,3 +79,13 @@ let lib_files pkg =
   match read_opt (opam_file ("install/" ^ pkg ^ ".changes")) with
   | None -> []
   | Some s -> String.split_on_char '"' s |> List.filter (fun f -> Str_util.starts_with ~prefix:"lib/" f)
+
+(* The environment of opam commands acting on this switch, not on opam's
+   current one: opam ignores OPAM_SWITCH_PREFIX, and only takes a switch
+   name, or the directory of a local switch. *)
+let opam_env () =
+  let p = prefix () in
+  if Filename.basename p = "_opam" then [ "OPAMSWITCH=" ^ Filename.dirname p ]
+  else if Sys.file_exists (Filename.concat (Filename.dirname p) "config") then
+    [ "OPAMROOT=" ^ Filename.dirname p; "OPAMSWITCH=" ^ Filename.basename p ]
+  else []

@@ -9,4 +9,5 @@ let () =
   Test_stamp.run ();
   Test_recipe.run ();
   Test_syslib.run ();
+  Test_source.run ();
   if !Check.failures > 0 then (Printf.printf "%d failure(s)\n" !Check.failures; exit 1)

@@ -19,10 +19,12 @@ let merged_env = function
       let keep kv = not (List.mem (List.hd (String.split_on_char '=' kv)) keys) in
       Array.append (Array.of_list extra) (Array.of_list (List.filter keep (Array.to_list (Unix.environment ()))))
 
-let run ?env prog args =
+(* [out]: where its stdout goes (stderr for commands whose own stdout is a
+   result) *)
+let run ?env ?(out = Unix.stdout) prog args =
   if !verbose then log "%s" (Compat.quote_command prog args);
   let env = merged_env env in
-  let pid = Unix.create_process_env prog (Array.of_list (prog :: args)) env Unix.stdin Unix.stdout Unix.stderr in
+  let pid = Unix.create_process_env prog (Array.of_list (prog :: args)) env Unix.stdin out Unix.stderr in
   match snd (Unix.waitpid [] pid) with Unix.WEXITED c -> c | _ -> 255
 
 (* Like [run], stderr captured (and returned) instead of shown. *)
@@ -37,8 +39,8 @@ let run_capture_stderr ?env prog args =
   Sys.remove tmp;
   (code, err)
 
-let run_exn ?env prog args =
-  let c = run ?env prog args in
+let run_exn ?env ?out prog args =
+  let c = run ?env ?out prog args in
   if c <> 0 then fail "command failed (exit %d): %s" c (Compat.quote_command prog args)
 
 let output_of prog args =
@@ -47,6 +49,20 @@ let output_of prog args =
   match Unix.close_process_in ic with
   | Unix.WEXITED 0 -> Some (String.trim s)
   | _ -> None
+
+(* stdout of a command if it succeeds, its stderr discarded *)
+let capture ?env prog args =
+  if !verbose then log "%s" (Compat.quote_command prog args);
+  let tmp = Filename.temp_file "ocaml-emcc" ".out" in
+  let fd = Unix.openfile tmp [ Unix.O_WRONLY; Unix.O_TRUNC ] 0o600 in
+  let null = Unix.openfile "/dev/null" [ Unix.O_WRONLY ] 0 in
+  let pid = Unix.create_process_env prog (Array.of_list (prog :: args)) (merged_env env) Unix.stdin fd null in
+  Unix.close fd;
+  Unix.close null;
+  let code = match snd (Unix.waitpid [] pid) with Unix.WEXITED c -> c | _ -> 255 in
+  let out = Compat.read_file tmp in
+  Sys.remove tmp;
+  if code = 0 then Some out else None
 
 let which prog =
   let path = Option.value (getenv_opt "PATH") ~default:"" in

@@ -398,6 +398,13 @@ let cmd_internal = function
   | "install" :: args ->
       let f, recipes = force args in
       List.iter (Recipe.install ~force:f) recipes
+  | [ "fetch-opam-source"; pkg; dest ] -> print_endline (Source.opam_source pkg dest)
+  | [ "fetch-opam-version"; pkg; v; dest ] -> if not (Source.opam_version pkg v dest) then exit 1
+  | "host-version" :: pc :: header :: macros -> (
+      match Source.host_version pc header macros with Some v -> print_endline v | None -> exit 1)
+  | [ "version-match"; want ] ->
+      let lines = String.split_on_char '\n' (Compat.input_all stdin) |> List.filter (( <> ) "") in
+      List.iter print_endline (Source.version_match want lines)
   | _ -> die_usage ()
 
 let () =

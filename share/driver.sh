@@ -2,8 +2,11 @@
 # Recipe driver for ocaml-emcc.
 #
 #   driver.sh describe <recipe>             the variables of a recipe
-#   driver.sh build <recipe> <result>       build + install a recipe, its
-#                                            dependencies built
+#   driver.sh build <recipe> <result> [<version>]
+#                                            build + install a recipe, its
+#                                            dependencies built and its
+#                                            sources fetched
+#   driver.sh releases <recipe>             its `releases` function
 #   driver.sh install-dune [--force] <opam-package>
 #                                            rebuild the C stubs of a dune
 #                                            package with the wasm32 toolchain
@@ -138,68 +141,30 @@ opam_pkg_version() {
 }
 
 # ----------------------------------------------------------------- sources
+#
+# The sources of a recipe are fetched by the CLI (Source), before `build`.
+# These helpers, for recipes and the code below, run it.
 
-# fetch_opam_source <pkg> <dest>: copy the sources of an installed package.
-# Looks, in order, at the build dir kept by opam (OPAMKEEPBUILDDIR / keep-
-# build-dir), the sources of pinned packages, then falls back to `opam
-# source`, which applies the `patches:` of the opam file as opam does in
-# this switch.  Not at the archive opam keeps in .opam-switch/sources:
-# they are not applied there (mlcuddidl's exn_init_val_unit.diff).
+# fetch_opam_source <pkg> <dest>: copy the sources of an installed package
+# (opam's kept build dir, else `opam source`).
 fetch_opam_source() {
-  local pkg=$1 dest=$2 ver src=
-  ver=$(opam_pkg_version "$pkg") || die "$pkg is not installed in $PREFIX"
-  for cand in "$PREFIX/.opam-switch/build/$pkg.$ver" \
-              "$PREFIX/.opam-switch/sources/$pkg"; do
-    if [ -d "$cand" ]; then src=$cand; break; fi
-  done
-  if [ -n "$src" ]; then
-    log "using sources of $pkg.$ver from $src"
-    cp -a "$src" "$dest"
-  else
-    local cache="$SYSROOT/src/$pkg.$ver"
-    if [ ! -d "$cache" ]; then
-      log "sources of $pkg.$ver not kept in the switch, running opam source"
-      opam source "$pkg.$ver" --dir "$cache.tmp" >&2 && mv "$cache.tmp" "$cache"
-    fi
-    cp -a "$cache" "$dest"
-  fi
-  SOURCE_VERSION=$ver
+  SOURCE_VERSION=$("$OCAML_EMCC_EXE" internal fetch-opam-source "$1" "$2") || exit 1
 }
 
 # fetch_opam_version <pkg> <version> <dest>: sources of any version known to
 # the opam repository, installed or not (opam checks the archive checksum).
 # Fails if the repository has no such version.
 fetch_opam_version() {
-  local pkg=$1 ver=$2 dest=$3 cache
-  cache="$SYSROOT/src/$pkg.$ver"
-  if [ ! -d "$cache" ]; then
-    opam show --field=version "$pkg.$ver" >/dev/null 2>&1 || return 1
-    log "fetching $pkg.$ver with opam source"
-    opam source "$pkg.$ver" --dir "$cache.tmp" >&2 && mv "$cache.tmp" "$cache" || return 1
-  fi
-  cp -a "$cache" "$dest"
-  SOURCE_VERSION=$ver
+  "$OCAML_EMCC_EXE" internal fetch-opam-version "$1" "$2" "$3" && SOURCE_VERSION=$2
 }
 
 # host_version <pkg-config name> <header> <major macro> <minor macro> [<patch macro>]
 # Version of a C library as the host (hence the native build) sees it:
 # pkg-config, else the version macros of its header.
-host_version() {
-  local pc=$1 header=$2; shift 2
-  local defs m v=
-  if command -v pkg-config >/dev/null && v=$(pkg-config --modversion "$pc" 2>/dev/null) && [ -n "$v" ]; then
-    echo "$v"; return
-  fi
-  v=
-  [ -n "$header" ] || return 1
-  defs=$(printf '#include <%s>\n' "$header" | cc -E -dM - 2>/dev/null) || return 1
-  for m in "$@"; do
-    m=$(printf '%s\n' "$defs" | awk -v m="$m" '$1 == "#define" && $2 == m { print $3 }' | tr -d '"')
-    [ -n "$m" ] || return 1
-    v=${v:+$v.}$m
-  done
-  echo "$v"
-}
+host_version() { "$OCAML_EMCC_EXE" internal host-version "$@"; }
+
+# Keep the versions (first word of each line) compatible with <want>.
+version_match() { "$OCAML_EMCC_EXE" internal version-match "$1"; }
 
 # ------------------------------------------------------- system libraries
 #
@@ -217,20 +182,10 @@ host_version() {
 #   releases()     optional function replacing RELEASES: prints a
 #                  "<version> <tarball url>" line per release, oldest first
 #                  (git_tag_releases helps for releases named after git tags)
-# Choice: the sources of OPAM_SOURCES if the switch has it installed (that is
-# what the project links natively).  Otherwise the newest upstream release
-# compatible with the host's version (any version without a host library),
-# fetched through opam when opam knows it (checksum verified).
-
-# "<version> <file>" for each release in the listing, oldest first.
-release_files() {
-  local prefix=$1 url=$2
-  curl -fsL --retry 3 "$url" 2>/dev/null \
-    | grep -oE "$prefix-[0-9][0-9.]*[0-9]\.tar\.(xz|bz2|gz)" \
-    | sed -E "s/^$prefix-([0-9.]*[0-9])\.tar\.(xz|bz2|gz)$/\1 \2 &/" \
-    | sed -e 's/ xz / 1 /' -e 's/ bz2 / 2 /' -e 's/ gz / 3 /' \
-    | sort -k1,1V -k2,2n -u | awk '$1 != last { print $1, $3; last = $1 }'
-}
+# Choice (Source.system): the sources of OPAM_SOURCES if the switch has it
+# installed (that is what the project links natively).  Otherwise the newest
+# upstream release compatible with the host's version (any version without a
+# host library), fetched through opam when opam knows it (checksum verified).
 
 # git_tag_releases <repo> <tag prefix> <url template>: "<version> <url>" for
 # each tag <prefix><version> of <repo> (final versions only), {v} in the
@@ -240,65 +195,6 @@ git_tag_releases() {
   git ls-remote --tags --refs "$repo" 2>/dev/null | sed -n "s|.*refs/tags/$prefix||p" \
     | grep -E '^[0-9]+(\.[0-9]+)+$' | sort -V \
     | while read -r v; do echo "$v ${template//\{v\}/$v}"; done
-}
-
-# Keep the versions (first word of each line) compatible with <want>.
-version_match() {
-  local want=$1
-  if [ -z "$want" ]; then cat; else grep -E "^${want//./\\.}([.-]| |$)" || true; fi
-}
-
-# An opam package wrapping the upstream sources: either they are the package
-# sources themselves, or the upstream tarball is inside (opam's `gmp`).
-unpack_vendored() {
-  local src=$1 prefix=$2 dest=$3 t
-  if [ -x "$src/configure" ] || [ -f "$src/configure" ]; then mv "$src" "$dest"; return; fi
-  t=$(find "$src" -maxdepth 3 -name "$prefix-*.tar.*" | head -1)
-  [ -n "$t" ] || die "no $prefix sources in $src"
-  mkdir -p "$dest"
-  tar -xf "$t" -C "$dest" --strip-components=1
-  rm -rf "$src"
-}
-
-fetch_system() {
-  local name=$1 dest=$2 prefix=${TARBALL:-$1} hv want= v= file= ov=
-  if [ -n "$OPAM_SOURCES" ] && opam_pkg_version "$OPAM_SOURCES" >/dev/null; then
-    fetch_opam_source "$OPAM_SOURCES" "$dest.opam"
-    unpack_vendored "$dest.opam" "$prefix" "$dest"; return
-  fi
-  # shellcheck disable=SC2086
-  if { [ -n "$HEADER" ] || [ -n "$PKGCONFIG" ]; } \
-     && hv=$(host_version "${PKGCONFIG:-$name}" "$HEADER" $VERSION_MACROS) && [ -n "$hv" ]; then
-    case ${COMPAT:-major} in
-      major)  want=${hv%%.*} ;;
-      minor)  want=$(echo "$hv" | cut -d. -f1-2) ;;
-      exact)  want=$hv ;;
-      latest) want= ;;
-      *) die "$name: bad COMPAT '$COMPAT'" ;;
-    esac
-    log "host $name is $hv: using the newest ${want:+$want.x }release"
-  else
-    log "no host $name found (pkg-config${HEADER:+, $HEADER}): using the newest release"
-  fi
-  if declare -F releases >/dev/null; then
-    read -r v file < <(releases | version_match "$want" | tail -1) || true
-  elif [ -n "$RELEASES" ]; then
-    read -r v file < <(release_files "$prefix" "$RELEASES" | version_match "$want" | tail -1) || true
-  fi
-  if [ -n "$OPAM_SOURCES" ]; then
-    # opam versions may carry a packaging revision (6.3.0-1)
-    ov=$(opam show --field=all-versions "$OPAM_SOURCES" 2>/dev/null | tr -s ' ' '\n' \
-           | version_match "${v:-$want}" | tail -1)
-    if [ -n "$ov" ] && { [ -z "$v" ] || [ "${ov%%-*}" = "$v" ]; } \
-       && fetch_opam_version "$OPAM_SOURCES" "$ov" "$dest.opam"; then
-      unpack_vendored "$dest.opam" "$prefix" "$dest"; SOURCE_VERSION=$ov; return
-    fi
-  fi
-  [ -n "$v" ] || die "$name: no release found${want:+ for version $want} (${RELEASES:-no RELEASES})"
-  log "$prefix $v: not in the opam repository, downloading it (no checksum to verify)"
-  case $file in *://*) ;; *) file=${RELEASES%/}/$file ;; esac
-  SHA256= fetch_url "$file" "$dest"
-  SOURCE_VERSION=$v
 }
 
 # Flags for users of system recipe <name> (meta/<name>.uselink), and the C
@@ -342,63 +238,6 @@ system_deps() {
     flags="$flags $(cat "$SYSROOT/meta/$r.uselink" 2>/dev/null)"
   done
   echo "$flags"
-}
-
-fetch_url() {
-  local url=$1 dest=$2 file
-  file="$SYSROOT/src/$(basename "$url")"
-  if [ ! -f "$file" ]; then
-    log "downloading $url"
-    curl -fsSL --retry 3 -o "$file.tmp" "$url" && mv "$file.tmp" "$file"
-  fi
-  if [ -n "${SHA256:-}" ] && ! echo "$SHA256  $file" | sha256sum -c --quiet - >/dev/null 2>&1; then
-    rm -f "$file"; die "checksum mismatch for $url"
-  fi
-  mkdir -p "$dest"
-  tar -xf "$file" -C "$dest" --strip-components=1
-  SOURCE_VERSION=$(basename "$url")
-}
-
-# fetch_git <url> <ref> <dest>: shallow clone, no history.  Tags and branches
-# go through `clone --branch`; commits through `fetch --depth 1 <sha>`, which
-# GitHub/GitLab allow.  Clones are cached per (repo, ref).
-fetch_git() {
-  local url=$1 ref=$2 dest=$3 cache
-  cache="$SYSROOT/src/git/$(basename "$url" .git)-${ref:-HEAD}"
-  if [ ! -d "$cache" ]; then
-    log "git clone --depth 1 $url ${ref:+($ref)}"
-    rm -rf "$cache.tmp"; mkdir -p "$SYSROOT/src/git"
-    if [ -z "$ref" ]; then
-      git clone -q --depth 1 --recurse-submodules --shallow-submodules "$url" "$cache.tmp" >&2
-    elif ! git clone -q --depth 1 --branch "$ref" --recurse-submodules --shallow-submodules \
-           "$url" "$cache.tmp" >&2 2>/dev/null; then
-      rm -rf "$cache.tmp"; mkdir -p "$cache.tmp"
-      ( cd "$cache.tmp" && git init -q && git remote add origin "$url" \
-          && git fetch -q --depth 1 origin "$ref" && git checkout -q FETCH_HEAD \
-          && git submodule -q update --init --depth 1 --recursive ) >&2 \
-        || { rm -rf "$cache.tmp"; die "cannot fetch $ref from $url"; }
-    fi
-    mv "$cache.tmp" "$cache"
-  fi
-  cp -a "$cache" "$dest"
-  SOURCE_VERSION=${ref:-HEAD}
-}
-
-# The compiler sources: whichever compiler package of the switch carries them.
-# Since OCaml 5.3 the sources live in `ocaml-compiler` (ocaml-base-compiler is
-# a meta package), hence the order.
-fetch_ocaml_source() {
-  local p ver
-  for p in ocaml-variants ocaml-compiler ocaml-base-compiler; do
-    ver=$(opam_pkg_version "$p") || continue
-    if [ -d "$PREFIX/.opam-switch/build/$p.$ver" ]; then
-      fetch_opam_source "$p" "$1"; return
-    fi
-  done
-  for p in ocaml-variants ocaml-compiler ocaml-base-compiler; do
-    if opam_pkg_version "$p" >/dev/null; then fetch_opam_source "$p" "$1"; return; fi
-  done
-  die "cannot find the compiler package of the switch"
 }
 
 # ----------------------------------------------------------------- helpers
@@ -680,38 +519,28 @@ load_recipe() {
   . "$dir/recipe.sh"
 }
 
-# describe <name>: the variables of the recipe, NAME=value NUL-terminated
+# describe <name>: the variables of the recipe, and the optional functions it
+# defines (FUNCTIONS), NAME=value NUL-terminated
 describe_recipe() {
   ( load_recipe "$1"
-    local v
-    for v in $RECIPE_VARS; do printf '%s=%s\0' "$v" "${!v}"; done )
+    local v f fns=
+    for v in $RECIPE_VARS; do printf '%s=%s\0' "$v" "${!v}"; done
+    for f in fetch releases pre_build; do declare -F $f >/dev/null && fns="$fns $f"; done
+    printf 'FUNCTIONS=%s\0' "${fns# }" )
 }
 
-# build_recipe <name> <result>: build and install the recipe (its
-# dependencies are built); writes the version of its sources and emcc's in
-# <result>, for its stamp.
+# build_recipe <name> <result> [<version>]: build and install the recipe,
+# its dependencies built and its sources in $SYSROOT/build/<name> (of that
+# version), unless it fetches them itself (SOURCE=fetch); writes the version
+# of its sources and emcc's in <result>, for its stamp.
 build_recipe() {
   local name=$1 result=$2
   (
     load_recipe "$name"
     local work=$SYSROOT/build/$name
-    rm -rf "$work"
     case "$SOURCE" in
-      opam:*) fetch_opam_source "${SOURCE#opam:}" "$work" ;;
-      url:*)  fetch_url "${SOURCE#url:}" "$work" ;;
-      git:*)
-        local repo=${SOURCE#git:}
-        case "$repo" in *'#'*) REF=${repo##*#}; repo=${repo%#*} ;; esac
-        fetch_git "$repo" "$REF" "$work" ;;
-      dir:*)
-        local d=${SOURCE#dir:}
-        case "$d" in /*) ;; *) d=$RECIPE_DIR/$d ;; esac
-        cp -a "$d" "$work"; SOURCE_VERSION=$(basename "$d") ;;
-      ocaml)  fetch_ocaml_source "$work" ;;
-      fetch)  SOURCE_VERSION=; fetch "$work" ;;
-      system:*) fetch_system "${SOURCE#system:}" "$work" ;;
-      none)   mkdir -p "$work"; SOURCE_VERSION= ;;
-      *) die "$name: bad SOURCE '$SOURCE'" ;;
+      fetch) rm -rf "$work"; SOURCE_VERSION=; fetch "$work" ;;
+      *) SOURCE_VERSION=${3-} ;;
     esac
     log "building $name ${SOURCE_VERSION:-}"
     cd "$work"
@@ -724,6 +553,9 @@ build_recipe() {
     log "installed $name"
   )
 }
+
+# releases <name>: the output of the recipe's `releases` function
+releases_of() { ( load_recipe "$1"; releases ) }
 
 # Rebuild a dune package's foreign stubs with `dune build -x wasm32`.
 run_dune_package() {
@@ -1026,7 +858,8 @@ cmd=${1:-}; shift || true
 if [ "${1:-}" = --force ]; then FORCE=yes; shift; fi
 case "$cmd" in
   describe)     describe_recipe "$1" ;;
-  build)        build_recipe "$1" "$2" ;;
+  build)        build_recipe "$@" ;;
+  releases)     releases_of "$1" ;;
   install-dune) run_dune_package "$1" ;;
   shadow)       for p in "$@"; do run_shadow "$p"; done ;;
   patched-dune) patched_dune ;;
