@@ -253,11 +253,14 @@ let dune_stubs ~dir ~provider pkg =
   if built = [] then log "  (no C archive produced)";
   built <> []
 
-(* Whether the stamp [name] is of the installed version of [pkg] *)
+(* Whether the stamp [name] is of the installed version of [pkg], built
+   with the current toolchain *)
 let up_to_date name pkg =
-  match Stamp.read name, Switch.version pkg with Some f, Some v -> Stamp.version f = v | _ -> false
+  match Stamp.read name, Switch.version pkg with
+  | Some f, Some v -> Stamp.version f = v && Stamp.current_toolchain f
+  | _ -> false
 
-let stamp name version = Stamp.write name [ version; "emcc-" ^ Lazy.force Toolchain.emcc_version ]
+let stamp name version = Stamp.write name [ version; "emcc-" ^ Lazy.force Toolchain.emcc_version; Stamp.toolchain ]
 
 (* Rebuild the stubs of the dune package [pkg] with its dune rules *)
 let dune_package ?(force = false) pkg =

@@ -1,5 +1,11 @@
 ## Unreleased
 
+- The stubs built with dune or from a package's native build, and the
+  packages rebuilt for ctypes, record the version of the toolchain's
+  wrappers in their stamps: a fix of the wrappers builds them again.
+  Those built before the pkg-config fix below had the host's C flags
+  (ctypes-foreign's wasm64 stubs: the host's `ffi_cif`, 8 bytes too
+  small, and calls failing with "Unexpected type 0").
 - The stubs whose C signature differs from their OCaml arity are found by
   reading the wasm objects of the libraries (`linking` section, function
   types), no longer by parsing wasm-ld's warnings, whose wording could

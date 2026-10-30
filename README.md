@@ -299,7 +299,9 @@ program needs from its bytecode and its opam packages:
 - **Stub libraries of opam packages** are
   rebuilt with emcc from the package that installed them: with the builtin
   recipe of that package if there is one, else with the package's own dune
-  rules, else from the C files of its native build.
+  rules, else from the C files of its native build. Those built with dune
+  or from the native build are built again when the package changes
+  version, and when ocaml-emcc's toolchain wrappers change.
 - **System C libraries**: when a package depends on `conf-gmp`,
   `conf-zlib`..., the recipe of the same name is built and linked. So is
   any recipe providing a `libX.a` for a `-lX` that the package's `.cma`

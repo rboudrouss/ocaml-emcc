@@ -3,9 +3,9 @@
    sources (possibly empty).
 
      <recipe>              <version> emcc-<v> recipe=<checksum> [opam=<package>]
-     dune-<package>        <version> emcc-<v>
-     auto-<package>-<lib>  <version> emcc-<v>
-     shadow-<package>      <version> <ok|failed|none> emcc-<v> [deps=<p>.<v>,...]
+     dune-<package>        <version> emcc-<v> toolchain=<v>
+     auto-<package>-<lib>  <version> emcc-<v> toolchain=<v>
+     shadow-<package>      <version> <ok|failed|none> emcc-<v> toolchain=<v> [deps=<p>.<v>,...]
      patched-dune          <version> patch=<checksum> *)
 
 let file name = Env.sysroot_file (Filename.concat "stamps" name)
@@ -36,6 +36,14 @@ let field key fields =
       if Str_util.starts_with ~prefix f then Some (String.sub f (String.length prefix) (String.length f - String.length prefix))
       else None)
     fields
+
+(* The version of the toolchain's wrappers the stubs of a package were
+   built with: a fix of the wrappers (emcc, pkg-config under
+   dune-configurator...) rebuilds them.  Not for recipes, whose builds
+   (configure, make) do not go through dune. *)
+let toolchain = "toolchain=" ^ Wrappers.version
+
+let current_toolchain fields = List.mem toolchain fields
 
 (* The names of the stamps of the sysroot *)
 let names () = try List.sort compare (Array.to_list (Sys.readdir (Env.sysroot_file "stamps"))) with Sys_error _ -> []

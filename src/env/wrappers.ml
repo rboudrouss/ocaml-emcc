@@ -3,7 +3,8 @@
    the manifest.  Written by the `ocaml` recipe once the runtime is built. *)
 
 (* Bumped whenever [write] changes: the CLI then regenerates the toolchain
-   in existing sysroots (cheap: the runtime is not rebuilt). *)
+   in existing sysroots (cheap: the runtime is not rebuilt), and the stubs
+   built with it are built again (see [Stamp.toolchain]). *)
 let version = "11"
 
 (* [template] with each @KEY@ replaced *)

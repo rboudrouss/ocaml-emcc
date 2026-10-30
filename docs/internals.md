@@ -138,8 +138,8 @@ bytes in structs, wasm32 to 8.
 
 So `build` and `link` rebuild ctypes and the packages of the
 program that depend on it (found from the program's `CRCS` section and
-the opam dependencies), once per switch and package version
-(`src/packages/shadow.ml`). Their OCaml libraries are installed in
+the opam dependencies), once per switch, package version and version of
+the toolchain's wrappers (`src/packages/shadow.ml`). Their OCaml libraries are installed in
 `<sysroot>/lib/findlib`, which the toolchain searches before the switch.
 `build` then builds the bytecode against them, and also rebuilds the
 libraries of the switch that ocamlc finds compiled against the host's

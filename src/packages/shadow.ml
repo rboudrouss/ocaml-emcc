@@ -14,7 +14,7 @@
    The stamp shadow-<pkg> records the package version and the outcome: ok
    (installed), failed (it lays C types out when built, and could not be
    rebuilt), none (it does not: the host's build is kept).  Rebuilt when the
-   package changes version. *)
+   package changes version, or the toolchain's wrappers. *)
 
 let log = Env.log
 
@@ -33,7 +33,7 @@ let dirs_file pkg = Stubs.meta ("shadow-" ^ pkg ^ ".dirs")
 let build ?(force = false) pkg =
   let ver = match Switch.version pkg with Some v -> v | None -> Env.fail "%s is not installed in %s" pkg (Switch.prefix ()) in
   let name = "shadow-" ^ pkg in
-  let built = match Stamp.read name with Some f -> Stamp.version f = ver | None -> false in
+  let built = match Stamp.read name with Some f -> Stamp.version f = ver && Stamp.current_toolchain f | None -> false in
   if force || not built then (
     (* the libraries of the previous version *)
     let dirs = dirs_file pkg in
@@ -83,4 +83,4 @@ let build ?(force = false) pkg =
         ignore (Env.run ~out:Unix.stderr "tail" [ "-n"; "30"; log_file ]);
         log "%s: could not be built for %s (log: %s)" pkg !Env.target log_file)
       else log "  not built for %s, which it does not need: no structs in its generated types" !Env.target);
-    Stamp.write name [ ver; !status; "emcc-" ^ Lazy.force Toolchain.emcc_version ])
+    Stamp.write name [ ver; !status; "emcc-" ^ Lazy.force Toolchain.emcc_version; Stamp.toolchain ])

@@ -86,22 +86,26 @@ let resolve ~extra_dirs ?bc_path bc name =
 (* The opam package of a stub library of the sysroot built from it (by
    dune or blindly: meta/<name>.provider, and a stamp starting with the
    version; by a recipe: its stamp ends with opam=<package>) for another
-   version than the installed one (opam upgrade). *)
+   version than the installed one (opam upgrade), or by dune or blindly
+   with an older toolchain; with the reason. *)
 let stale name f =
   let read rel = let p = Env.sysroot_file rel in if Sys.file_exists p then Some (String.trim (Bytecode.read_file p)) else None in
-  let older pkg stamp =
+  let older ~toolchain pkg stamp =
     match Stamp.read stamp, Switch.version pkg with
-    | Some fields, Some installed when Stamp.version fields <> installed -> Some pkg
+    | Some fields, Some installed when Stamp.version fields <> installed ->
+        Some (pkg, "for another version of opam package " ^ pkg)
+    | Some fields, Some _ when toolchain && not (Stamp.current_toolchain fields) ->
+        Some (pkg, "with an older toolchain (opam package " ^ pkg ^ ")")
     | _ -> None
   in
   if f <> lib_file (Env.sysroot_file "lib") name then None
   else
     match owner_of_dll name, read ("meta/" ^ name ^ ".provider") with
     | Some pkg, Some p when p = "dune-" ^ pkg || p = "auto-" ^ pkg ->
-        older pkg (if p = "dune-" ^ pkg then p else p ^ "-" ^ name)
+        older ~toolchain:true pkg (if p = "dune-" ^ pkg then p else p ^ "-" ^ name)
     | Some pkg, Some recipe -> (
         match Stamp.read recipe with
-        | Some fields when Stamp.field "opam" fields = Some pkg -> older pkg recipe
+        | Some fields when Stamp.field "opam" fields = Some pkg -> older ~toolchain:false pkg recipe
         | _ -> None)
     | _ -> None
 

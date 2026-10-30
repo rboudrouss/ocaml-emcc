@@ -8,6 +8,9 @@ let run () =
   Check.string_opt "field" (Some "zarith") (Stamp.field "opam" f);
   Check.string_opt "absent field" None (Stamp.field "deps" f);
   Check.string "version" "1.2" (Stamp.version f);
+  Check.bool "current_toolchain: none recorded" false (Stamp.current_toolchain f);
+  Check.bool "current_toolchain" true (Stamp.current_toolchain [ "1.2"; "emcc-4"; Stamp.toolchain ]);
+  Check.bool "current_toolchain: older" false (Stamp.current_toolchain [ "1.2"; "emcc-4"; "toolchain=0" ]);
   Stamp.write "x" [ ""; "emcc-4" ];
   Check.option (fun l -> String.concat "," l) "write then read" (Some [ ""; "emcc-4" ]) (Stamp.read "x");
   Check.string "file" " emcc-4\n" (Compat.read_file (Stamp.file "x"));

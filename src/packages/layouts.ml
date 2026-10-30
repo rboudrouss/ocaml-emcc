@@ -78,12 +78,14 @@ let dep_versions pkg =
   |> ( ^ ) "deps="
 
 (* "<version> <ok|failed|none> ... [deps=...]" (Shadow.build, then
-   [record_deps]): the build of the installed version, against the
-   installed versions of its dependencies *)
+   [record_deps]): the build of the installed version, with the current
+   toolchain, against the installed versions of its dependencies *)
 let stamp pkg =
   match Stamp.read ("shadow-" ^ pkg) with
   | Some (v :: status :: rest)
-    when Some v = Switch.version pkg && (List.mem (dep_versions pkg) rest || dep_versions pkg = "deps=") ->
+    when Some v = Switch.version pkg
+         && Stamp.current_toolchain rest
+         && (List.mem (dep_versions pkg) rest || dep_versions pkg = "deps=") ->
       Some status
   | _ -> None
 
@@ -159,7 +161,7 @@ let shadow l =
           drop p;
           (match Switch.version p with
           | Some v ->
-              Stamp.write ("shadow-" ^ p) [ v; "failed"; dep_versions p ]
+              Stamp.write ("shadow-" ^ p) [ v; "failed"; Stamp.toolchain; dep_versions p ]
           | None -> ());
           failed := p :: !failed
       | None ->
