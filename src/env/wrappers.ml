@@ -4,7 +4,7 @@
 
 (* Bumped whenever [write] changes: the CLI then regenerates the toolchain
    in existing sysroots (cheap: the runtime is not rebuilt). *)
-let version = "10"
+let version = "11"
 
 (* [template] with each @KEY@ replaced *)
 let subst vars template =
@@ -88,11 +88,15 @@ echo "@TOOL@: not found" >&2; exit 127
 (* pkg-config (dune-configurator): the rules of the wasm context only see
    the wasm libraries of the sysroot, not the host's (lmdb would take the
    host's liblmdb instead of its own copy).  Those of the host context get
-   the host's pkg-config. *)
+   the host's pkg-config.  The context is that of INSIDE_DUNE (its build
+   directory), which dune sets for its rules: dune-configurator runs
+   pkg-config from a temporary directory, and the working directory of
+   other rules is in the context (also in dune's sandboxes,
+   _build/.sandbox/<hash>/). *)
 let pkg_config_wrapper =
   {|#!/bin/sh
-case $PWD/ in
-  */default.@TARGET@/*) # also in dune's sandboxes (_build/.sandbox/<hash>/)
+case $INSIDE_DUNE/:$PWD/ in
+  */default.@TARGET@/*)
     PKG_CONFIG_LIBDIR='@SYSROOT@/lib/pkgconfig' PKG_CONFIG_PATH=
     export PKG_CONFIG_LIBDIR PKG_CONFIG_PATH ;;
 esac
@@ -105,7 +109,7 @@ esac
    (-print-resource-dir, --version): it compiles nothing. *)
 let llvm_wrapper =
   {|#!/bin/sh
-case $PWD/ in
+case $INSIDE_DUNE/:$PWD/ in
   */default.@TARGET@/*)
     if [ -x '@SYSROOT@/bin/@TOOL@' ]; then
       case @TOOL@:$1 in llvm-config:*|clang:-print-resource-dir|clang:--version) exec '@SYSROOT@/bin/@TOOL@' "$@" ;; esac

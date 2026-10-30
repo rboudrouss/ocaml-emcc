@@ -7,6 +7,10 @@
   toolchain's wrappers. `share/driver.sh` (1084 lines, now 339) reads
   recipes and runs their `build` function; the recipe format and helpers
   are unchanged. Unit tests (`dune test`) cover the logic that moved.
+- dune-configurator runs `pkg-config` from a temporary
+  directory, where the sysroot's wrapper took it for the host context: the
+  wasm stubs got the host's C flags (`gsl` read its headers from
+  `/usr/include`). The wrapper now goes by `INSIDE_DUNE`.
 - Compiled mode (experimental): with `--compiled`, `build` and `link`
   compile the bytecode to C with c_of_ocaml instead of interpreting it.
   Programs run 2 to 5 times faster in node, and their `.wasm` is 2 to 8
