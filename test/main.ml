@@ -8,4 +8,5 @@ let () =
   Check.mkdir_p (Filename.concat root "switch/.opam-switch/packages");
   Test_stamp.run ();
   Test_recipe.run ();
+  Test_syslib.run ();
   if !Check.failures > 0 then (Printf.printf "%d failure(s)\n" !Check.failures; exit 1)

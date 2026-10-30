@@ -394,7 +394,7 @@ let cmd_env = function
 
 (* Commands run by driver.sh, for what is done in OCaml *)
 let cmd_internal = function
-  | [ "lib-recipe"; x ] -> ( match Recipe.lib_recipe x with Some r -> print_endline r | None -> exit 1)
+  | [ "system-recipes"; pkg ] -> List.iter print_endline (Syslib.recipes pkg)
   | _ -> die_usage ()
 
 let () =
