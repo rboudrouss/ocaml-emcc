@@ -11,4 +11,5 @@ let () =
   Test_syslib.run ();
   Test_source.run ();
   Test_stubs.run ();
+  Test_wasm.run ();
   if !Check.failures > 0 then (Printf.printf "%d failure(s)\n" !Check.failures; exit 1)

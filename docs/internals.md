@@ -62,11 +62,10 @@ out, and tail calls become ordinary calls. The link exports `malloc` and
 code of some stubs (libffi, for ctypes) calls them.
 
 The generated C calls the primitives directly, declared with the arity of
-their call sites, and contains a function, never called, calling each of
-them, so that wasm-ld reports the stubs whose definition differs, as with
-the primitive table (see [signature adapters](#signature-adapters)). Their
-adapters are generated the same way, and the C code is compiled again with
-`-DNAME=ocaml_emcc_adapt__NAME` for each of them. The bytecode is not
+their call sites. The stubs whose definition differs get adapters, as with
+the primitive table (see [signature adapters](#signature-adapters)), and
+the C code is compiled again with `-DNAME=ocaml_emcc_adapt__NAME` for
+each of them. The bytecode is not
 needed at run time: nothing is embedded, preloaded or written next to the
 output.
 
@@ -116,8 +115,13 @@ ocaml-emcc's out and says so: the program's definition is the one linked.
 A wasm indirect call traps on any signature mismatch, while native code
 ignores extra arguments: OCaml calls zarith's `ml_z_init()` with one
 argument, for instance. The arity of each call site is read from the
-bytecode (`C_CALLn`), wasm-ld reports the definitions that differ, and an
-adapter is generated for each of them.
+bytecode (`C_CALLn`), the signature of each definition from the wasm
+objects of the libraries (the symbol table of their `linking` section and
+the types of their functions, `src/link/wasm.ml`), the first in link
+order, and an adapter is generated for each one that differs, before the
+link. A function never called, calling each primitive directly, makes
+wasm-ld report the mismatches left (a stub in an object that could not be
+read, LTO bitcode for instance).
 
 ## ctypes layouts
 

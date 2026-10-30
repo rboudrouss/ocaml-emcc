@@ -42,10 +42,11 @@ let call_proto arity =
 let adapter_name p = "ocaml_emcc_adapt__" ^ p
 
 (* The table of primitives.  Each primitive called by the bytecode is
-   declared with the prototype of its call site, so that wasm-ld reports the
-   stubs whose definition does not match (a wasm call_indirect traps on any
-   signature mismatch, where native code silently ignores extra arguments);
-   those go through an adapter, see [adapters_c]. *)
+   declared with the prototype of its call site.  A wasm call_indirect traps
+   on any signature mismatch, where native code silently ignores extra
+   arguments: the stubs whose definition does not match go through an
+   adapter, see [mismatches] and [adapters_c], and wasm-ld reports those
+   left. *)
 let prims_c ~arities ~adapted prims =
   let b = Buffer.create 4096 in
   let pr fmt = Printf.bprintf b fmt in
@@ -76,49 +77,54 @@ let prims_c ~arities ~adapted prims =
   pr "}\n";
   Buffer.contents b
 
-(* wasm-ld: "function signature mismatch: NAME" followed by two
-   ">>> defined as (i64, i64) -> i64 in FILE" lines.  Returns the signature
-   of the definition that is not ours (prims.o), for primitives only. *)
-let parse_mismatches ~prims_o ~prims err =
-  let lines = Array.of_list (String.split_on_char '\n' err) in
-  let marker = "function signature mismatch: " in
-  let res = ref [] in
-  Array.iteri
-    (fun i l ->
-      match Str_util.find l marker with
-      | None -> ()
-      | Some j ->
-          let name = String.trim (String.sub l (j + String.length marker) (String.length l - j - String.length marker)) in
-          let defs =
-            List.filter_map
-              (fun k ->
-                if k < Array.length lines then
-                  let d = lines.(k) in
-                  match (Str_util.find d "defined as ", Str_util.find d " in ") with
-                  | Some a, Some b when b > a ->
-                      let sg = String.sub d (a + 11) (b - a - 11) in
-                      let file = String.sub d (b + 4) (String.length d - b - 4) in
-                      Some (sg, file)
-                  | _ -> None
-                else None)
-              [ i + 1; i + 2 ]
-          in
-          if List.mem name prims then
-            match List.find_opt (fun (_, f) -> Str_util.find f (Filename.basename prims_o) = None) defs with
-            | Some (sg, _) -> res := (name, sg) :: !res
-            | None -> ())
-    lines;
-  List.rev !res
+(* The signature of a primitive's call site, see [call_proto]. *)
+let call_signature arity =
+  let v = if !Env.target = "wasm64" then "i64" else "i32" in
+  let params = match arity with -1 -> [ v; "i32" ] | k -> List.init k (fun _ -> v) in
+  { Wasm.params; results = [ v ] }
 
-(* "(i64, f64) -> i64" -> (["i64"; "f64"], "i64") *)
-let parse_sig sg =
-  match Str_util.find sg " -> " with
-  | None -> ([], "void")
-  | Some k ->
-      let params = String.sub sg 0 k and ret = String.sub sg (k + 4) (String.length sg - k - 4) in
-      let params = String.sub params 1 (String.length params - 2) in
-      let params = String.split_on_char ',' params |> List.map String.trim |> List.filter (( <> ) "") in
-      (params, String.trim ret)
+(* The signatures of the primitives as the libraries define them, read
+   from their objects, in link order: the first definition is the one
+   wasm-ld links (it takes an archive member for a symbol still undefined,
+   and the call sites come first).  Objects it cannot read (LTO bitcode)
+   are skipped: wasm-ld then reports their mismatches itself. *)
+let definitions ~prims files =
+  let wanted = Hashtbl.create 256 and found = Hashtbl.create 256 in
+  List.iter (fun p -> Hashtbl.replace wanted p ()) prims;
+  let objects f =
+    match Archive.members f with
+    | Some m -> List.map (fun (n, c) -> (Printf.sprintf "%s(%s)" f n, c)) m
+    | None -> ( match Compat.read_file f with c -> [ (f, c) ] | exception Sys_error _ -> [])
+  in
+  List.iter
+    (fun f ->
+      List.iter
+        (fun (what, c) ->
+          if Str_util.starts_with ~prefix:"\000asm" c then
+            match Wasm.functions ~what c with
+            | exception Failure e -> Env.log "note: %s, the signatures of its stubs are not checked" e
+            | syms ->
+                List.iter
+                  (fun (s : Wasm.symbol) ->
+                    if s.defined && (not s.local) && Hashtbl.mem wanted s.name && not (Hashtbl.mem found s.name) then
+                      Hashtbl.replace found s.name s.signature)
+                  syms)
+        (objects f))
+    files;
+  found
+
+(* The primitives whose definition differs from their call site (a direct
+   call of which wasm-ld would replace with a trap), with the signature of
+   the definition. *)
+let mismatches ~arities ~prims files =
+  let defs = definitions ~prims files in
+  List.concat
+    (List.mapi
+       (fun i p ->
+         match (Hashtbl.find_opt arities i, Hashtbl.find_opt defs p) with
+         | Some a, Some sg when sg <> call_signature a -> [ (p, sg) ]
+         | _ -> [])
+       prims)
 
 (* Adapters: the call-site signature on the outside, the real signature of
    the stub on the inside.  Extra arguments are dropped (what native code
@@ -134,8 +140,8 @@ let adapters_c ~arities ~prims adapted =
   in
   let ctype = function "f64" -> "double" | "f32" -> "float" | "i32" -> "int32_t" | _ -> "value" in
   List.iter
-    (fun (p, sg) ->
-      let params, ret = parse_sig sg in
+    (fun (p, (sg : Wasm.signature)) ->
+      let params = sg.params and ret = match sg.results with [] -> "void" | t :: _ -> t in
       let arity = Option.value (Hashtbl.find_opt arities (index p)) ~default:1 in
       let decl_params = if params = [] then "void" else String.concat ", " (List.map ctype params) in
       let ret_t = if ret = "void" then "void" else ctype ret in
@@ -512,7 +518,6 @@ let run o =
   let prims = Bytecode.primitives bc in
   let arities = Bytecode.call_arities bc in
   let prims_src = Filename.concat work "prims.c" in
-  write_file prims_src (prims_c ~arities ~adapted:[] prims);
   (* 3. libraries *)
   let libs = resolve_libs ~extra_dirs:o.lib_dirs ~auto_deps:o.auto_deps ~bc_path:o.bc bc in
   let camlrun = Env.sysroot_file "lib/libcamlrun.a" in
@@ -611,7 +616,6 @@ let run o =
     Env.run_exn emcc
       (cflags @ [ o.opt; "-std=gnu11"; "-Wno-incompatible-function-pointer-types"; "-Wno-deprecated-non-prototype"; "-c"; prims_src; "-o"; prims_o ])
   in
-  if compiled = None then cc_prims ();
   let fs_flags =
     match o.mode with
     | _ when standalone -> []
@@ -684,61 +688,49 @@ let run o =
   in
   Env.log "linking %s (%d primitives, %d stub libraries%s)" o.output (List.length prims) (List.length libs)
     (if compiled <> None then ", compiled" else "");
-  (* The primitives called, and the object calling them *)
-  let prims, arities, prims_o =
-    match compiled with Some c -> (c.c_prims, c.c_arities, c.c_obj) | None -> (prims, arities, prims_o)
+  (* The primitives called, and the stubs whose C signature differs from
+     the call site: called through an adapter. *)
+  let prims, arities = match compiled with Some c -> (c.c_prims, c.c_arities) | None -> (prims, arities) in
+  let adapted =
+    mismatches ~arities ~prims
+      ((compat_o :: standalone_objs) @ foreign_objs @ archives @ user_archives () @ flag_archives)
   in
-  (* First link: find the stubs whose C signature differs from the call site. *)
-  let code, err = Env.run_capture_stderr emcc (args ~output:o.output ()) in
-  let adapted = parse_mismatches ~prims_o ~prims err in
-  (* emcc's messages, without the mismatches of primitives (adapted).  The
-     other mismatches are calls between C functions that wasm-ld replaced
-     with a trap: shown, with an explanation. *)
-  let report err =
-    let lines = Array.of_list (String.split_on_char '\n' err) in
-    let marker = "function signature mismatch: " in
-    let traps = ref [] in
-    let skip = ref false in
-    Array.iter
-      (fun l ->
-        if Str_util.starts_with ~prefix:">>>" l then (if not !skip then prerr_endline l)
-        else (
-          skip := false;
-          match Str_util.find l marker with
-          | Some j ->
-              let name = String.trim (String.sub l (j + String.length marker) (String.length l - j - String.length marker)) in
-              if List.mem name prims then skip := true
-              else (
-                traps := name :: !traps;
-                prerr_endline l)
-          | None -> if l <> "" then prerr_endline l))
-      lines;
-    if !traps <> [] then
-      Env.log
-        "warning: C function(s) called with a signature different from their definition: %s.\n\
-        \  wasm-ld replaced those calls with a trap: the program stops with \"RuntimeError: unreachable\"\n\
-        \  if it makes them.  Most likely a stub declares the function itself with other types\n\
-        \  (int for long, which differ on wasm64)."
-        (String.concat " " (List.sort_uniq compare !traps))
+  let adapters =
+    if adapted = [] then []
+    else (
+      Env.log "%d stub(s) with a C signature different from their OCaml arity, adapting: %s" (List.length adapted)
+        (String.concat " " (List.map fst adapted));
+      let adapters_src = Filename.concat work "adapters.c" and adapters_o = Filename.concat work "adapters.o" in
+      write_file adapters_src (adapters_c ~arities ~prims adapted);
+      Env.run_exn emcc (cflags @ [ o.opt; "-w"; "-c"; adapters_src; "-o"; adapters_o ]);
+      [ adapters_o ])
   in
-  if adapted = [] then (
-    report err;
-    if code <> 0 then Env.fail "emcc failed (exit %d)" code)
-  else (
-    Env.log "%d stub(s) with a C signature different from their OCaml arity, adapting: %s" (List.length adapted)
-      (String.concat " " (List.map fst adapted));
-    let adapters_src = Filename.concat work "adapters.c" and adapters_o = Filename.concat work "adapters.o" in
-    write_file adapters_src (adapters_c ~arities ~prims adapted);
-    (match compiled with
-    | Some c ->
-        (* the generated C calls the adapters instead *)
-        c.cc (List.map (fun (p, _) -> Printf.sprintf "-D%s=%s" p (adapter_name p)) adapted)
-    | None ->
-        write_file prims_src (prims_c ~arities ~adapted prims);
-        cc_prims ());
-    Env.run_exn emcc (cflags @ [ o.opt; "-w"; "-c"; adapters_src; "-o"; adapters_o ]);
-    let code, err = Env.run_capture_stderr emcc (args ~extra:[ adapters_o ] ~output:o.output ()) in
-    report err;
-    if code <> 0 then Env.fail "emcc failed (exit %d)" code);
+  (match compiled with
+  | Some c ->
+      (* the generated C calls the adapters instead *)
+      if adapted <> [] then c.cc (List.map (fun (p, _) -> Printf.sprintf "-D%s=%s" p (adapter_name p)) adapted)
+  | None ->
+      write_file prims_src (prims_c ~arities ~adapted prims);
+      cc_prims ());
+  let code, err = Env.run_capture_stderr emcc (args ~extra:adapters ~output:o.output ()) in
+  (* emcc's messages.  Mismatches left are calls between C functions that
+     wasm-ld replaced with a trap: shown, with an explanation. *)
+  let marker = "function signature mismatch: " in
+  let traps =
+    String.split_on_char '\n' err
+    |> List.filter_map (fun l ->
+           if l <> "" then prerr_endline l;
+           match Str_util.find l marker with
+           | Some j -> Some (String.trim (String.sub l (j + String.length marker) (String.length l - j - String.length marker)))
+           | None -> None)
+  in
+  if traps <> [] then
+    Env.log
+      "warning: C function(s) called with a signature different from their definition: %s.\n\
+      \  wasm-ld replaced those calls with a trap: the program stops with \"RuntimeError: unreachable\"\n\
+      \  if it makes them.  Most likely a stub declares the function itself with other types\n\
+      \  (int for long, which differ on wasm64)."
+      (String.concat " " (List.sort_uniq compare traps));
+  if code <> 0 then Env.fail "emcc failed (exit %d)" code;
   if foreign <> None then keep_raw_exports o.output;
   if standalone then report_imports ~wasi:o.wasi o.output

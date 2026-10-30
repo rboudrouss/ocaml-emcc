@@ -1,5 +1,10 @@
 ## Unreleased
 
+- The stubs whose C signature differs from their OCaml arity are found by
+  reading the wasm objects of the libraries (`linking` section, function
+  types), no longer by parsing wasm-ld's warnings, whose wording could
+  change with emsdk. `link` now links once instead of twice when stubs
+  need adapters.
 - What the recipe driver decided moved from bash to OCaml: which recipes
   to build (stamps, `DEPENDS`), their sources (opam, tarballs, git, system
   libraries), the C stubs of opam packages (dune, native build, blind),
