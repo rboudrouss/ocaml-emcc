@@ -118,10 +118,7 @@ let obtain pkg name =
   if code <> 0 then Env.fail "could not build lib%s.a (package %s)" name pkg
 
 (* The recipe of the C library lib<name>.a (-lgmp, -lz...), if any. *)
-let lib_recipe name =
-  match Env.driver_output [ "lib-recipe"; name ] with
-  | Some r when r <> "" -> Some r
-  | _ -> None
+let lib_recipe name = Recipe.lib_recipe name
 
 let install_recipe r = if Env.driver [ "install"; r ] <> 0 then Env.fail "the %s recipe failed" r
 

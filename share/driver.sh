@@ -23,6 +23,8 @@
 #   OCAML_EMCC_RECIPES_PATH  extra ':'-separated recipe directories (optional,
 #                            searched before the builtin ones)
 #   OCAML_EMCC_EXTRA_CFLAGS  extra C flags for recipes (optional)
+#   OCAML_EMCC_EXE           the CLI, run as `ocaml-emcc internal ...` for
+#                            what is done in OCaml
 #
 # A recipe is a directory `<name>/` containing `recipe.sh`, which may set
 #   SOURCE   "opam:<package>"     sources of an installed opam package
@@ -44,7 +46,7 @@
 
 set -euo pipefail
 
-: "${OCAML_EMCC_SHARE:?}" "${OCAML_EMCC_SWITCH_PREFIX:?}" "${OCAML_EMCC_SYSROOT:?}"
+: "${OCAML_EMCC_SHARE:?}" "${OCAML_EMCC_SWITCH_PREFIX:?}" "${OCAML_EMCC_SYSROOT:?}" "${OCAML_EMCC_EXE:?}"
 
 SYSROOT=$OCAML_EMCC_SYSROOT
 PREFIX=$OCAML_EMCC_SWITCH_PREFIX
@@ -1046,28 +1048,8 @@ run_obtain() {
   fi
 }
 
-# lib_recipe <X>: the recipe of a C library (system:, or with a LINK or
-# LIB_PATTERNS) that builds libX.a (for a -lX of the program): named X or
-# libX (whatever the case: sdl2 for -lSDL2), whose LINK starts with -lX
-# (zlib: -lz), or with a LIB_PATTERNS glob matching X (clang: -lclang-cpp,
-# -lLLVM-19).
-lib_recipe() {
-  local IFS=: d r link pat pats lower=${1,,}
-  for d in $RECIPES_PATH; do
-    for r in "$d"/*/recipe.sh; do
-      [ -f "$r" ] && grep -qE '^(SOURCE=system:|LINK=|LIB_PATTERNS=)' "$r" || continue
-      case $(basename "$(dirname "$r")") in "$lower"|"lib$lower") basename "$(dirname "$r")"; return 0 ;; esac
-      link=$(sed -n "s/^LINK=[\"']\{0,1\}\([^ \"']*\).*/\1/p" "$r")
-      [ "$link" = "-l$1" ] && { basename "$(dirname "$r")"; return 0; }
-      IFS=' ' read -ra pats <<< "$(sed -n "s/^LIB_PATTERNS=[\"']\{0,1\}\([^\"']*\).*/\1/p" "$r")"
-      for pat in "${pats[@]}"; do
-        # shellcheck disable=SC2254
-        case $1 in $pat) basename "$(dirname "$r")"; return 0 ;; esac
-      done
-    done
-  done
-  return 1
-}
+# lib_recipe <X>: the recipe of a C library building libX.a (Recipe.lib_recipe)
+lib_recipe() { "$OCAML_EMCC_EXE" internal lib-recipe "$1"; }
 
 cmd=${1:-}; shift || true
 if [ "${1:-}" = --force ]; then FORCE=yes; shift; fi
@@ -1079,6 +1061,5 @@ case "$cmd" in
   auto)         run_auto "$1" "$2" ;;
   obtain)       run_obtain "$1" "$2" ;;
   toolchain)    write_toolchain ;;
-  lib-recipe)   lib_recipe "$1" ;;
-  *) die "usage: driver.sh install|install-dune|shadow|patched-dune|auto|obtain|toolchain|lib-recipe ..." ;;
+  *) die "usage: driver.sh install|install-dune|shadow|patched-dune|auto|obtain|toolchain ..." ;;
 esac

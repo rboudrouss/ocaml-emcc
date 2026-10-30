@@ -392,8 +392,18 @@ let cmd_env = function
       if Sys.file_exists m then print_string (Bytecode.read_file m)
   | _ -> die_usage ()
 
+(* Commands run by driver.sh, for what is done in OCaml *)
+let cmd_internal = function
+  | [ "lib-recipe"; x ] -> ( match Recipe.lib_recipe x with Some r -> print_endline r | None -> exit 1)
+  | _ -> die_usage ()
+
 let () =
   let args = global (List.tl (Array.to_list Sys.argv)) in
+  (match args with
+  | "internal" :: _ ->
+      Project.ignore ();
+      Env.switch := Env.getenv_opt "OCAML_EMCC_SWITCH_PREFIX"
+  | _ -> ());
   (match (Project.get ()).target with
   | Some (("wasm32" | "wasm64") as t) when not !Env.target_explicit -> Env.target := t
   | Some t when not !Env.target_explicit -> Env.fail "ocaml-emcc.conf: unknown target %s" t
@@ -407,5 +417,6 @@ let () =
   | "doctor" :: args -> cmd_doctor args
   | "link" :: args -> cmd_link args
   | "env" :: args -> cmd_env args
+  | "internal" :: args -> cmd_internal args
   | ("help" | "-h" | "--help") :: _ -> print_string usage
   | _ -> die_usage ()

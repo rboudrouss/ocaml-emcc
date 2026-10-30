@@ -121,16 +121,25 @@ let emcc () =
   | Some p -> p
   | None -> fail "emcc not found in PATH (source <emsdk>/emsdk_env.sh)"
 
-(* Environment given to the recipe driver and to dune. *)
+(* The recipe directories, searched in order: --recipes, the project's,
+   $OCAML_EMCC_RECIPES_PATH, then the builtin ones. *)
+let extra_recipe_dirs () =
+  let env = String.split_on_char ':' (Option.value (getenv_opt "OCAML_EMCC_RECIPES_PATH") ~default:"") in
+  List.filter (( <> ) "") (!recipe_dirs @ (Project.get ()).recipes @ env)
+
+let recipes_path () = extra_recipe_dirs () @ [ Filename.concat (share ()) "recipes" ]
+
+(* Environment given to the recipe driver and to dune.  OCAML_EMCC_EXE: the
+   driver runs `ocaml-emcc internal ...` for what is done in OCaml. *)
 let driver_env () =
   let p = Project.get () in
-  let join l = String.concat ":" (List.filter (( <> ) "") l) in
-  let recipes = join (!recipe_dirs @ p.recipes @ Option.to_list (getenv_opt "OCAML_EMCC_RECIPES_PATH")) in
+  let recipes = String.concat ":" (extra_recipe_dirs ()) in
   let cflags = String.concat " " (p.cflags @ Option.to_list (getenv_opt "OCAML_EMCC_EXTRA_CFLAGS")) in
   [
     "OCAML_EMCC_RECIPES_PATH=" ^ recipes;
     "OCAML_EMCC_EXTRA_CFLAGS=" ^ cflags;
     "OCAML_EMCC_SHARE=" ^ share ();
+    "OCAML_EMCC_EXE=" ^ Sys.executable_name;
     "OCAML_EMCC_SWITCH_PREFIX=" ^ Lazy.force switch_prefix;
     "OCAML_EMCC_SYSROOT=" ^ sysroot ();
     "OCAML_EMCC_TARGET=" ^ !target;

@@ -70,5 +70,11 @@ let load () =
       | Some (dir, _) -> { empty with dir = Some dir; recipes = default_recipes dir }
       | None -> empty)
 
-let current = lazy (load ())
-let get () = Lazy.force current
+let current = ref None
+
+let get () = match !current with Some p -> p | None -> let p = load () in current := Some p; p
+
+(* Commands run by driver.sh: its environment already has the project's
+   configuration (OCAML_EMCC_RECIPES_PATH...), and its current directory
+   is a build directory. *)
+let ignore () = current := Some empty
