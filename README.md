@@ -540,12 +540,14 @@ and 0.4, lmdb 1.1, dune 3.12 to 3.24 and mccs 1.1+13 to 1.1+19.
 
 ```
 bin/main.ml           CLI
-src/                  bytecode reading, linking, dependency resolution, project config
-share/driver.sh       recipe driver
+src/                  bytecode reading, linking, dependency resolution, project config,
+                      recipes (stamps, sources), stub builds, toolchain wrappers
+share/driver.sh       recipe driver: reads a recipe, runs its build function
 share/recipes/        ocaml (runtime + patches), C libraries (gmp, mpfr, zlib...),
                       OCaml packages needing changes (zarith, apron, lwt...)
 share/tools/          ocamlc / ocamlmklib wrappers for dune -x, dune's (ctypes) patch
 share/runtime/        main.c, compat.c, dlsym.c, wasi.c, node_stdio.js, node_stack.js
+test/                 unit tests (dune test)
 tests/                test suite (tests/README.md)
 docs/                 internals, recipe authoring
 ```
