@@ -353,6 +353,7 @@ A recipe is built once per switch and target, and is not rebuilt when it changes
 | `glfw3` | glfw-ocaml | emscripten's (`-sUSE_GLFW=3`), WebGL 2; no gamepads; a window needs a web page |
 | `libev` | lwt (when the host's uses it) | poll backend |
 | `libssl` | ssl | OpenSSL: generic C, no threads |
+| `ffmpeg` | ffmpeg-avutil, ffmpeg-avcodec... | its own codecs, formats and filters; generic C, no threads, networking or external libraries |
 | `clang` | programs embedding clang's frontend | see [docs/recipes.md](docs/recipes.md#the-clang-recipe) |
 
 These recipes take the sources of the opam package
