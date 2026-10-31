@@ -1,0 +1,19 @@
+wasm: a time stamp counter.
+
+rdtsc reads the CPU's counter (x86, arm64); on wasm, the high resolution
+clock (performance.now, in ns).
+
+--- a/time_stamp_counter/src/time_stamp_counter_stubs.c
++++ b/time_stamp_counter/src/time_stamp_counter_stubs.c
+@@
+   asm volatile("mrs %0, cntvct_el0" : "=r" (tsc));
+   return tsc;
+ }
++#elif defined(__wasm__)
++#include <emscripten/emscripten.h>
++static uint64_t rdtsc()
++{
++  /* the high resolution clock (performance.now), in ns */
++  return (uint64_t) (emscripten_get_now () * 1e6);
++}
+ #endif

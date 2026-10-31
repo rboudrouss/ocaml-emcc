@@ -1,0 +1,102 @@
+emscripten: linux_ext without the Linux-only headers.
+
+The OCaml side, built on the host, declares the primitives of linux_ext
+(JSC_LINUX_EXT of the host's jst-config).  Emscripten lacks prctl,
+sendfile, timerfd, eventfd, and declares without defining them memfd_create,
+sched_{get,set}affinity, sysinfo and the xattr functions: they fail with
+ENOSYS, as its unsupported syscalls do (emscripten_linux_ext.h).
+
+--- /dev/null
++++ b/linux_ext/src/emscripten_linux_ext.h
+@@ -0,0 +1,62 @@
++/* ocaml-emcc: what linux_ext uses that emscripten lacks, failing with
++   ENOSYS.  The functions emscripten declares but does not define are
++   renamed, after their prototypes. */
++#include <errno.h>
++#include <fcntl.h>
++#include <sched.h>
++#include <stdint.h>
++#include <sys/mman.h>
++#include <sys/sysinfo.h>
++#include <sys/types.h>
++#include <sys/xattr.h>
++#include <time.h>
++
++#define ENOSYS_RETURN errno = ENOSYS; return -1
++
++#define PR_SET_PDEATHSIG 1
++#define PR_GET_PDEATHSIG 2
++#define PR_SET_NAME 15
++#define PR_GET_NAME 16
++static int prctl(int option, ...) { (void)option; ENOSYS_RETURN; }
++
++static ssize_t sendfile(int out_fd, int in_fd, off_t *offset, size_t count)
++{ (void)out_fd; (void)in_fd; (void)offset; (void)count; ENOSYS_RETURN; }
++
++#define TFD_TIMER_ABSTIME 1
++#define TFD_NONBLOCK O_NONBLOCK
++#define TFD_CLOEXEC O_CLOEXEC
++static int timerfd_create(int clockid, int flags) { (void)clockid; (void)flags; ENOSYS_RETURN; }
++static int timerfd_settime(int fd, int flags, const struct itimerspec *new_value, struct itimerspec *old_value)
++{ (void)fd; (void)flags; (void)new_value; (void)old_value; ENOSYS_RETURN; }
++static int timerfd_gettime(int fd, struct itimerspec *curr_value) { (void)fd; (void)curr_value; ENOSYS_RETURN; }
++
++#define EFD_SEMAPHORE 1
++#define EFD_CLOEXEC O_CLOEXEC
++#define EFD_NONBLOCK O_NONBLOCK
++static int eventfd(unsigned int initval, int flags) { (void)initval; (void)flags; ENOSYS_RETURN; }
++
++static int ocaml_emcc_memfd_create(const char *name, unsigned flags) { (void)name; (void)flags; ENOSYS_RETURN; }
++#define memfd_create ocaml_emcc_memfd_create
++
++static int ocaml_emcc_sched_getaffinity(pid_t pid, size_t size, cpu_set_t *set)
++{ (void)pid; (void)size; (void)set; ENOSYS_RETURN; }
++static int ocaml_emcc_sched_setaffinity(pid_t pid, size_t size, const cpu_set_t *set)
++{ (void)pid; (void)size; (void)set; ENOSYS_RETURN; }
++#define sched_getaffinity ocaml_emcc_sched_getaffinity
++#define sched_setaffinity ocaml_emcc_sched_setaffinity
++
++static int ocaml_emcc_sysinfo(struct sysinfo *info) { (void)info; ENOSYS_RETURN; }
++#define sysinfo(info) ocaml_emcc_sysinfo(info)
++
++static ssize_t ocaml_emcc_getxattr(const char *path, const char *name, void *value, size_t size)
++{ (void)path; (void)name; (void)value; (void)size; ENOSYS_RETURN; }
++static int ocaml_emcc_setxattr(const char *path, const char *name, const void *value, size_t size, int flags)
++{ (void)path; (void)name; (void)value; (void)size; (void)flags; ENOSYS_RETURN; }
++#define getxattr ocaml_emcc_getxattr
++#define lgetxattr ocaml_emcc_getxattr
++#define setxattr ocaml_emcc_setxattr
++#define lsetxattr ocaml_emcc_setxattr
++
++#ifndef XATTR_SIZE_MAX
++#define XATTR_SIZE_MAX 65536
++#endif
+--- a/linux_ext/src/linux_ext_stubs.c
++++ b/linux_ext/src/linux_ext_stubs.c
+@@
+ #include <unistd.h>
++#if defined(__EMSCRIPTEN__)
++#include "emscripten_linux_ext.h"
++#else
+ #include <sys/prctl.h>
++#endif
+ #include <errno.h>
+@@
+ #include <sys/syscall.h>
++#if !defined(__EMSCRIPTEN__)
+ #include <sys/sendfile.h>
++#endif
+ #include <sys/epoll.h>
+@@
+-#include <linux/limits.h> /* needed to build with musl */
++#if !defined(__EMSCRIPTEN__)
++#include <linux/limits.h> /* needed to build with musl */
++#endif
+@@
++#if !defined(__EMSCRIPTEN__)
+ #include <sys/timerfd.h>
++#endif
+@@
++#if !defined(__EMSCRIPTEN__)
+ #include <sys/eventfd.h>
++#endif

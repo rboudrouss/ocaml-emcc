@@ -1,0 +1,66 @@
+emscripten: core_unix without the functions emscripten lacks.
+
+Emscripten declares, without defining them, initgroups, getgrouplist and
+wordexp (core_unix), pthread_{get,set}affinity_np and __sched_cpucount
+(CPU_COUNT, core_thread).  The OCaml side, built on the host, declares
+their primitives: they fail with ENOSYS (wordexp: with an error code).
+
+--- /dev/null
++++ b/core_unix/src/emscripten_core_unix.h
+@@ -0,0 +1,23 @@
++/* ocaml-emcc: what core_unix uses that emscripten declares but does not
++   define, failing with ENOSYS (wordexp: an error code), renamed after
++   their prototypes. */
++#include <errno.h>
++#include <grp.h>
++#include <sys/types.h>
++#if defined(JSC_WORDEXP)
++#include <wordexp.h>
++#endif
++
++static int ocaml_emcc_initgroups(const char *user, gid_t group)
++{ (void)user; (void)group; errno = ENOSYS; return -1; }
++static int ocaml_emcc_getgrouplist(const char *user, gid_t group, gid_t *groups, int *ngroups)
++{ (void)user; (void)group; (void)groups; (void)ngroups; errno = ENOSYS; return -1; }
++#define initgroups ocaml_emcc_initgroups
++#define getgrouplist ocaml_emcc_getgrouplist
++
++#if defined(JSC_WORDEXP)
++static int ocaml_emcc_wordexp(const char *s, wordexp_t *p, int flags) { (void)s; (void)p; (void)flags; return -1; }
++static void ocaml_emcc_wordfree(wordexp_t *p) { (void)p; }
++#define wordexp ocaml_emcc_wordexp
++#define wordfree ocaml_emcc_wordfree
++#endif
+--- a/core_unix/src/core_unix_stubs.c
++++ b/core_unix/src/core_unix_stubs.c
+@@
+ #if defined(JSC_WORDEXP)
+ #include <wordexp.h>
+ #endif
++
++#if defined(__EMSCRIPTEN__)
++#include "emscripten_core_unix.h"
++#endif
+--- a/core_thread/src/pthread_np_stubs.c
++++ b/core_thread/src/pthread_np_stubs.c
+@@
+ #include <sched.h>
+ #endif
++
++#if defined(__EMSCRIPTEN__)
++/* ocaml-emcc: declared, not defined by emscripten */
++#include <errno.h>
++static int ocaml_emcc_pthread_setaffinity_np(pthread_t t, size_t size, const cpu_set_t *set)
++{ (void)t; (void)size; (void)set; errno = ENOSYS; return -1; }
++static int ocaml_emcc_pthread_getaffinity_np(pthread_t t, size_t size, cpu_set_t *set)
++{ (void)t; (void)size; (void)set; errno = ENOSYS; return -1; }
++static int ocaml_emcc_sched_cpucount(size_t size, const cpu_set_t *set)
++{
++  int n = 0;
++  for (size_t i = 0; i < size; i++) n += __builtin_popcount(((const unsigned char *)set)[i]);
++  return n;
++}
++#define pthread_setaffinity_np ocaml_emcc_pthread_setaffinity_np
++#define pthread_getaffinity_np ocaml_emcc_pthread_getaffinity_np
++#define __sched_cpucount ocaml_emcc_sched_cpucount
++#endif

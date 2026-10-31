@@ -358,7 +358,7 @@ variant), `mlcuddidl` (its bundled CUDD, and the stubs camlidl generates),
 called), and packages whose sources need a change for wasm, described in
 their `share/recipes/<name>/` directory: `mirage-crypto` (and `-ec`,
 `-rng`), `lwt`, `cryptokit`, `secp256k1-internal`, `lmdb`, `mccs`,
-`eio_posix`, `ocaml-lua` and `raylib` (see [raylib in a
+`core_unix`, `eio_posix`, `ocaml-lua` and `raylib` (see [raylib in a
 browser](#raylib-in-a-browser)).
 
 ### Project recipes

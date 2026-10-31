@@ -1,0 +1,16 @@
+emscripten: gettid() instead of syscall(SYS_gettid).
+
+GET_THREAD_ID comes from the host's jst-config (thread_id.h, Linux):
+syscall(SYS_gettid).  Emscripten has no syscall(), but gettid() (_GNU_SOURCE).
+
+--- a/core_unix/src/core_unix_stubs.c
++++ b/core_unix/src/core_unix_stubs.c
+@@
+ #if defined(GET_THREAD_ID)
+ 
++#if defined(__EMSCRIPTEN__)
++#undef GET_THREAD_ID
++#define GET_THREAD_ID gettid()
++#endif
++
+ CAMLprim value core_unix_gettid(value v_unit __unused) {

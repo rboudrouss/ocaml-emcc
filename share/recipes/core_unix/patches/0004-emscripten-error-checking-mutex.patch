@@ -1,0 +1,12 @@
+emscripten: error-checking mutexes.
+
+Without -pthread, emscripten leaves _POSIX_THREADS undefined, but its libc
+has the mutexes of a single thread, which the OCaml side expects
+(unix_create_error_checking_mutex).
+
+--- a/error_checking_mutex/src/error_checking_mutex_stubs.c
++++ b/error_checking_mutex/src/error_checking_mutex_stubs.c
+@@
+-#if defined(_POSIX_THREADS) && _POSIX_THREADS >= 200112L
++#if (defined(_POSIX_THREADS) && _POSIX_THREADS >= 200112L) || defined(__EMSCRIPTEN__)
+ CAMLprim value unix_create_error_checking_mutex(value __unused v_unit)
