@@ -360,6 +360,7 @@ A recipe is built once per switch and target, and is not rebuilt when it changes
 | `libogg`, `libopus` | ogg, opus | opus without intrinsics |
 | `mad` | mad | 64-bit fixed point, no assembly |
 | `faad` | faad | |
+| `shine` | shine | |
 | `clang` | programs embedding clang's frontend | see [docs/recipes.md](docs/recipes.md#the-clang-recipe) |
 
 These recipes take the sources of the opam package
