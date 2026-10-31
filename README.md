@@ -223,6 +223,11 @@ On wasm32, as with a 32-bit OCaml:
   (`input_value: integer too large`).
 - Arithmetic beyond 31 bits wraps silently (`1 lsl 40` is 256).
 
+Packages that require 63-bit ints (`assert (Sys.int_size >= 62)` in matrix,
+hence k7 and kaun-board; binsec's marshalled data), or a 64-bit `size_t`
+(bls12-381-unix's ctypes bindings), need wasm64: matrix, k7, kaun-board
+and binsec run there.
+
 ## Compiled mode
 
 By default, ocaml-emcc runs the bytecode on an interpreter. With
