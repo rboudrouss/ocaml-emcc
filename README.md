@@ -289,6 +289,11 @@ Besides 31-bit integers on wasm32:
 - **ctypes-foreign** only finds the C symbols named by string literals of
   the program, not names computed at run time. `dlopen` accepts any file
   name, since everything is linked in.
+- **Missing primitives.** A primitive that no linked library defines (a
+  stub written for one OS only: Linux's epoll, Windows...) becomes a stub
+  raising `Failure "NAME not implemented"` when called, as with
+  js_of_ocaml: `link` warns, and a program that never calls it runs.
+  `--no-missing-primitives` makes it a link error instead.
 - **C type mismatches.** A C function declared by a stub with other types
   than its definition (`int` for `long`) becomes a trap on wasm64. `link`
   warns about each one.
