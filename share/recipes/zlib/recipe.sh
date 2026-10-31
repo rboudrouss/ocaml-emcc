@@ -14,5 +14,6 @@ build() {
   emmake make -j"$NPROC" libz.a > make.log 2>&1 || { tail -30 make.log; die "make failed"; }
   install_lib libz.a
   install_headers . zlib.h zconf.h
+  install_pc zlib "$SOURCE_VERSION" -lz
   provides zlib z
 }
