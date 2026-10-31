@@ -14,7 +14,13 @@
    The stamp shadow-<pkg> records the package version and the outcome: ok
    (installed), failed (it lays C types out when built, and could not be
    rebuilt), none (it does not: the host's build is kept).  Rebuilt when the
-   package changes version, or the toolchain's wrappers. *)
+   package changes version, or the toolchain's wrappers.
+   A package that does not lay C types out is only rebuilt if [needed]: it
+   was compiled against interfaces that differ in the target's builds of
+   its dependencies.  Otherwise the target's build of its libraries would
+   differ from the host's for no reason, and so would be inconsistent with
+   the packages depending on it, which keep the host's (frama-c's plugins,
+   in other packages). *)
 
 let log = Env.log
 
@@ -30,7 +36,7 @@ let computes_layouts work =
 let findlib d = Env.sysroot_file (Filename.concat "lib/findlib" d)
 let dirs_file pkg = Stubs.meta ("shadow-" ^ pkg ^ ".dirs")
 
-let build ?(force = false) pkg =
+let build ?(force = false) ?(needed = fun () -> true) pkg =
   let ver = match Switch.version pkg with Some v -> v | None -> Env.fail "%s is not installed in %s" pkg (Switch.prefix ()) in
   let name = "shadow-" ^ pkg in
   let built = match Stamp.read name with Some f -> Stamp.version f = ver && Stamp.current_toolchain f | None -> false in
@@ -45,7 +51,9 @@ let build ?(force = false) pkg =
     ignore (Source.opam_source pkg work);
     let layouts = computes_layouts work in
     let status = ref (if layouts then "failed" else "none") in
-    if Sys.file_exists (Filename.concat work "dune-project") then (
+    if (not layouts) && not (needed ()) then
+      log "%s: no C layouts, and the interfaces it was compiled against are the same for %s: not rebuilt" pkg !Env.target
+    else if Sys.file_exists (Filename.concat work "dune-project") then (
       let dune = Stubs.dune_for work in
       ignore (Stubs.system_deps pkg);
       log "building the OCaml libraries of %s for %s (C layouts of %s)" pkg !Env.target !Env.target;

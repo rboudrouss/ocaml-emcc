@@ -146,6 +146,51 @@ let to_build pkgs =
     (fun acc p -> if stamp p = None || List.exists (depends_on p) acc then acc @ [ p ] else acc)
     [] pkgs
 
+(* (interface, CRC) of the interfaces in ocamlobjinfo's output for
+   [files]: those of the units themselves ([own]), or all those they import *)
+let objinfo_crcs ~own files =
+  if files = [] then []
+  else
+    match Env.output_of (Filename.concat (Env.host_bin ()) "ocamlobjinfo") files with
+    | None -> []
+    | Some out ->
+        let unit = ref "" in
+        String.split_on_char '\n' out
+        |> List.filter_map (fun l ->
+               let u = "Unit name: " in
+               if Str_util.starts_with ~prefix:u l then (
+                 unit := String.trim (String.sub l (String.length u) (String.length l - String.length u));
+                 None)
+               else
+                 match String.split_on_char '\t' l with
+                 | [ ""; crc; name ] when if own then name = !unit else crc <> "" && crc.[0] <> '-' -> Some (name, crc)
+                 | _ -> None)
+
+let cmi_crcs = objinfo_crcs ~own:true
+
+(* The interfaces of the packages built for the target whose CRC differs
+   from the host's: (interface, host CRC) *)
+let changed_interfaces () =
+  let prefix = Lazy.force Env.switch_prefix in
+  Hashtbl.fold (fun p _ acc -> p :: acc) (fst (Lazy.force ctypes_users)) []
+  |> List.filter (fun p -> stamp p = Some "ok")
+  |> Compat.concat_map (fun p ->
+         let files = List.map snd (cmis p) in
+         let target = cmi_crcs (List.filter Sys.file_exists (List.map (fun f -> Env.sysroot_file ("lib/findlib/" ^ String.sub f 4 (String.length f - 4))) files)) in
+         cmi_crcs (List.map (Filename.concat prefix) files)
+         |> List.filter (fun (m, crc) -> match List.assoc_opt m target with Some c -> c <> crc | None -> false))
+
+(* Whether the libraries of [pkg] were compiled against an interface that
+   differs in the target's build of its dependencies *)
+let imports_changed pkg =
+  let prefix = Lazy.force Env.switch_prefix in
+  let cmas = List.filter (fun f -> Filename.check_suffix f ".cma") (Switch.lib_files pkg) in
+  let changed = changed_interfaces () in
+  let imports = objinfo_crcs ~own:false (List.map (Filename.concat prefix) cmas) in
+  match List.find_opt (fun i -> List.mem i changed) imports with
+  | Some (m, _) -> Env.log "  %s was compiled against %s, which differs for %s" pkg m !Env.target; true
+  | None -> false
+
 (* Build [l] (dependencies first) for the target, one by one.  A package
    depending on one that could not be built keeps the host's build, as
    that one does (ctypes before 0.21, built by make): the bytecode is then
@@ -165,7 +210,8 @@ let shadow l =
           | None -> ());
           failed := p :: !failed
       | None ->
-          let ok = try Shadow.build ~force:true p; true with Env.Failed -> false in
+          let needed () = imports_changed p in
+          let ok = try Shadow.build ~force:true ~needed p; true with Env.Failed -> false in
           record_deps p;
           if (not ok) || stamp p = Some "failed" then failed := p :: !failed)
     l;
@@ -214,25 +260,6 @@ type state =
   | Stale  (** it has one, the bytecode was built against the host's *)
   | Not_rebuilt  (** it lays C types out when built, and has none *)
   | Unneeded  (** it does not lay C types out *)
-
-(* (unit, CRC) of interfaces, from ocamlobjinfo *)
-let cmi_crcs files =
-  if files = [] then []
-  else
-    match Env.output_of (Filename.concat (Env.host_bin ()) "ocamlobjinfo") files with
-    | None -> []
-    | Some out ->
-        let unit = ref "" in
-        String.split_on_char '\n' out
-        |> List.filter_map (fun l ->
-               let u = "Unit name: " in
-               if Str_util.starts_with ~prefix:u l then (
-                 unit := String.trim (String.sub l (String.length u) (String.length l - String.length u));
-                 None)
-               else
-                 match String.split_on_char '\t' l with
-                 | [ ""; crc; name ] when name = !unit -> Some (name, crc)
-                 | _ -> None)
 
 let state crcs pkg =
   match stamp pkg with
