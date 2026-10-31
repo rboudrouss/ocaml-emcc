@@ -486,6 +486,18 @@ let report_imports ~wasi output =
             \  --wasi replaces them with WASI calls (a module for wasmtime, node:wasi...)."
             output (List.length l) (names l))
 
+(* -sINITIAL_HEAP (emscripten >= 3.1.55): with MAXIMUM_MEMORY given,
+   emscripten fixes the initial memory at 16 MB instead (INITIAL_MEMORY),
+   which the static data alone can exceed (the interpreter's embedded
+   bytecode of a big program: 72 MB for core with -linkall).  wasm-ld then
+   adds the heap to the static data and the stack.  Not when the user's
+   flags size the memory. *)
+let initial_heap user_flags =
+  let sized = List.exists (fun f -> List.exists (fun k -> Str_util.find f k <> None) [ "INITIAL_MEMORY"; "INITIAL_HEAP"; "IMPORTED_MEMORY" ]) user_flags in
+  let version = List.map int_of_string_opt (String.split_on_char '.' (Lazy.force Toolchain.emcc_version)) in
+  let recent = match version with Some a :: Some b :: Some c :: _ -> compare (a, b, c) (3, 1, 55) >= 0 | _ -> false in
+  if recent && not sized then [ "-sINITIAL_HEAP=16777216" ] else []
+
 let run o =
   if not (Env.toolchain_ready ()) then
     Env.fail "no wasm runtime in %s, run `ocaml-emcc setup` first" (Env.sysroot ());
@@ -645,6 +657,9 @@ let run o =
       o.opt;
       "-sALLOW_MEMORY_GROWTH=1";
       (if !Env.target = "wasm64" then "-sMAXIMUM_MEMORY=16GB" else "-sMAXIMUM_MEMORY=4GB");
+    ]
+    @ initial_heap o.emcc_flags
+    @ [
       "-sSTACK_SIZE=" ^ o.stack_size;
       (* not allowed (implied) for a standalone .wasm *)
       (if standalone then "" else "-sEXIT_RUNTIME=1");
