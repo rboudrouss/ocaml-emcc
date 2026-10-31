@@ -41,6 +41,38 @@ let opam_field s name =
       let i = i + String.length key in
       match String.index_from_opt s i ']' with Some j -> String.sub s i (j - i) | None -> "")
 
+(* The `build: [...]` field of an opam file, its nested lists (commands)
+   included *)
+let opam_build s =
+  let key = "build: [" in
+  let start = if Str_util.starts_with ~prefix:key s then Some 0 else Option.map (fun i -> i + 1) (Str_util.find s ("\n" ^ key)) in
+  match start with
+  | None -> ""
+  | Some i ->
+      let i = i + String.length key and n = String.length s in
+      let rec go j depth str =
+        if j >= n then String.sub s i (n - i)
+        else
+          match s.[j] with
+          | '"' -> go (j + 1) depth (not str)
+          | '\\' when str -> go (j + 2) depth str
+          | '[' when not str -> go (j + 1) (depth + 1) str
+          | ']' when not str -> if depth = 0 then String.sub s i (j - i) else go (j + 1) (depth - 1) str
+          | _ -> go (j + 1) depth str
+      in
+      go i 0 false
+
+(* The `dune build` arguments selecting what the opam build of [pkg]
+   builds: -p [pkg], unless it runs dune on the whole tree without -p
+   (frama-c's `dune build --release @install`: its plugins are other dune
+   projects, of other packages, frama-c-wp...) *)
+let dune_selection pkg =
+  let blank c = if c = '\n' || c = '\t' || c = '\r' then ' ' else c in
+  let b = match opam pkg with Some s -> String.concat " " (Str_util.words (String.map blank (opam_build s))) | None -> "" in
+  let has w = Str_util.find b w <> None in
+  if has "\"dune\" \"build\"" && not (List.exists has [ "\"-p"; "--only-packages"; "--for-release-of-packages" ]) then [ "--release" ]
+  else [ "-p"; pkg ]
+
 (* The "name" {filter} entries of a list of packages (formulas: their
    operators are skipped) *)
 let entries s =

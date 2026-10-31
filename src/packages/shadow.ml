@@ -67,7 +67,8 @@ let build ?(force = false) ?(needed = fun () -> true) pkg =
       let has_cmi d = Files.first d (fun f -> Filename.check_suffix f ".cmi") <> None in
       let ok =
         Env.run_logged ~cwd:work ~env log_file dune
-          [ "build"; "--build-dir"; "_build.ocaml-emcc"; "--workspace"; ".ocaml-emcc-workspace"; "-p"; pkg; "@install" ]
+          ([ "build"; "--build-dir"; "_build.ocaml-emcc"; "--workspace"; ".ocaml-emcc-workspace" ]
+          @ Switch.dune_selection pkg @ [ "@install" ])
         = 0
         && has_cmi lib
       in

@@ -162,7 +162,7 @@ let native_stubs ~dir ~bdir pkg only =
   in
   if missing then (
     log "no native build kept for %s: building it" pkg;
-    if Env.run ~cwd:dir ~out:Unix.stderr (Filename.concat (Env.host_bin ()) "dune") [ "build"; "--build-dir"; bdir; "-p"; pkg; "@install" ] <> 0
+    if Env.run ~cwd:dir ~out:Unix.stderr (Filename.concat (Env.host_bin ()) "dune") ([ "build"; "--build-dir"; bdir ] @ Switch.dune_selection pkg @ [ "@install" ]) <> 0
     then Env.fail "%s: native build failed" pkg);
   let incs = header_includes pkg @ system_cflags pkg in
   let out = Filename.concat dir "_wasm_stubs" in
@@ -216,7 +216,7 @@ let dune_stubs ~dir ~provider pkg =
   let built =
     if
       Env.run ~cwd:dir ~env:(dune_env ()) ~out:Unix.stderr dune
-        [ "build"; "--build-dir"; bdir; "-x"; !Env.target; "-p"; pkg; "@install" ]
+        ([ "build"; "--build-dir"; bdir; "-x"; !Env.target ] @ Switch.dune_selection pkg @ [ "@install" ])
       = 0
     then (
       let all = archives (Filename.concat dir (Filename.concat bdir ("default." ^ !Env.target))) in
