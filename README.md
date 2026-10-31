@@ -226,7 +226,9 @@ On wasm32, as with a 32-bit OCaml:
 Packages that require 63-bit ints (`assert (Sys.int_size >= 62)` in matrix,
 hence k7 and kaun-board; binsec's marshalled data), or a 64-bit `size_t`
 (bls12-381-unix's ctypes bindings), need wasm64: matrix, k7, kaun-board
-and binsec run there.
+and binsec run there.  So does ecaml, which on wasm32 passes a 63-bit int
+where Base's 32-bit representation of `Int63` expects an `int64` (a crash
+in `caml_int64_div`).
 
 ## Compiled mode
 
