@@ -1,0 +1,16 @@
+--- a/src/config/dune
++++ b/src/config/dune
+@@
+ (rule
+  (targets blas_kind_flags.sexp)
++ (enabled_if (= %{context_name} default))
+  (action
+   (run ./gen_blas_kind.exe)))
++
++; the target's gen_blas_kind.exe cannot run on the host: OpenBLAS's zdotc_
++; (ocaml-emcc's openblas recipe) returns its result
++(rule
++ (targets blas_kind_flags.sexp)
++ (enabled_if (<> %{context_name} default))
++ (action
++  (with-stdout-to %{targets} (echo "(-DZDOT_IS_FUNCTION)"))))
