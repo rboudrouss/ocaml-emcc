@@ -357,6 +357,7 @@ A recipe is built once per switch and target, and is not rebuilt when it changes
 | `cairo` (`pixman`, `libpng`, `freetype`, `libfontconfig`) | cairo2 | image, PDF, PostScript, SVG and script surfaces, FreeType fonts; fontconfig finds the host's fonts under node; no X11; pixman without SIMD; built with meson (and gperf) |
 | `oniguruma` | oniguruma | |
 | `secp256k1` | secp256k1 | recovery, ECDH, extrakeys, schnorrsig, ellswift and musig modules; the host's minor version |
+| `libogg`, `libopus` | ogg, opus | opus without intrinsics |
 | `clang` | programs embedding clang's frontend | see [docs/recipes.md](docs/recipes.md#the-clang-recipe) |
 
 These recipes take the sources of the opam package
