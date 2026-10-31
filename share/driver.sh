@@ -199,6 +199,40 @@ make_var() {
     | make -s --no-print-directory -C "$1" -f Makefile -f - __ocaml_emcc_var
 }
 
+# meson_setup [<option>...]: `meson setup build`, cross-compiling for the
+# target (emscripten.ini): static libraries, installed in the sysroot, which
+# they find through its pkg-config files.  `ninja -C build install` follows.
+meson_setup() {
+  command -v meson >/dev/null && command -v ninja >/dev/null || die "meson and ninja are needed"
+  local a cflags= ldflags=
+  for a in $CFLAGS -I"$SYSROOT/include"; do cflags+="${cflags:+, }'$a'"; done
+  for a in $CFLAGS -L"$SYSROOT/lib"; do ldflags+="${ldflags:+, }'$a'"; done
+  cat > emscripten.ini <<INI
+[binaries]
+c = '$EMCC'
+cpp = '$EMSDK_BIN/em++'
+ar = '$EMAR'
+ranlib = '$EMSDK_BIN/emranlib'
+pkg-config = 'pkg-config'
+
+[built-in options]
+c_args = [$cflags]
+cpp_args = [$cflags]
+c_link_args = [$ldflags]
+cpp_link_args = [$ldflags]
+
+[host_machine]
+system = 'emscripten'
+cpu_family = '$TARGET'
+cpu = '$TARGET'
+endian = 'little'
+INI
+  log "meson setup"
+  PKG_CONFIG_LIBDIR=$SYSROOT/lib/pkgconfig meson setup build --cross-file emscripten.ini \
+    --prefix="$SYSROOT" --libdir=lib --buildtype=plain -Ddefault_library=static "$@" \
+    > meson.log 2>&1 || { tail -30 meson.log; die "meson setup failed"; }
+}
+
 # mklib <name> <objects...>: archive objects into lib<name>.a
 mklib() { local n=$1; shift; rm -f "lib$n.a"; "$EMAR" rcs "lib$n.a" "$@"; }
 
