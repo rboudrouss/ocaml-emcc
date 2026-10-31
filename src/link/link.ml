@@ -211,10 +211,11 @@ let generated_prims c_file =
            | _ -> None)
 
 type compiled = {
-  c_src : string;
-  c_obj : string;
+  c_objs : string list;
   support_obj : string;
-  cc : string list -> unit;  (** compiles the generated C, with these extra flags *)
+  cc : string list -> unit;
+      (** compiles the generated C, with these extra flags, once the adapters
+          are known *)
   c_prims : string list;
   c_arities : (int, int) Hashtbl.t;  (** arities by index in [c_prims] *)
 }
@@ -227,12 +228,21 @@ let compile_to_c ~emcc ~flags ~tail_calls ~work ~base ~bc bc_path =
   let support = Filename.concat work "c_of_ocaml" in
   if not (Sys.file_exists support) then Unix.mkdir support 0o755;
   Env.run_exn cooc [ "--runtime-files"; support ];
-  let c_src = Filename.concat work (base ^ ".c") and c_obj = Filename.concat work (base ^ ".o") in
+  (* the C code in parts, compiled separately: DIR/part0.c (static data,
+     tables, the declarations of the primitives), DIR/part1.c, ... *)
+  let c_dir = Filename.concat work (base ^ ".c.d") in
   Env.log "compiling %s to C (c_of_ocaml)" (Filename.basename bc_path);
   (* backtraces when the bytecode has debug information (ocamlc -g) *)
   let debug = if Bytecode.section bc "DBUG" <> None then [ "--debug-info" ] else [] in
   let word_size = if !Env.target = "wasm64" then [ "--word-size"; "64" ] else [] in
-  Env.run_exn cooc (debug @ word_size @ [ bc_path; "-o"; c_src ]);
+  Env.run_exn cooc (debug @ word_size @ [ bc_path; "--split"; c_dir ]);
+  let parts =
+    Sys.readdir c_dir |> Array.to_list
+    |> List.filter (fun f -> Filename.check_suffix f ".c")
+    |> List.sort compare
+    |> List.map (Filename.concat c_dir)
+  in
+  let c_objs = List.map (fun c -> Filename.chop_suffix c ".c" ^ ".o") parts in
   (* -mtail-call: tail calls of the generated code (return_call), unless
      asyncify, which does not support them, is used: tail calls are then
      plain calls (deep tail recursion may run out of stack) *)
@@ -242,12 +252,29 @@ let compile_to_c ~emcc ~flags ~tail_calls ~work ~base ~bc bc_path =
   in
   let support_obj = Filename.concat work "camlc_runtime.o" in
   Env.run_exn emcc (flags @ [ "-c"; Filename.concat support "camlc_runtime.c"; "-o"; support_obj ]);
-  let cc extra = Env.run_exn emcc (flags @ extra @ [ "-c"; c_src; "-o"; c_obj ]) in
-  cc [];
-  let prims = generated_prims c_src in
+  (* c_of_ocaml does not rewrite the parts left unchanged: they are not
+     compiled again if their flags are the same (PART.flags) *)
+  let cc extra =
+    List.iter2
+      (fun c o ->
+        let args = flags @ extra @ [ "-c"; c; "-o"; o ] in
+        let stamp = Filename.chop_suffix c ".c" ^ ".flags" in
+        let key = String.concat "\n" (emcc :: args) in
+        let up_to_date =
+          Sys.file_exists o && Sys.file_exists stamp
+          && (Unix.stat o).Unix.st_mtime >= (Unix.stat c).Unix.st_mtime
+          && Compat.read_file stamp = key
+        in
+        if not up_to_date then (
+          if Sys.file_exists stamp then Sys.remove stamp;
+          Env.run_exn emcc args;
+          write_file stamp key))
+      parts c_objs
+  in
+  let prims = generated_prims (Filename.concat c_dir "part0.c") in
   let c_arities = Hashtbl.create 64 in
   List.iteri (fun i (_, a) -> Hashtbl.replace c_arities i a) prims;
-  { c_src; c_obj; support_obj; cc; c_prims = List.map fst prims; c_arities }
+  { c_objs; support_obj; cc; c_prims = List.map fst prims; c_arities }
 
 let rec mkdir_p d =
   if not (Sys.file_exists d) then (
@@ -693,7 +720,7 @@ let run o =
   in
   let program_objs =
     match compiled with
-    | Some c -> [ c.c_obj; c.support_obj ]
+    | Some c -> c.c_objs @ [ c.support_obj ]
     | None -> [ main_o; prims_o ]
   in
   let args ?(extra = []) ~output () =
@@ -723,7 +750,7 @@ let run o =
   (match compiled with
   | Some c ->
       (* the generated C calls the adapters instead *)
-      if adapted <> [] then c.cc (List.map (fun (p, _) -> Printf.sprintf "-D%s=%s" p (adapter_name p)) adapted)
+      c.cc (List.map (fun (p, _) -> Printf.sprintf "-D%s=%s" p (adapter_name p)) adapted)
   | None ->
       write_file prims_src (prims_c ~arities ~adapted prims);
       cc_prims ());
