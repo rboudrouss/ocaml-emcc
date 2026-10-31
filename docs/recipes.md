@@ -73,7 +73,9 @@ The recipe should install a pkg-config file in `$SYSROOT/lib/pkgconfig`
   variable), `include_recipe NAME`, `dune_stubs PKG` (build and install the
   stub archives of a dune package from its sources, after changing them),
   `fetch_opam_version PKG VER DEST`, `host_version PCNAME HEADER MACRO...`,
-  `git_tag_releases REPO TAG_PREFIX URL_TEMPLATE`, `log`, `die`
+  `git_tag_releases REPO TAG_PREFIX URL_TEMPLATE`, `meson_setup [OPTION...]`
+  (`meson setup build` cross-compiling for the target, static libraries
+  installed in the sysroot; `ninja -C build install` follows), `log`, `die`
 - variables: `$EMCC`, `$CFLAGS`, `$LDFLAGS`, `$SYSROOT`, `$OCAML_INC`,
   `$OCAML_VERSION`, `$TARGET`, `$RECIPE_DIR`, `$BASE_RECIPE_DIR` (that of
   the recipe read by `include_recipe`, where its patches are), `$NPROC`,
