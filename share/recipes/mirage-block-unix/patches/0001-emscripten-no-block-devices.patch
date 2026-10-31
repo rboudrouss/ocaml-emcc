@@ -1,0 +1,7 @@
+--- a/lib/blkgetsize_stubs.c
++++ b/lib/blkgetsize_stubs.c
+@@
+-#elif _WIN32
++#elif defined(_WIN32) || defined(__EMSCRIPTEN__)
+ 
+ int blkgetsize(int fd, uint64_t *psize)
