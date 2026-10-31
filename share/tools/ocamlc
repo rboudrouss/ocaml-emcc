@@ -9,6 +9,10 @@
 #   c_compiler             -> emcc
 #   ocamlc_cflags/cppflags -> wasm flags, with the wasm <caml/*.h> headers
 #                             placed before dune's own `-I <stdlib>`
+#   architecture           -> none, as without a native compiler: the
+#                             stubs choosing their C code with
+#                             %{architecture} take the portable one (num's
+#                             bng: no amd64 assembly)
 #
 # Linking skips the primitive check: the stub "dlls" are empty placeholders
 # (see ocamlmklib), the real check happens in `ocaml-emcc link`.
@@ -39,6 +43,7 @@ rewrite_config() {
     -e "s|^host: .*|host: $OCAML_EMCC_TRIPLE|" \
     -e "s|^target: .*|target: $OCAML_EMCC_TRIPLE|" \
     -e "s|^native_compiler: .*|native_compiler: false|" \
+    -e "s|^architecture: .*|architecture: none|" \
     -e "s|^natdynlink_supported: .*|natdynlink_supported: false|"
 }
 
