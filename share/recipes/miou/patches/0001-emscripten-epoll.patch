@@ -1,0 +1,27 @@
+--- a/lib/conf/select.ml
++++ b/lib/conf/select.ml
+@@
+   {c|#define _GNU_SOURCE
+ #include <sys/epoll.h>
++#ifdef __EMSCRIPTEN__
++#define epoll_pwait2(fd, evs, n, ts, sigs) epoll_wait(fd, evs, n, 0)
++#endif
+ #include <stddef.h>
+--- a/lib/miou_unix.epoll.c
++++ b/lib/miou_unix.epoll.c
+@@
+ #include <caml/unixsupport.h>
+ 
++#ifdef __EMSCRIPTEN__
++/* emscripten has epoll_wait, not epoll_pwait2: milliseconds, rounded up */
++static int epoll_pwait2(int epfd, struct epoll_event *evs, int n,
++                        const struct timespec *ts, const void *sigs) {
++  (void)sigs;
++  return epoll_wait(epfd, evs, n,
++                    ts == NULL ? -1
++                               : (int)(ts->tv_sec * 1000 +
++                                       (ts->tv_nsec + 999999) / 1000000));
++}
++#endif
++
+ #ifndef __unused
