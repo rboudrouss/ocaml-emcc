@@ -4,7 +4,9 @@ The OCaml side, built on the host, declares the primitives of linux_ext
 (JSC_LINUX_EXT of the host's jst-config).  Emscripten lacks prctl,
 sendfile, timerfd, eventfd, and declares without defining them memfd_create,
 sched_{get,set}affinity, sysinfo and the xattr functions: they fail with
-ENOSYS, as its unsupported syscalls do (emscripten_linux_ext.h).
+ENOSYS, as its unsupported syscalls do (emscripten_linux_ext.h).  The
+struct msghdr is zeroed rather than initialized by position: musl's has
+padding fields on 64-bit targets (wasm64).
 
 --- /dev/null
 +++ b/linux_ext/src/emscripten_linux_ext.h
@@ -100,3 +102,6 @@ ENOSYS, as its unsupported syscalls do (emscripten_linux_ext.h).
 +#if !defined(__EMSCRIPTEN__)
  #include <sys/eventfd.h>
 +#endif
+@@
+-  struct msghdr msghdr = {NULL, 0, NULL, 0, NULL, 0, 0};
++  struct msghdr msghdr = {0};
