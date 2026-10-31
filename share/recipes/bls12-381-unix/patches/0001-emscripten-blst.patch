@@ -1,0 +1,29 @@
+--- a/src/blst/build_blst.sh
++++ b/src/blst/build_blst.sh
+@@
+ # supporting ADX on a arch supporting ADX.
++case $PWD in
++  # ocaml-emcc's dune -x: emscripten's build of blst (its C, no assembly),
++  # with the target's CFLAGS; an empty libblst.so for the rule's dllblst.so
++  */default.wasm32/*|*/default.wasm64/*)
++    cd libblst
++    ./build.sh CROSS_COMPILE=em -Wno-missing-braces
++    : > libblst.so
++    exit 0 ;;
++esac
+ cd libblst
+--- a/src/blst/bindings/blst_bindings_stubs.c
++++ b/src/blst/bindings/blst_bindings_stubs.c
+@@
+ #define ctypes_copy_size_t integers_copy_uint64
++#elif SIZE_MAX == UINT32_MAX
++#define ctypes_size_t_val Uint32_val
++#define ctypes_copy_size_t integers_copy_uint32
+ #else
+--- a/src/blst/dune
++++ b/src/blst/dune
+@@
+    (progn
+-    (run ./build_blst.sh)
++    (run sh ./build_blst.sh)
+     (run cp libblst/libblst.a libblst.a)

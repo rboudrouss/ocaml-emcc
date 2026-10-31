@@ -224,9 +224,9 @@ On wasm32, as with a 32-bit OCaml:
 - Arithmetic beyond 31 bits wraps silently (`1 lsl 40` is 256).
 
 Packages that require 63-bit ints (`assert (Sys.int_size >= 62)` in matrix,
-hence k7 and kaun-board; binsec's marshalled data), or a 64-bit `size_t`
-(bls12-381-unix's ctypes bindings), need wasm64: matrix, k7, kaun-board
-and binsec run there.  So does ecaml, which on wasm32 passes a 63-bit int
+hence k7 and kaun-board; binsec's marshalled data) need wasm64: matrix, k7,
+kaun-board and binsec run there.  So do frama-c (`assert (Sys.word_size =
+64)` in unionFind) and ecaml, which on wasm32 passes a 63-bit int
 where Base's 32-bit representation of `Int63` expects an `int64` (a crash
 in `caml_int64_div`).
 
@@ -376,7 +376,7 @@ variant), `mlcuddidl` (its bundled CUDD, and the stubs camlidl generates),
 called), and packages whose sources need a change for wasm, described in
 their `share/recipes/<name>/` directory: `mirage-crypto` (and `-ec`,
 `-rng`), `lwt`, `cryptokit`, `secp256k1-internal`, `lmdb`, `mccs`,
-`core_unix`, `eio_posix`, `num`, `rowex`, `mirage-block-unix`, `miou`, `osdp`, `ocaml-lua` and `raylib` (see [raylib in a
+`core_unix`, `eio_posix`, `num`, `rowex`, `mirage-block-unix`, `miou`, `osdp`, `bls12-381-unix`, `ocaml-lua` and `raylib` (see [raylib in a
 browser](#raylib-in-a-browser)).
 
 ### Project recipes
