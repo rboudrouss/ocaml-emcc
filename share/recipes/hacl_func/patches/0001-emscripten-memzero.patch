@@ -1,0 +1,10 @@
+emscripten: memzero with explicit_bzero.
+
+Lib_Memzero0.c knows the platforms having a safe memzero, and has a #warning
+for the others, an error with -Werror.  Emscripten has explicit_bzero.
+
+--- a/src/c/hacl-star/Lib_Memzero0.c
++++ b/src/c/hacl-star/Lib_Memzero0.c
+@@
+-  #elif (defined(__linux__) && !defined(LINUX_NO_EXPLICIT_BZERO)) || defined(__FreeBSD__)
++  #elif (defined(__linux__) && !defined(LINUX_NO_EXPLICIT_BZERO)) || defined(__FreeBSD__) || defined(__EMSCRIPTEN__)
