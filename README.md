@@ -343,6 +343,7 @@ A recipe is built once per switch and target, and is not rebuilt when it changes
 | `libargon2` | argon2 | reference implementation, no threads |
 | `liblmdb` | lmdb | `MDB_NOLOCK \| MDB_WRITEMAP`: emscripten has no process-shared mutexes, and its file mappings are copies |
 | `sdl2` | tsdl | emscripten's port (`-sUSE_SDL=2`); under node, only the timer and events subsystems |
+| `libev` | lwt (when the host's uses it) | poll backend |
 | `clang` | programs embedding clang's frontend | see [docs/recipes.md](docs/recipes.md#the-clang-recipe) |
 
 These recipes take the sources of the opam package
