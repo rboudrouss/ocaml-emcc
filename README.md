@@ -368,6 +368,7 @@ A recipe is built once per switch and target, and is not rebuilt when it changes
 | `shine` | shine | |
 | `ncurses` | curses | wide-character libraries; reads the host's terminfo under node; needs more than 64 KB of stack |
 | `libjpeg`, `gd` | gd | libjpeg-turbo without SIMD; libgd with PNG, JPEG and FreeType |
+| `liblo` | lo | Open Sound Control; without threads |
 | `clang` | programs embedding clang's frontend | see [docs/recipes.md](docs/recipes.md#the-clang-recipe) |
 
 These recipes take the sources of the opam package
