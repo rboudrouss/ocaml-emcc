@@ -1,0 +1,24 @@
+emscripten: OS entropy from getentropy.
+
+Outside Linux, the stubs call arc4random_buf, which emscripten's libc lacks;
+it has getentropy (crypto.getRandomValues), at most 256 bytes per call.
+(It declares getrandom, but does not define it.)
+
+--- a/lib_eio_posix/eio_posix_stubs.c
++++ b/lib_eio_posix/eio_posix_stubs.c
+@@
+ #include <sys/syscall.h>
+ #endif
++#elif defined(__EMSCRIPTEN__)
++#include <unistd.h>
+ #endif
+@@
+     ret = syscall(SYS_getrandom, buf, len, 0);
+ #endif
++#elif defined(__EMSCRIPTEN__)
++    ret = len;
++    for (ssize_t done = 0, n; done < len; done += n) {
++      n = len - done > 256 ? 256 : len - done;
++      if (getentropy((uint8_t *)buf + done, n) != 0) { ret = -1; break; }
++    }
+ #else
