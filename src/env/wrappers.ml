@@ -5,7 +5,7 @@
 (* Bumped whenever [write] changes: the CLI then regenerates the toolchain
    in existing sysroots (cheap: the runtime is not rebuilt), and the stubs
    built with it are built again (see [Stamp.toolchain]). *)
-let version = "13"
+let version = "14"
 
 (* [template] with each @KEY@ replaced *)
 let subst vars template =
@@ -37,6 +37,9 @@ let symlink target link =
    -pthread (lwt's configuration adds it) is dropped: the program is
    single-threaded, and with it emcc compiles `caml_state` as a real
    thread-local variable, which the runtime's is not (see the ocaml recipe).
+   So is -fopenmp (nx): emscripten's OpenMP needs threads (shared memory,
+   which the libraries built without it refuse); the code then runs
+   serially (_OPENMP undefined).
    So are -march, -mtune and -mcpu (CPU tuning, nx's -march=native), which
    clang refuses for wasm, and -Ofast, deprecated (hacl's -Werror): -O3
    -ffast-math.  So are the host's headers (-I/usr/include..., from the
@@ -67,7 +70,7 @@ for a; do
     -I|-isystem|-idirafter|-iquote) inc=$a; continue ;;
     -I/usr/include|-I/usr/include/*|-I/usr/local/include|-I/usr/local/include/*) ;;
     -isystem/usr/include|-isystem/usr/include/*|-isystem/usr/local/include|-isystem/usr/local/include/*) ;;
-    -pthread|-march=*|-mtune=*|-mcpu=*) ;;
+    -pthread|-fopenmp|-fopenmp=*|-march=*|-mtune=*|-mcpu=*) ;;
     -Ofast) set -- "$@" -O3 -ffast-math ;;
     *) set -- "$@" $inc "$a" ;;
   esac
