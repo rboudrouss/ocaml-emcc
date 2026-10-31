@@ -225,10 +225,11 @@ On wasm32, as with a 32-bit OCaml:
 
 Packages that require 63-bit ints (`assert (Sys.int_size >= 62)` in matrix,
 hence k7 and kaun-board; binsec's marshalled data) need wasm64: matrix, k7,
-kaun-board and binsec run there.  So do frama-c (`assert (Sys.word_size =
-64)` in unionFind) and ecaml, which on wasm32 passes a 63-bit int
-where Base's 32-bit representation of `Int63` expects an `int64` (a crash
-in `caml_int64_div`).
+kaun-board and binsec run there.  frama-c needs it too (`assert
+(Sys.word_size = 64)` in unionFind), but does not run yet: it does not
+find its share directory (dune-site).  ecaml runs on wasm64 too: on wasm32
+it passes a 63-bit int where Base's 32-bit representation of `Int63`
+expects an `int64` (a crash in `caml_int64_div`).
 
 ## Compiled mode
 
