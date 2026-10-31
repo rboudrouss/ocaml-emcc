@@ -5,7 +5,7 @@
 (* Bumped whenever [write] changes: the CLI then regenerates the toolchain
    in existing sysroots (cheap: the runtime is not rebuilt), and the stubs
    built with it are built again (see [Stamp.toolchain]). *)
-let version = "11"
+let version = "12"
 
 (* [template] with each @KEY@ replaced *)
 let subst vars template =
@@ -37,6 +37,11 @@ let symlink target link =
    -pthread (lwt's configuration adds it) is dropped: the program is
    single-threaded, and with it emcc compiles `caml_state` as a real
    thread-local variable, which the runtime's is not (see the ocaml recipe).
+   So are -march, -mtune and -mcpu (CPU tuning, nx's -march=native), which
+   clang refuses for wasm, and -Ofast, deprecated (hacl's -Werror): -O3
+   -ffast-math.  So are the host's headers (-I/usr/include..., from the
+   host's pkg-config in a package configured on the host): their libc is not
+   emscripten's, and a missing library reads better as a missing header.
    The headers and libraries of the sysroot come last (after the package's
    own): dune-configurator's C tests only get the C flags, not -I.  Those of
    the host in CPATH and friends would come before them (the host's ffi.h
@@ -51,14 +56,22 @@ let symlink target link =
 let emcc_wrapper =
   {|#!/bin/sh
 unset CPATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH LIBRARY_PATH
-link=-L'@SYSROOT@/lib' std='@STUB_STD@' prev= exe=
+link=-L'@SYSROOT@/lib' std='@STUB_STD@' prev= exe= inc=
 for a; do
   shift
   case $a in -c|-E|-S|-M|-MM) link= ;; -xc++*|*.cc|*.cpp|*.cxx|*.C) std= ;; esac
   case $prev$a in -xc++*) std= ;; esac
   [ "$prev" = -o ] && case ${a##*/} in *.exe) exe=1 ;; *.*) exe= ;; *) exe=1 ;; esac
   prev=$a
-  [ "$a" = -pthread ] || set -- "$@" "$a"
+  case $inc$a in
+    -I|-isystem|-idirafter|-iquote) inc=$a; continue ;;
+    -I/usr/include|-I/usr/include/*|-I/usr/local/include|-I/usr/local/include/*) ;;
+    -isystem/usr/include|-isystem/usr/include/*|-isystem/usr/local/include|-isystem/usr/local/include/*) ;;
+    -pthread|-march=*|-mtune=*|-mcpu=*) ;;
+    -Ofast) set -- "$@" -O3 -ffast-math ;;
+    *) set -- "$@" $inc "$a" ;;
+  esac
+  inc=
 done
 [ -n "$link" ] && [ -n "$exe" ] && set -- "$@" -sEXECUTABLE='@NODE@' -sSINGLE_FILE=1 -sEXIT_RUNTIME=1 -sNODERAWFS=1
 exec '@EMCC@' @TARGET_FLAGS@ $std -idirafter '@SYSROOT@/include' $link "$@"
