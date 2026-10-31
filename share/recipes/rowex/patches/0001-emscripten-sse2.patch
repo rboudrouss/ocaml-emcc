@@ -1,0 +1,19 @@
+emscripten: SSE2 through wasm SIMD.
+
+The stubs need SSE2 or NEON.  Emscripten emulates SSE2 with wasm SIMD
+(-msimd128 -msse2).
+
+--- a/conf/sse.ml
++++ b/conf/sse.ml
+@@
+ let _msc_ver = "_MSC_VER"
++let __emscripten__ = "__EMSCRIPTEN__"
+@@
+-      ; (__aarch64__, Switch); (__arm_neon, Switch)
++      ; (__aarch64__, Switch); (__arm_neon, Switch); (__emscripten__, Switch)
+@@
+   let flags =
++    if List.assoc_opt __emscripten__ defines = Some (Switch true) then
++      [ "-DART_SSE2"; "-msimd128"; "-msse2" ]
++    else
+     match
