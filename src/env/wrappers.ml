@@ -5,7 +5,7 @@
 (* Bumped whenever [write] changes: the CLI then regenerates the toolchain
    in existing sysroots (cheap: the runtime is not rebuilt), and the stubs
    built with it are built again (see [Stamp.toolchain]). *)
-let version = "14"
+let version = "15"
 
 (* [template] with each @KEY@ replaced *)
 let subst vars template =
@@ -46,7 +46,9 @@ let symlink target link =
    host's pkg-config in a package configured on the host): their libc is not
    emscripten's, and a missing library reads better as a missing header.
    The headers and libraries of the sysroot come last (after the package's
-   own): dune-configurator's C tests only get the C flags, not -I.  Those of
+   own): dune-configurator's C tests only get the C flags, not -I.  Its -I
+   of the host's standard library becomes that of the runtime's headers
+   (the target's caml/config.h: jst-config's ARCH_SIXTYFOUR).  Those of
    the host in CPATH and friends would come before them (the host's ffi.h
    for ctypes-foreign): the environment loses them.
    The C standard is left out for C++ (snappy's stubs: -x c++), which clang
@@ -69,6 +71,7 @@ for a; do
   case $inc$a in
     -I|-isystem|-idirafter|-iquote) inc=$a; continue ;;
     -I/usr/include|-I/usr/include/*|-I/usr/local/include|-I/usr/local/include/*) ;;
+    -I'@STDLIB@'|-I'@STDLIB@/') set -- "$@" -I'@SYSROOT@/lib/ocaml' ;;
     -isystem/usr/include|-isystem/usr/include/*|-isystem/usr/local/include|-isystem/usr/local/include/*) ;;
     -pthread|-fopenmp|-fopenmp=*|-march=*|-mtune=*|-mcpu=*) ;;
     -Ofast) set -- "$@" -O3 -ffast-math ;;
@@ -189,8 +192,9 @@ let write () =
   let emcc = Toolchain.emcc () in
   let cc = file ("bin/emcc-" ^ target) in
   let words = String.concat " " in
+  let stdlib = match Env.capture (Filename.concat host_bin "ocamlc") [ "-where" ] with Some s -> String.trim s | None -> "" in
   let vars =
-    [
+    [ ("STDLIB", stdlib);
       ("SYSROOT", sysroot); ("TARGET", target); ("HOST_BIN", host_bin); ("EMCC", emcc); ("CC", cc);
       ("STUB_STD", words (Lazy.force Toolchain.stub_std)); ("TARGET_FLAGS", words (Toolchain.target_flags ()));
       ("CFLAGS", words (Toolchain.base_cflags ())); ("EMAR", Toolchain.emar ());
@@ -224,11 +228,10 @@ let write () =
   let host_conf = if Sys.file_exists host_conf then Some (Compat.read_file host_conf) else None in
   let destdir = if host_conf = None then Filename.concat prefix "lib" else destdir in
   Compat.write_file (file "findlib.conf") (findlib_conf ~host_conf ~destdir ~path:findlib_path);
-  let stdlib = match Env.capture (Filename.concat host_bin "ocamlc") [ "-where" ] with Some s -> String.trim s | None -> "" in
   Compat.write_file
     (file ("findlib.conf.d/" ^ target ^ ".conf"))
     (subst
-       (("PATH", findlib_path) :: ("STDLIB", stdlib) :: vars)
+       (("PATH", findlib_path) :: vars)
        {|path(@TARGET@) = "@SYSROOT@/lib/findlib:@PATH@"
 destdir(@TARGET@) = "@SYSROOT@/lib/findlib"
 stdlib(@TARGET@) = "@STDLIB@"

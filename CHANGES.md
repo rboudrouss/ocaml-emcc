@@ -7,6 +7,9 @@
   mirage-block-unix, ncurses, nlopt, num, oniguruma, openblas, osdp,
   pixman, poll, rowex, scrypt, secp256k1, setcore, shine. zlib installs its
   pkg-config file, gmp its C++ interface (gmpxx).
+- dune-configurator's C tests in the wasm context read the runtime's
+  `caml/config.h`, not the host's (its `-I` of the host's standard library
+  is replaced).
 - OCaml 5.1 and later: the runtime is built with zstd when the switch's
   compiler is, and can read compressed marshalled data: the `.cmi` and
   `.cmt` files (`ocamlc.byte`, merlin, odoc, toplevels failed with
