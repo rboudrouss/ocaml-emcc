@@ -1,4 +1,5 @@
-# GNU MP (conf-gmp), generic C: no assembly.  See "system libraries" in
+# GNU MP (conf-gmp), generic C: no assembly.  With its C++ interface
+# (gmpxx, class_group_vdf).  See "system libraries" in
 # driver.sh for how the version is chosen; gmp keeps source compatibility
 # within a major version.
 
@@ -10,11 +11,11 @@ OPAM_SOURCES=gmp
 
 build() {
   log "configure (emconfigure)"
-  emconfigure ./configure --host=none --disable-assembly --enable-static --disable-shared \
+  emconfigure ./configure --host=none --disable-assembly --enable-cxx --enable-static --disable-shared \
     --prefix="$SYSROOT" CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" > configure.log 2>&1 \
     || { tail -30 configure.log; die "configure failed"; }
   log "make"
   emmake make -j"$NPROC" > make.log 2>&1 || { tail -30 make.log; die "make failed"; }
   make install > install.log 2>&1
-  provides gmp gmp
+  provides gmp gmp gmpxx
 }
