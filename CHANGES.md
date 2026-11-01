@@ -6,7 +6,8 @@
   libfontconfig, libjpeg, liblo, liblzo2, libogg, libopus, libpng, libssl,
   mad, memcpy, miou, mirage-block-unix, ncurses, nlopt, num, oniguruma,
   openblas, osdp, pixman, poll, rowex, scrypt, secp256k1, setcore, shine.
-  zlib installs its pkg-config file, gmp its C++ interface (gmpxx).
+  zlib installs its pkg-config file and comes from its GitHub releases
+  (zlib.net fails at times), gmp installs its C++ interface (gmpxx).
 - Jane Street's libraries on wasm32: jst-config, the libraries reading its
   configuration (time_now, core, core_unix) and those compiled against an
   interface that differs there (the async stack) are rebuilt for the

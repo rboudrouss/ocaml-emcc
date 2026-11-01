@@ -3,8 +3,12 @@
 SOURCE=system:zlib
 HEADER=zlib.h
 VERSION_MACROS=ZLIB_VERSION
-RELEASES=https://zlib.net/fossils/
 LINK=-lz
+
+# (its GitHub releases: zlib.net fails at times)
+releases() {
+  git_tag_releases https://github.com/madler/zlib.git v 'https://github.com/madler/zlib/releases/download/v{v}/zlib-{v}.tar.gz'
+}
 
 build() {
   log "configure (emconfigure)"
