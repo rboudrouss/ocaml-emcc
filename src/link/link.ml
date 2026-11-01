@@ -612,7 +612,8 @@ let run o =
         else None)
       (o.libs @ List.filter (Str_util.starts_with ~prefix:"-l") o.emcc_flags)
   in
-  let flags_of_libs = Compat.concat_map (fun (n, _) -> Deps.link_flags n) libs in
+  (* (and those of the runtime: -lzstd since OCaml 5.1) *)
+  let flags_of_libs = Compat.concat_map Deps.link_flags (List.map fst libs @ [ "camlrun" ]) in
   let lib_dirs = Deps.search_dirs ~extra_dirs:o.lib_dirs ~bc_path:o.bc bc in
   let flags_of_libs = flags_of_libs @ cclib_flags ~auto_deps:o.auto_deps ~dirs:lib_dirs o.bc in
   (* the archives of those flags: paths (c_library_flags) and -lX *)

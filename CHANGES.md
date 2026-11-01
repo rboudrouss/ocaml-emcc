@@ -7,6 +7,11 @@
   mirage-block-unix, ncurses, nlopt, num, oniguruma, openblas, osdp,
   pixman, poll, rowex, scrypt, secp256k1, setcore, shine. zlib installs its
   pkg-config file, gmp its C++ interface (gmpxx).
+- OCaml 5.1 and later: the runtime is built with zstd when the switch's
+  compiler is, and can read compressed marshalled data: the `.cmi` and
+  `.cmt` files (`ocamlc.byte`, merlin, odoc, toplevels failed with
+  "Corrupted compiled interface") and compiler-libs' `Compression`.
+  Existing runtimes: `ocaml-emcc setup --force`.
 - A primitive that no linked library defines (a stub written for one OS
   only: epoll, Windows...) becomes a stub raising `Failure "NAME not
   implemented"` when called, as with js_of_ocaml: `link` warns, and a

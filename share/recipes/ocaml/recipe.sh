@@ -22,8 +22,16 @@
 #   >=5.1  patches/5.1+ (the same, with mprotect as on Cygwin)
 #   5.0-5.2, >=5.3  patches/5.0-5.2, patches/5.3+ (a single domain: the
 #          minor heaps of the others are not allocated)
+#   >=5.1  with zstd when the host compiler has it: it compresses the
+#          marshalled data of Marshal.Compression and the .cmi/.cmt files,
+#          which the runtime must then read (ocamlc.byte, merlin...)
 
 SOURCE=ocaml
+
+# (the compiler of the switch compresses: compression_c_libraries)
+if ocaml_version_ge 5 1 && "$HOST_BIN/ocamlc" -config | grep -q '^compression_c_libraries: *[^ ]'; then
+  DEPENDS=zstd
+fi
 
 host_cc() { command -v cc || command -v gcc || command -v clang; }
 
@@ -53,13 +61,17 @@ build() {
   # everywhere: AX_PTHREAD keeps the flags it is given when they link
   # pthread_join, which emscripten's single-threaded stubs do.
   [ "$OCAML_MAJOR" -ge 5 ] && cache_vars+=(PTHREAD_CFLAGS=-D_REENTRANT)
+  # zstd, found through the sysroot's libzstd.pc (emconfigure replaces
+  # PKG_CONFIG_LIBDIR); without it, configure would only warn
+  local zstd=()
+  [ "$DEPENDS" = zstd ] && zstd=(--with-zstd)
 
   # Target flags (-m64, longjmp flavour...) go in CC as well: some versions
   # (4.08 to 4.11) compile the otherlibs without the configure-time CFLAGS.
   log "configure (emconfigure)"
-  emconfigure ./configure \
+  EM_PKG_CONFIG_PATH="$SYSROOT/lib/pkgconfig" emconfigure ./configure \
     --disable-native-compiler --disable-ocamltest --disable-ocamldoc \
-    --disable-debugger --disable-systhreads \
+    --disable-debugger --disable-systhreads "${zstd[@]}" \
     CC="$EMCC $TARGET_FLAGS" CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" "${cache_vars[@]}" > configure.log 2>&1 || { tail -30 configure.log; die "configure failed"; }
 
   # wasm loads doubles and 64-bit ints at any alignment, like i686, the only
@@ -97,6 +109,7 @@ build() {
   fi || { tail -30 make.log; die "runtime build failed"; }
   install_lib runtime/libcamlrun.a
   provides ocaml camlrun
+  if [ "$DEPENDS" = zstd ]; then link_flags camlrun -lzstd; else rm -f "$SYSROOT/meta/camlrun.link"; fi
 
   # C stubs of the otherlibs.  Their archive is built by ocamlmklib, which
   # needs a working ocamlrun: substitute our emar-based replacement

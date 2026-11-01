@@ -35,6 +35,7 @@ stubs     | bin/main |            |                             | wasm32 wasm64 
 zarith    | zt       |            | zarith                      | wasm32 wasm64 wasi |
 mixed     | mixed    | --name w 7 | digestif yojson re cmdliner | wasm32 wasm64 wasi |
 ocaml5    | o5       |            | ocaml>=5                    | wasm32 wasm64 wasi | ^Domain\.
+compress  | cm       |            | ocaml>=5.1                  | wasm32 wasm64 wasi |
 gitrecipe | bin/main |            |                             | wasm32 wasm64 wasi |
 nodune    | prog     |            | zarith                      | wasm32 wasm64 wasi |
 syslibs   | bin/main |            | mlmpfr zlib                 | wasm32 wasm64 wasi |
@@ -80,7 +81,7 @@ mccs      | mc       |            | mccs                        | wasm32 wasm64 
 
 has_pkg() {
   case $1 in
-    ocaml\>=5) [ "$(ocamlc -vnum | cut -d. -f1)" -ge 5 ] ;;
+    ocaml\>=*) [ "$(printf '%s\n' "${1#ocaml>=}" "$(ocamlc -vnum)" | sort -V | head -1)" = "${1#ocaml>=}" ] ;;
     *) ocamlfind query "$1" >/dev/null 2>&1 || [ -d "$OPAM_SWITCH_PREFIX/lib/$1" ] ;;
   esac
 }
