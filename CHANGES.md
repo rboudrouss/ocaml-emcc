@@ -1,5 +1,40 @@
 ## Unreleased
 
+- Added recipes: bls12-381-unix, cairo, core_unix, cpu, eio_posix, faad,
+  ffmpeg, freetype, frei0r, gd, glfw3, hacl_func, lacaml, lame, libev,
+  libevent, libfontconfig, libjpeg, liblo, liblzo2, libogg, libopus,
+  libpng, libssl, mad, memcpy, miou, mirage-block-unix, ncurses, nlopt,
+  num, oniguruma, openblas, osdp, pixman, poll, rowex, scrypt, secp256k1,
+  setcore, shine. zlib installs its pkg-config file.
+- A primitive that no linked library defines (a stub written for one OS
+  only: epoll, Windows...) becomes a stub raising `Failure "NAME not
+  implemented"` when called, as with js_of_ocaml: `link` warns, and a
+  program that never calls it runs. `--no-missing-primitives` makes it a
+  link error, as before.
+- Compiled mode: the generated C is split in parts (`c_of_ocaml --split`),
+  compiled separately, and a part left unchanged is not compiled again.
+- The heap is sized with `-sINITIAL_HEAP` (emscripten 3.1.55 and later)
+  unless the user's flags size the memory: with `MAXIMUM_MEMORY`, the
+  initial memory was fixed at 16 MB, which the static data alone can exceed
+  (72 MB of embedded bytecode for core with `-linkall`).
+- The C compiler wrapper drops `-march`, `-mtune`, `-mcpu`, `-fopenmp`
+  (emscripten's OpenMP needs threads: the code runs serially) and the
+  host's `-I/usr/include...`; `-Ofast` becomes `-O3 -ffast-math`.
+- `ocamlc -config` in the wasm context reports `architecture: none`: stubs
+  choosing their C code with `%{architecture}` take the portable one (num's
+  bng, without amd64 assembly).
+- A package that does not lay C types out is rebuilt for the target only if
+  an interface it was compiled against differs there: otherwise its build
+  was inconsistent with the packages depending on it (frama-c's plugins).
+- The stubs of a dune package are built with what its opam build selects:
+  `--release` instead of `-p PKG` when it builds the whole tree (frama-c's
+  plugins, which are other packages).
+- Stubs found without a recipe nor dune: a C file including the OCaml
+  headers through a local header counts (b0's `b0_stubs.h`), those of the
+  library are preferred when the package has several (bytesrw), and
+  without the native archive the files that do not compile are left out.
+- Recipes: `meson_setup` configures a meson project for the target (cross
+  file, static libraries, the sysroot's pkg-config files).
 - OCaml 5: the runtime has a single domain (`Domain.spawn` already
   failed). It reserved at startup the minor heaps of 16 domains in wasm32
   and 128 in wasm64, which emscripten's `mmap` allocates and clears: a
