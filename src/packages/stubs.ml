@@ -286,9 +286,20 @@ let archive_sources dir a =
   let files = List.map found members in
   if List.mem None files then None else Some (List.map Option.get files)
 
+(* Whether the C file [f] includes the OCaml headers, directly or through a
+   header of its directory (b0's b0_stubs.h) *)
 let includes_caml f =
+  let caml s = Files.has_seq s "#include" [ "<caml/"; "\"caml/" ] in
   let s = Files.contents f in
-  Files.has_seq s "#include" [ "<caml/"; "\"caml/" ]
+  caml s
+  || List.exists
+       (fun l ->
+         match Str_util.words (String.trim l) with
+         | [ "#include"; h ] when String.length h > 2 && h.[0] = '"' ->
+             let h = Filename.concat (Filename.dirname f) (String.sub h 1 (String.length h - 2)) in
+             Sys.file_exists h && caml (Files.contents h)
+         | _ -> false)
+       (String.split_on_char '\n' s)
 
 (* Last resort for packages with neither a recipe nor dune.  If the kept
    native build has lib<lib>.a, the C files behind its members are compiled
@@ -312,21 +323,41 @@ let auto ?(force = false) pkg lib =
              (ocamlbuild, topkg), only used when the stubs are nowhere else
              (generated) *)
           let c f = Filename.check_suffix f ".c" in
-          match List.filter includes_caml (Files.find ~skip:(( = ) "_build") work c) with
-          | [] -> List.filter includes_caml (Files.find work c)
+          let all =
+            match List.filter includes_caml (Files.find ~skip:(( = ) "_build") work c) with
+            | [] -> List.filter includes_caml (Files.find work c)
+            | l -> l
+          in
+          (* those of this library when the package has several (bytesrw's
+             sysrandom, blake3...: lib<pkg>_<key>_stubs.a, src/<key>/) *)
+          let key =
+            let strip ~prefix s =
+              if Str_util.starts_with ~prefix s then String.sub s (String.length prefix) (String.length s - String.length prefix) else s
+            in
+            let k = strip ~prefix:(pkg ^ "_") lib in
+            if Filename.check_suffix k "_stubs" then Filename.chop_suffix k "_stubs" else k
+          in
+          let rel f = String.sub f (String.length work) (String.length f - String.length work) in
+          let distinctive = key <> lib && key <> "" && key <> "stubs" in
+          match List.filter (fun f -> distinctive && Str_util.find (rel f) key <> None) all with
+          | [] -> all
           | l -> l)
     in
     if files = [] then Env.fail "%s: no OCaml stub found" pkg;
     let native_dir = match native with Some n -> Filename.dirname n | None -> work in
+    (* without the native archive, a guess: the files that do not compile
+       (bindings of an optional library not installed) are left out *)
     let objs =
-      List.map
+      List.filter_map
         (fun f ->
           log "  emcc %s" f;
-          if not (compile ~cwd:work ~flags:([ "-I" ^ Filename.dirname f; "-I" ^ native_dir ] @ cflags) f) then
-            Env.fail "%s: cannot compile %s" pkg f;
-          Filename.remove_extension f ^ ".o")
+          if compile ~cwd:work ~flags:([ "-I" ^ Filename.dirname f; "-I" ^ native_dir ] @ cflags) f then
+            Some (Filename.remove_extension f ^ ".o")
+          else if native = None && List.length files > 1 then (log "  %s does not compile: left out" f; None)
+          else Env.fail "%s: cannot compile %s" pkg f)
         files
     in
+    if objs = [] then Env.fail "%s: no OCaml stub compiles" pkg;
     install_lib (mklib work lib objs);
     provides ("auto-" ^ pkg) [ lib ];
     if sysflags <> [] then link_flags lib sysflags;
