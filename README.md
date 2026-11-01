@@ -377,6 +377,7 @@ A recipe is built once per switch and target, and is not rebuilt when it changes
 | `openblas` | lacaml, nx, owl... (`-lblas`, `-llapack` too) | BLAS, CBLAS, LAPACK and LAPACKE in C (no Fortran), generic kernels, no threads; about 20 minutes to build on one core; calls to potri, potrs, trtrs and laed3 through LAPACKE (and xerbla's error path) still have mismatched signatures: `link` warns, they trap |
 | `lame` | lame | libmp3lame, no assembly |
 | `libevent` | libevent | poll and select backends, no threads or OpenSSL |
+| `liblzo2` | lzo | |
 | `clang` | programs embedding clang's frontend | see [docs/recipes.md](docs/recipes.md#the-clang-recipe) |
 
 These recipes take the sources of the opam package
