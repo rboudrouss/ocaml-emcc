@@ -40,6 +40,8 @@ jobs:
         ocaml: ['4.14', '5.5']
         # wasi: OUT.wasm --wasi, run with node's WASI
         target: [wasm32, wasm64, wasi]
+        # compiled: the bytecode compiled to C by c_of_ocaml (--compiled)
+        mode: [interpreted, compiled]
     runs-on: ubuntu-latest
     timeout-minutes: 180
     env:
@@ -76,15 +78,26 @@ jobs:
           case ${{ matrix.ocaml }} in 4.*) pkgs="$pkgs mlmpfr" ;; esac
           # the package of tests/depgraph (mpfr through pkg-config, zarith)
           opam install $pkgs ./tests/depgraph/pkg
+      # c_of_ocaml, built with the switch's compiler (its bytecode format)
+      - name: Build c_of_ocaml
+        if: matrix.mode == 'compiled'
+        run: |
+          git clone --depth 1 https://github.com/rboudrouss/C_of_ocaml.git ../C_of_ocaml
+          # ppx_devtools is not released yet (its pin-depends)
+          opam pin add -n -y ppx_devtools-optcomp.dev "git+https://github.com/ocsigen/ppx_devtools.git#f62719d5087fa8d7f2bd0616c1fa91fd660eb27e"
+          opam install -y --deps-only ../C_of_ocaml/js_of_ocaml-compiler.opam
+          (cd ../C_of_ocaml && opam exec -- dune build --profile release --root . compiler/bin-c_of_ocaml/c_of_ocaml.exe)
+          echo "OCAML_EMCC_C_OF_OCAML=$(realpath ../C_of_ocaml)/_build/default/compiler/bin-c_of_ocaml/c_of_ocaml.exe" >> "$GITHUB_ENV"
       - run: opam exec -- dune build
-      - name: tests/run.sh (${{ matrix.target }})
+      - name: tests/run.sh (${{ matrix.target }}, ${{ matrix.mode }})
         run: |
           case ${{ matrix.target }} in wasi) args=--wasi ;; *) args="--target ${{ matrix.target }}" ;; esac
+          [ ${{ matrix.mode }} = compiled ] && args="$args --compiled"
           opam exec -- bash -c "SWITCH=\$(opam var prefix) tests/run.sh $args"
       - if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: tests-${{ matrix.ocaml }}-${{ matrix.target }}
+          name: tests-${{ matrix.ocaml }}-${{ matrix.target }}-${{ matrix.mode }}
           path: |
             tests/*/out.log
             tests/*/out/
