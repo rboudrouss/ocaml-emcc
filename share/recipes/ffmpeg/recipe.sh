@@ -7,9 +7,14 @@
 SOURCE=system:ffmpeg
 HEADER=libavutil/ffversion.h
 VERSION_MACROS=FFMPEG_VERSION
-RELEASES=https://ffmpeg.org/releases/
 LINK="-lavdevice -lavfilter -lavformat -lavcodec -lswresample -lswscale -lavutil"
 LIB_PATTERNS="avdevice avfilter avformat avcodec swresample swscale avutil"
+
+# (its git tags, whose archives have the configure script: ffmpeg.org fails
+# at times)
+releases() {
+  git_tag_releases https://github.com/FFmpeg/FFmpeg.git n 'https://github.com/FFmpeg/FFmpeg/archive/refs/tags/n{v}.tar.gz'
+}
 
 build() {
   local arch=x86_32
