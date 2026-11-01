@@ -207,6 +207,7 @@ The `ocaml` recipe works around these issues:
 | 5.x     | no `sigaltstack` in emscripten ("Failed to allocate signal stack") | `ac_cv_func_sigaction=no` |
 | 5.x     | configure adds `-pthread`: runtime and stubs disagree on `caml_state` ("no domain lock held") | `PTHREAD_CFLAGS=-D_REENTRANT` given to configure, which AX_PTHREAD keeps |
 | 5.x     | minor heap committed with `mmap(MAP_FIXED)` ("Failed to create main domain") | `patches/5.0/`, `patches/5.1+/`: committed with `mprotect`, as on Cygwin |
+| 5.x     | the minor heaps of all the possible domains (16 in wasm32, 128 in wasm64) reserved at startup, which emscripten's `mmap` allocates and clears, while `Domain.spawn` fails: 13 MB more memory and ~10 ms in wasm32, 300 MB and ~130 ms in wasm64 | `patches/5.0-5.2/`, `patches/5.3+/`: a single domain (`Max_domains`, the default of `OCAMLRUNPARAM=d` since 5.3) |
 | 5.0     | configure only compiles its `pthread_getaffinity_np` test: undefined at link time | `patches/5.0/`: not called |
 | 5.0     | otherlibs stub archives without the `byt` suffix (5.1) | `libunix.a`, `libcamlstr.a`... |
 | ≥ 5.5   | `caml_byte_program_mode` and `caml_runtime_standard_library_default` come from the file ocamlc generates | weak definitions (`compat.c`) |

@@ -1,0 +1,14 @@
+emscripten without pthreads: a single domain.
+
+Domain.spawn cannot start a thread, while the runtime reserves the minor
+heaps of all the possible domains at startup, which emscripten's mmap
+allocates and clears: 16 MB in wasm32, 256 MB in wasm64.
+
+--- a/runtime/caml/domain.h
++++ b/runtime/caml/domain.h
+@@
+-#ifdef ARCH_SIXTYFOUR
++#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
++#define Max_domains 1
++#elif defined(ARCH_SIXTYFOUR)
+ #define Max_domains 128

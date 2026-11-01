@@ -1,5 +1,12 @@
 ## Unreleased
 
+- OCaml 5: the runtime has a single domain (`Domain.spawn` already
+  failed). It reserved at startup the minor heaps of 16 domains in wasm32
+  and 128 in wasm64, which emscripten's `mmap` allocates and clears: a
+  hello world now starts with 16 MB of wasm memory instead of 29 MB
+  (wasm32) and 317 MB (wasm64), and ~10 ms (wasm32) and ~130 ms (wasm64)
+  sooner. `OCAMLRUNPARAM=d=N` still sets it (5.3 and later). Existing
+  runtimes: `ocaml-emcc setup --force`.
 - The stubs built with dune or from a package's native build, and the
   packages rebuilt for ctypes, record the version of the toolchain's
   wrappers in their stamps: a fix of the wrappers builds them again.
