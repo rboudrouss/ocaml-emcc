@@ -235,11 +235,16 @@ Packages that require 63-bit ints (`assert (Sys.int_size >= 62)` in matrix,
 hence k7 and kaun-board; binsec's marshalled data) need wasm64: matrix, k7,
 kaun-board and binsec run there.  So does frama-c (`assert (Sys.word_size =
 64)` in unionFind; with `--node-fs`, for its share directory), interpreted
-or compiled (c_of_ocaml peaks at about 2 GB on it).  So do ecaml and
-async: Jane Street's libraries are configured on the 64-bit host
-(jst-config's `ARCH_SIXTYFOUR`), so a 63-bit int reaches code that expects
-the 32-bit representation of `Int63`, an `int64`, on wasm32 (a crash in
-`caml_int64_div`).  core and core_unix run on wasm32 until such code runs.
+or compiled (c_of_ocaml peaks at about 2 GB on it).
+
+Jane Street's libraries choose some of their code with the configuration
+of jst-config, computed on the 64-bit host. On wasm32, `build` and `link`
+rebuild jst-config and those of the program's libraries that read its
+configuration, or were compiled against one whose interface differs
+(core, and with it the async stack), for the target, as for ctypes (see
+[internals](docs/internals.md#jane-streets-configuration)): the first
+build of an async program takes some tens of minutes. core and async then
+run on wasm32, interpreted or compiled, in node and with `--wasi`.
 
 ## Compiled mode
 

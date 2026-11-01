@@ -156,6 +156,32 @@ Packages built without dune cannot be rebuilt this way. When one of them
 does not generate structs or unions (its types are constants), the host's
 build is kept as it is.
 
+## Jane Street's configuration
+
+Jane Street's libraries choose some of their OCaml code when they are
+built, with ppx_optcomp and the `config.h` of jst-config (`[%%import
+"config.h"]`), which dune-configurator computes from the C configuration of
+the host: `JSC_ARCH_SIXTYFOUR` is defined there. On wasm32, time_now and
+core then treat an `Int63` as an `int`, where Base, which chooses at run
+time, represents it as an `int64` (`Sys.word_size` is 32): the 64-bit code
+reaches `caml_int64_div` with an `int` (a crash in async).
+
+So on wasm32, jst-config and the packages copying its `config.h` into an
+OCaml library are rebuilt for the target as ctypes is, and then those
+compiled against an interface that differs there (core's: the whole async
+stack). dune-configurator compiles its tests with `-I` the host's
+standard library, whose `caml/config.h` is the host's: the toolchain's
+emcc wrapper replaces it by the runtime's. Of the `config.h` built for
+wasm32, only `JSC_ARCH_SIXTYFOUR` and `JSC_ARCH_BIG_ENDIAN` are kept, the
+rest is the host's: emscripten's other answers make combinations Jane
+Street's code never meets (`JSC_LINUX_EXT` without `JSC_EVENTFD`:
+linux_ext then declares eventfd's primitives in OCaml, and its C defines
+them only with both), while core_unix's patches give the primitives of
+the host's configuration to emscripten, failing with `ENOSYS`. The
+toolchain finds this `config.h` before the host's
+(`%{lib:jst-config:config.h}`), for the C stubs too. On wasm64 the host's
+configuration is kept as it is.
+
 ## dune's `(ctypes)` stanza
 
 dune links the generators of its `(ctypes)` stanza natively only

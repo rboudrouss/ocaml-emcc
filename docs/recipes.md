@@ -89,6 +89,11 @@ text, not by line numbers: its old text must occur exactly once in the
 file, and its `@@` lines need no numbers. A hunk that matches no place, or
 several, stops the build, and one already applied is skipped.
 
+The patches of a recipe with `SOURCE=opam:PACKAGE` are also applied when
+the OCaml libraries of the package are rebuilt for the target (ctypes
+users, Jane Street's configuration): core_unix's C stubs, which such a
+build compiles too.
+
 ## The clang recipe
 
 `clang` builds the libraries of clang's frontend (`libclang*.a`,

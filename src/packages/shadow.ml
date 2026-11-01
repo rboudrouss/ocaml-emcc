@@ -10,14 +10,19 @@
    (with the host's stub DLLs), C ones are compiled by emcc and run by node
    (see the toolchain's emcc wrapper), dune-configurator gets the target's
    answers.
+   For jst-config on wasm32 and the packages reading its config.h (Jane
+   Street's): computed by dune-configurator, its word size is that of
+   wasm32 once jst-config is built for it (JSC_ARCH_SIXTYFOUR undefined,
+   see [merge_jst_config]), and the toolchain's
+   %{lib:jst-config:config.h} is this one.
 
    The stamp shadow-<pkg> records the package version and the outcome: ok
-   (installed), failed (it lays C types out when built, and could not be
-   rebuilt), none (it does not: the host's build is kept).  Rebuilt when the
-   package changes version, or the toolchain's wrappers.
-   A package that does not lay C types out is only rebuilt if [needed]: it
-   was compiled against interfaces that differ in the target's builds of
-   its dependencies.  Otherwise the target's build of its libraries would
+   (installed), failed (it lays C types out or reads jst-config's
+   configuration when built, and could not be rebuilt), none (it does not:
+   the host's build is kept).  Rebuilt when the package changes version,
+   or the toolchain's wrappers, or the patches of its recipe.
+   Another package is only rebuilt if [needed]: it was compiled against
+   interfaces that differ in the target's builds of its dependencies.  Otherwise the target's build of its libraries would
    differ from the host's for no reason, and so would be inconsistent with
    the packages depending on it, which keep the host's (frama-c's plugins,
    in other packages). *)
@@ -33,13 +38,65 @@ let computes_layouts work =
   List.exists (fun f -> generated (Files.contents f)) (Files.find ~skip work (fun f -> ml f || f = "dune"))
   && List.exists (fun f -> Files.has_word (Files.contents f) "seal") (Files.find ~skip work ml)
 
+(* Whether [pkg], whose sources are in [work], is jst-config or reads its
+   config.h in OCaml code, on wasm32 (the host's is that of 64 bits): its
+   dune files copy %{lib:jst-config:config.h}, and ppx_optcomp imports it
+   ([%%import "config.h"]; core copies it for its C stubs only) *)
+let reads_jst_config pkg work =
+  let skip = Str_util.starts_with ~prefix:"_build" in
+  let has f s = Str_util.find (Files.contents f) s <> None in
+  let ml f = List.exists (Filename.check_suffix f) [ ".ml"; ".mli"; ".mlh" ] in
+  !Env.target = "wasm32"
+  && (pkg = "jst-config"
+     || List.exists (fun f -> has f "jst-config:config.h") (Files.find ~skip work (fun f -> f = "dune"))
+        && List.exists (fun f -> has f "%%import") (Files.find ~skip work ml))
+
+(* The patches of the recipe of [pkg] that it is built with (core_unix's C
+   stubs), if it has one for its opam sources *)
+let patches pkg =
+  match Recipe.find pkg with
+  | Some d when Str_util.find (Files.contents (Recipe.script d)) ("SOURCE=opam:" ^ pkg) <> None ->
+      Files.find (Filename.concat d "patches") (fun f -> Filename.check_suffix f ".patch")
+  | _ -> []
+
+(* "patch=<checksum>" of [patches], in the stamp: a change builds it again *)
+let patch_tag pkg =
+  "patch=" ^ match patches pkg with [] -> "" | l -> Recipe.checksum (String.concat "" (List.map Compat.read_file l))
+
 let findlib d = Env.sysroot_file (Filename.concat "lib/findlib" d)
 let dirs_file pkg = Stubs.meta ("shadow-" ^ pkg ^ ".dirs")
 
-let build ?(force = false) ?(needed = fun () -> true) pkg =
+(* jst-config's config.h for the target: the host's, but for the target's
+   JSC_ARCH_* (word size, endianness).  The other answers of emscripten
+   make combinations Jane Street's code never meets: JSC_LINUX_EXT
+   without JSC_EVENTFD, where linux_ext declares eventfd's primitives in
+   OCaml and defines them in C only with both.  core_unix's patches give
+   the host's primitives to emscripten (ENOSYS). *)
+let merge_jst_config () =
+  let target = findlib "jst-config/config.h" in
+  let host = Filename.concat (Switch.prefix ()) "lib/jst-config/config.h" in
+  if Sys.file_exists target && Sys.file_exists host then (
+    let lines f = String.split_on_char '\n' (Compat.read_file f) in
+    let name l = match List.rev (Str_util.words l) with w :: _ -> w | [] -> "" in
+    let arch l = Str_util.starts_with ~prefix:"JSC_ARCH_" (name l) in
+    let target_arch = List.filter arch (lines target) in
+    let merged =
+      lines host
+      |> List.map (fun l -> if arch l then Option.value (List.find_opt (fun t -> name t = name l) target_arch) ~default:l else l)
+      |> String.concat "\n"
+    in
+    (* (copied from dune's _build, read-only) *)
+    Unix.chmod target 0o644;
+    Compat.write_file target merged)
+
+let build ?(force = false) ?(needed = fun () -> true) ?(direct = true) pkg =
   let ver = match Switch.version pkg with Some v -> v | None -> Env.fail "%s is not installed in %s" pkg (Switch.prefix ()) in
   let name = "shadow-" ^ pkg in
-  let built = match Stamp.read name with Some f -> Stamp.version f = ver && Stamp.current_toolchain f | None -> false in
+  let built =
+    match Stamp.read name with
+    | Some f -> Stamp.version f = ver && Stamp.current_toolchain f && List.mem (patch_tag pkg) f
+    | None -> false
+  in
   if force || not built then (
     (* the libraries of the previous version *)
     let dirs = dirs_file pkg in
@@ -47,49 +104,59 @@ let build ?(force = false) ?(needed = fun () -> true) pkg =
     (try Sys.remove dirs with Sys_error _ -> ());
     let work = Env.sysroot_file ("build/" ^ name) in
     Source.remove work;
-    Source.sh "mkdir" [ "-p"; Filename.dirname work ];
-    ignore (Source.opam_source pkg work);
-    let layouts = computes_layouts work in
-    let status = ref (if layouts then "failed" else "none") in
-    if (not layouts) && not (needed ()) then
-      log "%s: no C layouts, and the interfaces it was compiled against are the same for %s: not rebuilt" pkg !Env.target
-    else if Sys.file_exists (Filename.concat work "dune-project") then (
-      let dune = Stubs.dune_for work in
-      ignore (Stubs.system_deps pkg);
-      log "building the OCaml libraries of %s for %s (C layouts of %s)" pkg !Env.target !Env.target;
-      Compat.write_file
-        (Filename.concat work ".ocaml-emcc-workspace")
-        (Printf.sprintf "(lang dune 3.0)\n(context (default (name default.%s) (toolchain %s)))\n" !Env.target !Env.target);
-      let prefix = Switch.prefix () in
-      let env = Stubs.dune_env () @ [ Printf.sprintf "CAML_LD_LIBRARY_PATH=%s/lib/stublibs:%s/lib/ocaml/stublibs" prefix prefix ] in
-      let log_file = Filename.concat work "ocaml-emcc-build.log" in
-      let lib = Filename.concat work ("_build.ocaml-emcc/install/default." ^ !Env.target ^ "/lib") in
-      let has_cmi d = Files.first d (fun f -> Filename.check_suffix f ".cmi") <> None in
-      let ok =
-        Env.run_logged ~cwd:work ~env log_file dune
-          ([ "build"; "--build-dir"; "_build.ocaml-emcc"; "--workspace"; ".ocaml-emcc-workspace" ]
-          @ Switch.dune_selection pkg @ [ "@install" ])
-        = 0
-        && has_cmi lib
-      in
-      if ok then (
-        Source.sh "mkdir" [ "-p"; Env.sysroot_file "lib/findlib" ];
-        (try List.sort compare (Array.to_list (Sys.readdir lib)) with Sys_error _ -> [])
-        |> List.iter (fun d ->
-               let p = Filename.concat lib d in
-               (* (dune -p of a package that another build system builds
-                  installs an empty library: hacl-star-raw, built by make
-                  next to hacl-star) *)
-               if Files.is_dir p && d <> "stublibs" && has_cmi p then (
-                 Source.remove (findlib d);
-                 Source.sh "cp" [ "-rL"; p; Env.sysroot_file "lib/findlib/" ];
-                 let oc = open_out_gen [ Open_append; Open_creat ] 0o644 dirs in
-                 output_string oc (d ^ "\n");
-                 close_out oc;
-                 log "  %s" (findlib d)));
-        status := "ok")
-      else if layouts then (
-        ignore (Env.run ~out:Unix.stderr "tail" [ "-n"; "30"; log_file ]);
-        log "%s: could not be built for %s (log: %s)" pkg !Env.target log_file)
-      else log "  not built for %s, which it does not need: no structs in its generated types" !Env.target);
-    Stamp.write name [ ver; !status; "emcc-" ^ Lazy.force Toolchain.emcc_version; Stamp.toolchain ])
+    (* (without its sources when it does not depend on a root itself) *)
+    let unneeded = lazy (not (needed ())) in
+    let status = ref "none" in
+    if (not direct) && Lazy.force unneeded then
+      log "%s: the interfaces it was compiled against are the same for %s: not rebuilt" pkg !Env.target
+    else (
+      Source.sh "mkdir" [ "-p"; Filename.dirname work ];
+      ignore (Source.opam_source pkg work);
+      Stubs.apply_patches ~cwd:work (patches pkg);
+      let layouts = computes_layouts work || reads_jst_config pkg work in
+      if layouts then status := "failed";
+      if (not layouts) && Lazy.force unneeded then
+        log "%s: nothing computed for the target, and the interfaces it was compiled against are the same for %s: not rebuilt" pkg !Env.target
+      else if Sys.file_exists (Filename.concat work "dune-project") then (
+        let dune = Stubs.dune_for work in
+        ignore (Stubs.system_deps pkg);
+        log "building the OCaml libraries of %s for %s" pkg !Env.target;
+        Compat.write_file
+          (Filename.concat work ".ocaml-emcc-workspace")
+          (Printf.sprintf "(lang dune 3.0)\n(context (default (name default.%s) (toolchain %s)))\n" !Env.target !Env.target);
+        let prefix = Switch.prefix () in
+        let env = Stubs.dune_env () @ [ Printf.sprintf "CAML_LD_LIBRARY_PATH=%s/lib/stublibs:%s/lib/ocaml/stublibs" prefix prefix ] in
+        let log_file = Filename.concat work "ocaml-emcc-build.log" in
+        let lib = Filename.concat work ("_build.ocaml-emcc/install/default." ^ !Env.target ^ "/lib") in
+        let has_cmi d = Files.first d (fun f -> Filename.check_suffix f ".cmi") <> None in
+        (* (jst-config has none, only headers) *)
+        let host_has_cmi = List.exists (fun f -> Filename.check_suffix f ".cmi") (Switch.lib_files pkg) in
+        let ok =
+          Env.run_logged ~cwd:work ~env log_file dune
+            ([ "build"; "--build-dir"; "_build.ocaml-emcc"; "--workspace"; ".ocaml-emcc-workspace" ]
+            @ Switch.dune_selection pkg @ [ "@install" ])
+          = 0
+          && (has_cmi lib || not host_has_cmi)
+        in
+        if ok then (
+          Source.sh "mkdir" [ "-p"; Env.sysroot_file "lib/findlib" ];
+          (try List.sort compare (Array.to_list (Sys.readdir lib)) with Sys_error _ -> [])
+          |> List.iter (fun d ->
+                 let p = Filename.concat lib d in
+                 (* (dune -p of a package that another build system builds
+                    installs an empty library: hacl-star-raw, built by make
+                    next to hacl-star) *)
+                 if Files.is_dir p && d <> "stublibs" && (has_cmi p || not host_has_cmi) then (
+                   Source.remove (findlib d);
+                   Source.sh "cp" [ "-rL"; p; Env.sysroot_file "lib/findlib/" ];
+                   let oc = open_out_gen [ Open_append; Open_creat ] 0o644 dirs in
+                   output_string oc (d ^ "\n");
+                   close_out oc;
+                   log "  %s" (findlib d)));
+          if pkg = "jst-config" then merge_jst_config ();
+          status := "ok")
+        else if layouts then (
+          ignore (Env.run ~out:Unix.stderr "tail" [ "-n"; "30"; log_file ]);
+          log "%s: could not be built for %s (log: %s)" pkg !Env.target log_file)
+        else log "  not built for %s, which it does not need: no structs in its generated types" !Env.target));
+    Stamp.write name [ ver; !status; "emcc-" ^ Lazy.force Toolchain.emcc_version; Stamp.toolchain; patch_tag pkg ])

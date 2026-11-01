@@ -7,6 +7,14 @@
   mirage-block-unix, ncurses, nlopt, num, oniguruma, openblas, osdp,
   pixman, poll, rowex, scrypt, secp256k1, setcore, shine. zlib installs its
   pkg-config file, gmp its C++ interface (gmpxx).
+- Jane Street's libraries on wasm32: jst-config, the libraries reading its
+  configuration (time_now, core, core_unix) and those compiled against an
+  interface that differs there (the async stack) are rebuilt for the
+  target, as ctypes users are. Their 64-bit code treated an `Int63` as an
+  `int`, where Base has an `int64` on wasm32 (a crash in `caml_int64_div`
+  in async). The configuration is the host's but for the word size and
+  endianness. core and async run on wasm32, interpreted or compiled, in
+  node and with `--wasi`.
 - dune-configurator's C tests in the wasm context read the runtime's
   `caml/config.h`, not the host's (its `-I` of the host's standard library
   is replaced).
@@ -19,6 +27,9 @@
   `fchdir` works, `sendmsg` and `recvmsg` fail with `ENOSYS` instead of
   being imported from JavaScript, and a descriptor the host reports as a
   socket is a FIFO (node's piped standard streams).
+- Recipes: the patches of an `opam:` recipe are also applied to the builds
+  for the target of ctypes users and Jane Street's libraries (core_unix's
+  C stubs), whose stamps record them.
 - A primitive that no linked library defines (a stub written for one OS
   only: epoll, Windows...) becomes a stub raising `Failure "NAME not
   implemented"` when called, as with js_of_ocaml: `link` warns, and a
@@ -39,6 +50,9 @@
 - A package that does not lay C types out is rebuilt for the target only if
   an interface it was compiled against differs there: otherwise its build
   was inconsistent with the packages depending on it (frama-c's plugins).
+  One already built is only built again if one of its dependencies was
+  rebuilt, and one depending on no root (ctypes, jst-config) is checked
+  without fetching its sources.
 - The stubs of a dune package are built with what its opam build selects:
   `--release` instead of `-p PKG` when it builds the whole tree (frama-c's
   plugins, which are other packages).

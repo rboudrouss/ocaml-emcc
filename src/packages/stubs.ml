@@ -79,6 +79,19 @@ let header_includes pkg =
              let headers = try Array.exists (fun f -> Filename.check_suffix f ".h") (Sys.readdir dir) with Sys_error _ -> false in
              if headers then Some ("-I" ^ dir) else None)
 
+(* Apply the patches [files] in [cwd], in order (tools/patch.awk: hunks
+   placed by their text) *)
+let apply_patches ~cwd files =
+  let awk = Filename.concat (Env.share ()) "tools/patch.awk" in
+  List.iter
+    (fun p ->
+      match Env.capture ~cwd ~errors:true "awk" [ "-f"; awk; p ] with
+      | Some out ->
+          let out = String.trim out in
+          log "patch %s%s" (Filename.basename p) (if out = "" then "" else " (" ^ out ^ ")")
+      | None -> Env.fail "patch %s failed" p)
+    files
+
 (* ----------------------------------------------------------- patched dune *)
 
 (* A dune whose (ctypes) stanza links its generators as custom bytecode in
@@ -100,15 +113,7 @@ let patched_dune () =
     log "building dune %s, its (ctypes) stanza patched for the target's toolchain" ver;
     Source.remove (Filename.concat work "_build");
     Source.remove (Filename.concat work "_boot");
-    let awk = Filename.concat (Env.share ()) "tools/patch.awk" in
-    List.iter
-      (fun p ->
-        match Env.capture ~cwd:work ~errors:true "awk" [ "-f"; awk; p ] with
-        | Some out ->
-            let out = String.trim out in
-            log "patch %s%s" (Filename.basename p) (if out = "" then "" else " (" ^ out ^ ")")
-        | None -> Env.fail "patch %s failed" p)
-      files;
+    apply_patches ~cwd:work files;
     let path = "PATH=" ^ Env.host_bin () ^ ":" ^ Option.value (Env.getenv_opt "PATH") ~default:"" in
     if Env.run_logged ~cwd:work ~env:[ path ] (Filename.concat work "build.log") "make" [ "release" ] <> 0 then (
       ignore (Env.run ~out:Unix.stderr "tail" [ "-n"; "20"; Filename.concat work "build.log" ]);

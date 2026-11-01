@@ -1,14 +1,21 @@
-(* The C layouts computed when OCaml libraries were built.
+(* The OCaml libraries whose build depends on the target.
 
    ctypes lays C types out (struct fields, sizeof, arrays) with the sizes it
    generated when it was built (ctypes_primitives.ml), and bindings that
    generate their type descriptions (yaml, posix-stat) print the offsets of
    the structs from a C program: those of the 64-bit host.  wasm32 has other
    sizes (long, size_t, pointers), and both targets another libc than the
-   host (musl's struct stat is not glibc's).  So the packages of the program
-   depending on ctypes are rebuilt for the target (Shadow) into
-   the sysroot's findlib directory, which the toolchain searches before the
-   switch, and the bytecode is built against them. *)
+   host (musl's struct stat is not glibc's).
+
+   On wasm32, Jane Street's libraries choose their code with jst-config's
+   config.h (ppx_optcomp), computed on the host: JSC_ARCH_SIXTYFOUR makes
+   time_now or core treat an Int63 as an int, where Base, choosing at run
+   time, has the 32-bit one, an int64.
+
+   So the packages of the program depending on ctypes or jst-config are
+   rebuilt for the target (Shadow) into the sysroot's findlib directory,
+   which the toolchain searches before the switch, and the bytecode is built
+   against them. *)
 
 let read_opt f = if Sys.file_exists f then Some (Compat.read_file f) else None
 
@@ -24,11 +31,16 @@ let deps pkg =
       |> List.filter_map (fun (d, f) -> if d <> pkg && Switch.is_installed d && not (dev f) then Some d else None)
       |> List.sort_uniq compare
 
-(* ctypes and the packages depending on it, directly or not *)
-let ctypes_users =
+(* The packages whose build depends on the target, whatever their users:
+   ctypes, and jst-config on wasm32 (the 64-bit host's config.h is right
+   for wasm64) *)
+let roots () = "ctypes" :: (if !Env.target = "wasm32" then [ "jst-config" ] else [])
+
+(* The roots and the packages depending on them, directly or not *)
+let target_users =
   lazy
     (let users = Hashtbl.create 16 in
-     if Switch.is_installed "ctypes" then Hashtbl.replace users "ctypes" ();
+     List.iter (fun r -> if Switch.is_installed r then Hashtbl.replace users r ()) (roots ());
      let pkgs = Hashtbl.fold (fun p _ acc -> p :: acc) (Lazy.force Switch.installed) [] |> List.sort compare in
      let deps = List.map (fun p -> (p, deps p)) pkgs in
      let rec fix () =
@@ -49,28 +61,31 @@ let cmis pkg =
   |> List.filter (fun f -> Filename.check_suffix f ".cmi")
   |> List.map (fun f -> (String.capitalize_ascii (Filename.chop_suffix (Filename.basename f) ".cmi"), f))
 
-(* The packages depending on ctypes (and ctypes) whose modules [bc] links,
-   dependencies first. *)
+(* The packages depending on a root whose modules [bc] links, and the
+   roots they depend on (jst-config has no modules), dependencies first. *)
 let packages bc =
   let crcs = Bytecode.crcs bc in
-  if not (List.mem_assoc "Ctypes" crcs) then []
-  else
-    let users, deps = Lazy.force ctypes_users in
-    let linked p = List.exists (fun (m, _) -> List.mem_assoc m crcs) (cmis p) in
-    let seen = Hashtbl.create 16 and order = ref [] in
-    let rec visit p =
-      if not (Hashtbl.mem seen p) then (
-        Hashtbl.add seen p ();
-        List.iter (fun d -> if Hashtbl.mem users d then visit d) (Option.value (List.assoc_opt p deps) ~default:[]);
-        if linked p then order := p :: !order)
-    in
-    List.iter (fun (p, _) -> if Hashtbl.mem users p then visit p) deps;
-    List.rev !order
+  let users, deps = Lazy.force target_users in
+  let linked p = List.exists (fun (m, _) -> List.mem_assoc m crcs) (cmis p) in
+  let user_deps p = List.filter (Hashtbl.mem users) (Option.value (List.assoc_opt p deps) ~default:[]) in
+  (* the linked users and their dependencies among the users *)
+  let wanted = Hashtbl.create 16 in
+  let rec want p = if not (Hashtbl.mem wanted p) then (Hashtbl.add wanted p (); List.iter want (user_deps p)) in
+  List.iter (fun (p, _) -> if Hashtbl.mem users p && linked p then want p) deps;
+  let seen = Hashtbl.create 16 and order = ref [] in
+  let rec visit p =
+    if not (Hashtbl.mem seen p) then (
+      Hashtbl.add seen p ();
+      List.iter visit (user_deps p);
+      if linked p || List.mem p (roots ()) then order := p :: !order)
+  in
+  List.iter (fun (p, _) -> if Hashtbl.mem wanted p then visit p) deps;
+  List.rev !order
 
-(* "deps=<pkg>.<version>,...": the users of ctypes [pkg] depends on, with
+(* "deps=<pkg>.<version>,...": the users of the roots [pkg] depends on, with
    their installed versions *)
 let dep_versions pkg =
-  let users, deps = Lazy.force ctypes_users in
+  let users, deps = Lazy.force target_users in
   Option.value (List.assoc_opt pkg deps) ~default:[]
   |> List.filter (Hashtbl.mem users)
   |> List.map (fun d -> d ^ "." ^ Option.value (Switch.version d) ~default:"")
@@ -85,6 +100,7 @@ let stamp pkg =
   | Some (v :: status :: rest)
     when Some v = Switch.version pkg
          && Stamp.current_toolchain rest
+         && List.mem (Shadow.patch_tag pkg) rest
          && (List.mem (dep_versions pkg) rest || dep_versions pkg = "deps=") ->
       Some status
   | _ -> None
@@ -112,9 +128,10 @@ let prune () =
            let pkg = String.sub f 7 (String.length f - 7) in
            if stamp pkg = None then drop pkg)
 
-(* [roots] and the users of ctypes they depend on, dependencies first *)
+(* [roots] and the users of the roots (ctypes...) they depend on,
+   dependencies first *)
 let with_deps roots =
-  let users, deps = Lazy.force ctypes_users in
+  let users, deps = Lazy.force target_users in
   let seen = Hashtbl.create 16 and order = ref [] in
   let rec visit p =
     if not (Hashtbl.mem seen p) then (
@@ -127,7 +144,7 @@ let with_deps roots =
 
 (* whether [p] depends on [q], directly or not (or is [q]) *)
 let depends_on p q =
-  let _, deps = Lazy.force ctypes_users in
+  let _, deps = Lazy.force target_users in
   let seen = Hashtbl.create 16 in
   let rec go p =
     p = q
@@ -172,7 +189,7 @@ let cmi_crcs = objinfo_crcs ~own:true
    from the host's: (interface, host CRC) *)
 let changed_interfaces () =
   let prefix = Lazy.force Env.switch_prefix in
-  Hashtbl.fold (fun p _ acc -> p :: acc) (fst (Lazy.force ctypes_users)) []
+  Hashtbl.fold (fun p _ acc -> p :: acc) (fst (Lazy.force target_users)) []
   |> List.filter (fun p -> stamp p = Some "ok")
   |> Compat.concat_map (fun p ->
          let files = List.map snd (cmis p) in
@@ -194,26 +211,31 @@ let imports_changed pkg =
 (* Build [l] (dependencies first) for the target, one by one.  A package
    depending on one that could not be built keeps the host's build, as
    that one does (ctypes before 0.21, built by make): the bytecode is then
-   compiled against consistent libraries, and `link` warns. *)
+   compiled against consistent libraries, and `link` warns.  One with a
+   build for its version is only built again if one of its dependencies was
+   rebuilt here, or failed (not if they were all left as the host's). *)
 let shadow l =
-  Env.log "ctypes: building %s for %s (C layouts)" (String.concat ", " l) !Env.target;
-  let failed = ref [] in
+  Env.log "checking the %s builds of %s (C layouts, configuration)" !Env.target (String.concat ", " l);
+  let failed = ref [] and rebuilt = ref [] in
   List.iter
     (fun p ->
       match List.find_opt (depends_on p) !failed with
+      | _ when stamp p <> None && not (List.exists (depends_on p) (!rebuilt @ !failed)) -> ()
       | Some q ->
           Env.log "  %s: not built for %s, as %s could not be" p !Env.target q;
           drop p;
           (match Switch.version p with
           | Some v ->
-              Stamp.write ("shadow-" ^ p) [ v; "failed"; Stamp.toolchain; dep_versions p ]
+              Stamp.write ("shadow-" ^ p) [ v; "failed"; Stamp.toolchain; Shadow.patch_tag p; dep_versions p ]
           | None -> ());
           failed := p :: !failed
       | None ->
           let needed () = imports_changed p in
-          let ok = try Shadow.build ~force:true ~needed p; true with Env.Failed -> false in
+          let direct = List.exists (fun r -> r = p || List.mem r (deps p)) (roots ()) in
+          let ok = try Shadow.build ~force:true ~needed ~direct p; true with Env.Failed -> false in
           record_deps p;
-          if (not ok) || stamp p = Some "failed" then failed := p :: !failed)
+          if (not ok) || stamp p = Some "failed" then failed := p :: !failed
+          else if stamp p = Some "ok" then rebuilt := p :: !rebuilt)
     l;
   if !failed <> [] then
     Env.log "warning: could not build the %s libraries of %s" !Env.target (String.concat ", " (List.rev !failed));
@@ -222,7 +244,10 @@ let shadow l =
 (* Build the missing libraries of the packages of [bc] for the target;
    whether there were any. *)
 let ensure bc =
-  match to_build (packages bc) with
+  (* (and their dependencies among the users, which the build of one
+     needs consistent: core_unix's libraries use expect_test_helpers_core,
+     compiled against core) *)
+  match to_build (with_deps (packages bc)) with
   | [] -> false
   | l -> ignore (shadow l); true
 
@@ -284,9 +309,15 @@ let states bc =
 
 let with_state st l = List.filter_map (fun (p, s) -> if s = st then Some p else None) l
 
-let wrong () =
-  if !Env.target = "wasm32" then "struct fields, sizeof, arrays of long, size_t or pointers are those of the 64-bit host"
-  else "the fields of the libc's structs are those of the host's libc"
+(* What is wrong on the target in the host's builds of [ps] *)
+let wrong ps =
+  let layouts =
+    if !Env.target = "wasm32" then "C layouts: struct fields, sizeof, arrays of long, size_t or pointers are those of the 64-bit host"
+    else "C layouts: the fields of the libc's structs are those of the host's libc"
+  in
+  let by root text = if List.exists (fun p -> depends_on p root) ps then [ text ] else [] in
+  String.concat "; "
+    (by "ctypes" layouts @ by "jst-config" "configuration: jst-config's, of the 64-bit host (an Int63 is an int)")
 
 let warn ~bc_path bc =
   let l = states bc in
@@ -294,16 +325,15 @@ let warn ~bc_path bc =
   | [] -> ()
   | ps ->
       Env.log
-        "warning: %s was built against the host's %s, whose C layouts (%s) are wrong on %s.\n\
+        "warning: %s was built against the host's %s, wrong on %s\n\
+        \  (%s).\n\
         \  Their %s builds are in %s: build the bytecode with them\n\
         \  (ocaml-emcc build or ocaml-emcc dune, or ocamlfind -toolchain %s with\n\
         \  OCAMLFIND_CONF=%s)."
-        bc_path (String.concat ", " ps) (wrong ()) !Env.target !Env.target (Env.sysroot_file "lib/findlib")
+        bc_path (String.concat ", " ps) !Env.target (wrong ps) !Env.target (Env.sysroot_file "lib/findlib")
         !Env.target (Env.sysroot_file "findlib.conf"));
   match with_state Not_rebuilt l with
   | [] -> ()
   | ps ->
-      Env.log
-        "warning: %s could not be built for %s: the C layouts of their ctypes bindings\n\
-        \  (%s) are wrong there."
-        (String.concat ", " ps) !Env.target (wrong ())
+      Env.log "warning: %s could not be built for %s, and the host's builds are wrong there\n  (%s)."
+        (String.concat ", " ps) !Env.target (wrong ps)

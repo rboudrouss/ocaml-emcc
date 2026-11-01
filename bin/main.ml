@@ -297,7 +297,7 @@ let cmd_build args =
             else Env.fail "dune could not build %s" exe)
   in
   let built = build_bc 5 in
-  (* ctypes and its users built for the target (C layouts), then the
+  (* ctypes, jst-config and their users built for the target, then the
      bytecode again, against them *)
   let built =
     if not layouts then built
@@ -305,7 +305,7 @@ let cmd_build args =
       let bc = Bytecode.parse (Filename.concat root built) in
       let installed = Layouts.ensure bc in
       if installed || List.exists (fun (_, s) -> s = Layouts.Stale) (Layouts.states bc) then (
-        Env.log "rebuilding %s against the %s builds of its ctypes libraries" exe !Env.target;
+        Env.log "rebuilding %s against the %s builds of its libraries" exe !Env.target;
         build_bc 5)
       else built
   in
@@ -349,12 +349,12 @@ let cmd_doctor args =
   List.iter
     (fun (p, s) ->
       let t = !Env.target in
-      Printf.printf "C layouts of %s: %s\n" p
+      Printf.printf "%s build of %s: %s\n" t p
         (match s with
-        | Layouts.Rebuilt -> t ^ " (ok)"
-        | Layouts.Stale -> "WARNING: the 64-bit host's; rebuild the bytecode against its " ^ t ^ " build"
-        | Layouts.Not_rebuilt -> "WARNING: the 64-bit host's, no " ^ t ^ " build (`link` tries one)"
-        | Layouts.Unneeded -> "none computed when it was built (ok)"))
+        | Layouts.Rebuilt -> "ok"
+        | Layouts.Stale -> "WARNING: the bytecode was built against the 64-bit host's, rebuild it against this one"
+        | Layouts.Not_rebuilt -> "WARNING: none, the 64-bit host's is wrong here (`link` tries one)"
+        | Layouts.Unneeded -> "not needed, the host's is right (ok)"))
     (Layouts.states bc);
   let found = ref [ Env.sysroot_file "lib/libcamlrun.a" ] in
   List.iter
