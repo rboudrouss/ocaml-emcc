@@ -42,6 +42,15 @@ jobs:
         target: [wasm32, wasm64, wasi]
         # compiled: the bytecode compiled to C by c_of_ocaml (--compiled)
         mode: [interpreted, compiled]
+        # c_of_ocaml's C is that of the runtime of OCaml 5.4 at most (5.5
+        # changed caml_sys_init): compiled mode with 5.4
+        exclude:
+          - ocaml: '5.5'
+            mode: compiled
+        include:
+          - { ocaml: '5.4', target: wasm32, mode: compiled }
+          - { ocaml: '5.4', target: wasm64, mode: compiled }
+          - { ocaml: '5.4', target: wasi, mode: compiled }
     runs-on: ubuntu-latest
     timeout-minutes: 180
     env:
