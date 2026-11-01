@@ -86,7 +86,8 @@ jobs:
           # ppx_devtools is not released yet (its pin-depends)
           opam pin add -n -y ppx_devtools-optcomp.dev "git+https://github.com/ocsigen/ppx_devtools.git#f62719d5087fa8d7f2bd0616c1fa91fd660eb27e"
           opam install -y --deps-only ../C_of_ocaml/js_of_ocaml-compiler.opam
-          (cd ../C_of_ocaml && opam exec -- dune build --profile release --root . compiler/bin-c_of_ocaml/c_of_ocaml.exe)
+          # (opam exec from here: the switch is local, _opam)
+          opam exec -- sh -c 'cd ../C_of_ocaml && dune build --profile release --root . compiler/bin-c_of_ocaml/c_of_ocaml.exe'
           echo "OCAML_EMCC_C_OF_OCAML=$(realpath ../C_of_ocaml)/_build/default/compiler/bin-c_of_ocaml/c_of_ocaml.exe" >> "$GITHUB_ENV"
       - run: opam exec -- dune build
       - name: tests/run.sh (${{ matrix.target }}, ${{ matrix.mode }})
