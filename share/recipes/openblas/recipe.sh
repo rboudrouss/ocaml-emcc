@@ -3,14 +3,14 @@
 # (-lblas, -llapack...).  Generic C kernels: its RISCV64_GENERIC target, as
 # Pyodide does, whose -march/-mabi flags clang refuses for wasm and are
 # dropped.  No threads.
-# Its subroutines (returning nothing in Fortran) are void in its BLAS, int in
-# its own LAPACK functions (getrf, potrf... lapack.h's lapack_int) and
-# xerbla, and either in the C translation of LAPACK: harmless natively, but
+# Its subroutines (returning nothing in Fortran) are void in its BLAS, int or
+# void in its own LAPACK functions (getrf, potrf..., not as in its lapack.h)
+# and in the C translation of LAPACK, int in xerbla: harmless natively, but
 # wasm-ld replaces a call through another signature with a trap (dgeqrf,
-# dgesvd, dgeev... would trap).  The translation is made to agree: void,
-# but for OpenBLAS's own functions (int); the `return 0;` of those made void
-# are allowed (-Wno-return-mismatch).  A rewrite of a thousand files, not a
-# patch.
+# dgesvd, dgeev... would trap).  All are made void, their `return 0;` being
+# allowed (-Wno-return-mismatch); no caller uses the value.  Some call xerbla
+# without the length of the name, which is added.  A rewrite of a thousand
+# files, not a patch.
 
 SOURCE=system:openblas
 LINK=-lopenblas
@@ -30,9 +30,16 @@ build() {
   set -- HOSTCC=cc CC="$PWD/emcc-generic" AR="$EMAR" RANLIB="$EMSDK_BIN/emranlib" TARGET=RISCV64_GENERIC \
     BINARY=$binary NOFORTRAN=1 C_LAPACK=1 USE_THREAD=0 USE_LOCKING=0 NO_SHARED=1 DYNAMIC_ARCH=0 \
     NO_AFFINITY=1 CFLAGS="$CFLAGS -Wno-return-mismatch" PREFIX="$SYSROOT"
-  local own="[sdcz](getf2|getrf|laswp|getrs|gesv|potf2|potrf|potri|potrs|lauu2|lauum|trti2|trtri|trtrs|laed3)_|xerbla_"
-  find lapack-netlib/SRC -name '*.c' -exec sed -i -E -e 's|/\* Subroutine \*/ int |/* Subroutine */ void |' \
-    -e "s/\\<(int|void) (($own)\\()/int \\2/g" {} +
+  local own="getf2|getrf|laswp|getrs|gesv|potf2|potrf|potri|potrs|lauu2|lauum|trti2|trtri|trtrs|laed3"
+  find lapack-netlib/SRC lapack-netlib/TESTING/MATGEN -name '*.c' -exec sed -i -E \
+    -e 's|/\* Subroutine \*/ int |/* Subroutine */ void |' -e "s/\\<int (([sdcz]($own)|xerbla)_\\()/void \\1/g" \
+    -e 's/xerbla_\("([A-Z0-9_]+)", (&[a-z_0-9]+)\)/xerbla_("\1", \2, (ftnlen)sizeof("\1") - 1)/' {} +
+  find lapack-netlib/SRC lapack-netlib/TESTING/MATGEN -name '*.c' -exec sed -i -z -E \
+    's/xerbla_\([[:space:]]*char[[:space:]]*\*,[[:space:]]*integer[[:space:]]*\*[[:space:]]*\)/xerbla_(char *, integer *, ftnlen)/g' {} +
+  sed -i 's/^int NAME(/void NAME(/' interface/lapack/*.c
+  sed -i -E -e "s/^int (BLASFUNC\\([sdqczx]($own)\\))/void \\1/" -e 's/^int( +BLASFUNC\(xerbla\))/void\1/' \
+    common_interface.h driver/others/xerbla.c
+  sed -i -E "s/^lapack_int (LAPACK_[sdcz]($own)(_base)?\\()/void \\1/" lapack-netlib/LAPACKE/include/lapack.h
   log "make"
   make -j"$NPROC" "$@" libs netlib > make.log 2>&1 || { tail -30 make.log; die "make failed"; }
   make "$@" install > install.log 2>&1 || { tail -30 install.log; die "install failed"; }
