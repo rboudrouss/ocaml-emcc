@@ -12,6 +12,10 @@
   `.cmt` files (`ocamlc.byte`, merlin, odoc, toplevels failed with
   "Corrupted compiled interface") and compiler-libs' `Compression`.
   Existing runtimes: `ocaml-emcc setup --force`.
+- `--wasi`: pipes are buffers in memory (Async's and lwt's wake-up pipes),
+  `fchdir` works, `sendmsg` and `recvmsg` fail with `ENOSYS` instead of
+  being imported from JavaScript, and a descriptor the host reports as a
+  socket is a FIFO (node's piped standard streams).
 - A primitive that no linked library defines (a stub written for one OS
   only: epoll, Windows...) becomes a stub raising `Failure "NAME not
   implemented"` when called, as with js_of_ocaml: `link` warns, and a

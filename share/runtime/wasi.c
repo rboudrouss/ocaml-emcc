@@ -6,9 +6,9 @@
  * failing with EPERM or ENOSYS (system/lib/standalone/standalone.c), and the
  * other calls (unlink, rename, getcwd, readdir...) are imports of
  * emscripten's JavaScript.  These definitions replace both: paths are
- * resolved against the directories the host preopens, as wasi-libc does, and
- * what WASI has no notion of (users, pipes, sockets, a shell) fails or is a
- * no-op.  A function the program's libraries define themselves is left out
+ * resolved against the directories the host preopens, as wasi-libc does,
+ * pipes are buffers in memory, and what WASI has no notion of (users,
+ * sockets, a shell) fails or is a no-op.  A function the program's libraries define themselves is left out
  * by `link` (renamed at compile time), so theirs is used. */
 
 #define _GNU_SOURCE
@@ -19,11 +19,14 @@
 #include <netdb.h>
 #include <poll.h>
 #include <stdarg.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
+#include <sys/uio.h>
+#include <unistd.h>
 #include <wasi/api.h>
 #include <emscripten/syscalls.h>
 
@@ -199,6 +202,159 @@ static int open_rel(int dirfd, const char *rel, int flags)
   return fd;
 }
 
+/* ----------------------------------------------------------------- pipes */
+
+/* WASI has none: a pipe is a buffer between descriptors of the program
+   (the wake-up pipes of Async and lwt, which only the program reads).
+   Each end is a descriptor of the host, a preopened directory opened
+   again, so that the host gives its number to no other file; reading,
+   writing, polling and closing it use the buffer.  Reading an empty pipe
+   whose write end is open fails with EAGAIN even when blocking: nothing
+   else can fill it. */
+struct pipe { char *buf; size_t len, cap; int ends; /* 1: read end open, 2: write end */ };
+static struct { struct pipe *p; int write_end; int flags; } pipes[MAX_FD];
+
+static int is_pipe(int fd) { return fd >= 0 && fd < MAX_FD && pipes[fd].p; }
+
+int __syscall_pipe2(int fd[2], int flags)
+{
+  load_preopens();
+  if (npreopens == 0) return -ENOSYS;
+  int ends[2];
+  for (int i = 0; i < 2; i++) {
+    ends[i] = open_rel(preopens[0].fd, ".", O_RDONLY | O_DIRECTORY);
+    if (ends[i] >= 0 && ends[i] >= MAX_FD) {
+      (void)__wasi_fd_close(ends[i]);
+      ends[i] = -EMFILE;
+    }
+    if (ends[i] < 0) {
+      if (i == 1) (void)__wasi_fd_close(ends[0]);
+      return ends[i];
+    }
+    free(opened[ends[i]].rel);
+    opened[ends[i]].rel = NULL;
+  }
+  struct pipe *p = calloc(1, sizeof *p);
+  if (!p) {
+    (void)__wasi_fd_close(ends[0]);
+    (void)__wasi_fd_close(ends[1]);
+    return -ENOMEM;
+  }
+  p->ends = 3;
+  for (int i = 0; i < 2; i++) {
+    pipes[ends[i]].p = p;
+    pipes[ends[i]].write_end = i;
+    pipes[ends[i]].flags = (i ? O_WRONLY : O_RDONLY) | (flags & O_NONBLOCK);
+    fd[i] = ends[i];
+  }
+  return 0;
+}
+
+static ssize_t pipe_read(int fd, const struct iovec *iov, int count)
+{
+  struct pipe *p = pipes[fd].p;
+  if (pipes[fd].write_end) { errno = EBADF; return -1; }
+  if (p->len == 0) {
+    if (p->ends & 2) { errno = EAGAIN; return -1; }
+    return 0;
+  }
+  size_t n = 0;
+  for (int i = 0; i < count && n < p->len; i++) {
+    size_t k = iov[i].iov_len < p->len - n ? iov[i].iov_len : p->len - n;
+    memcpy(iov[i].iov_base, p->buf + n, k);
+    n += k;
+  }
+  memmove(p->buf, p->buf + n, p->len - n);
+  p->len -= n;
+  return n;
+}
+
+static ssize_t pipe_write(int fd, const struct iovec *iov, int count)
+{
+  struct pipe *p = pipes[fd].p;
+  if (!pipes[fd].write_end) { errno = EBADF; return -1; }
+  if (!(p->ends & 1)) { errno = EPIPE; return -1; }
+  size_t n = 0;
+  for (int i = 0; i < count; i++) n += iov[i].iov_len;
+  if (p->len + n > p->cap) {
+    size_t cap = p->cap ? p->cap : 4096;
+    while (cap < p->len + n) cap *= 2;
+    char *b = realloc(p->buf, cap);
+    if (!b) { errno = ENOMEM; return -1; }
+    p->buf = b;
+    p->cap = cap;
+  }
+  for (int i = 0; i < count; i++) {
+    memcpy(p->buf + p->len, iov[i].iov_base, iov[i].iov_len);
+    p->len += iov[i].iov_len;
+  }
+  return n;
+}
+
+/* emscripten's read, write, readv, writev and close (WASI calls), with
+   pipes */
+ssize_t readv(int fd, const struct iovec *iov, int count)
+{
+  if (is_pipe(fd)) return pipe_read(fd, iov, count);
+  size_t n;
+  __wasi_errno_t e = __wasi_fd_read(fd, (const __wasi_iovec_t *)iov, count, &n);
+  if (e) { errno = e; return -1; }
+  return n;
+}
+
+ssize_t writev(int fd, const struct iovec *iov, int count)
+{
+  if (is_pipe(fd)) return pipe_write(fd, iov, count);
+  size_t n;
+  __wasi_errno_t e = __wasi_fd_write(fd, (const __wasi_ciovec_t *)iov, count, &n);
+  if (e) { errno = e; return -1; }
+  return n;
+}
+
+ssize_t read(int fd, void *buf, size_t count)
+{
+  struct iovec iov = { buf, count };
+  return readv(fd, &iov, 1);
+}
+
+ssize_t write(int fd, const void *buf, size_t count)
+{
+  struct iovec iov = { (void *)buf, count };
+  return writev(fd, &iov, 1);
+}
+
+int close(int fd)
+{
+  if (is_pipe(fd)) {
+    struct pipe *p = pipes[fd].p;
+    p->ends &= pipes[fd].write_end ? ~2 : ~1;
+    if (!p->ends) {
+      free(p->buf);
+      free(p);
+    }
+    pipes[fd].p = NULL;
+  }
+  __wasi_errno_t e = __wasi_fd_close(fd);
+  if (e == __WASI_ERRNO_INTR) e = 0;
+  if (e) { errno = e; return -1; }
+  return 0;
+}
+
+/* POLLIN/POLLOUT/POLLHUP/POLLERR of pipe end FD for EVENTS */
+static short pipe_revents(int fd, short events)
+{
+  struct pipe *p = pipes[fd].p;
+  short r = 0;
+  if (pipes[fd].write_end) {
+    if (!(p->ends & 1)) r |= POLLERR;
+    else if (events & POLLOUT) r |= POLLOUT;
+  } else {
+    if ((events & POLLIN) && p->len > 0) r |= POLLIN;
+    if (!(p->ends & 2)) r |= POLLHUP;
+  }
+  return r;
+}
+
 int __syscall_openat(int dirfd, const char *path, int flags, ...)
 {
   RESOLVE(dirfd, path, rel);
@@ -259,8 +415,11 @@ static void fill_stat(struct stat *st, const __wasi_filestat_t *f)
   case __WASI_FILETYPE_SYMBOLIC_LINK: st->st_mode = S_IFLNK | 0777; break;
   case __WASI_FILETYPE_CHARACTER_DEVICE: st->st_mode = S_IFCHR | 0666; break;
   case __WASI_FILETYPE_BLOCK_DEVICE: st->st_mode = S_IFBLK | 0666; break;
+  /* node reports the standard streams piped so; they cannot be used as
+     sockets here (no socket calls), a library treating them as such
+     fails (Async's writers) */
   case __WASI_FILETYPE_SOCKET_STREAM:
-  case __WASI_FILETYPE_SOCKET_DGRAM: st->st_mode = S_IFSOCK | 0666; break;
+  case __WASI_FILETYPE_SOCKET_DGRAM: st->st_mode = S_IFIFO | 0666; break;
   default: st->st_mode = S_IFREG | 0644; break;
   }
   st->st_atim.tv_sec = f->atim / 1000000000;
@@ -273,6 +432,13 @@ static void fill_stat(struct stat *st, const __wasi_filestat_t *f)
 
 int __syscall_fstat64(int fd, struct stat *st)
 {
+  if (is_pipe(fd)) {
+    memset(st, 0, sizeof *st);
+    st->st_mode = S_IFIFO | 0600;
+    st->st_nlink = 1;
+    st->st_blksize = 4096;
+    return 0;
+  }
   __wasi_filestat_t f;
   __wasi_errno_t e = __wasi_fd_filestat_get(fd, &f);
   if (e) return -e;
@@ -316,6 +482,14 @@ int __syscall_fcntl64(int fd, int cmd, ...)
   va_start(ap, cmd);
   unsigned long arg = va_arg(ap, unsigned long); /* always passed by libc */
   va_end(ap);
+  if (is_pipe(fd)) {
+    switch (cmd) {
+    case F_GETFD: case F_SETFD: return 0;
+    case F_GETFL: return pipes[fd].flags;
+    case F_SETFL: pipes[fd].flags = (pipes[fd].flags & O_ACCMODE) | (arg & O_NONBLOCK); return 0;
+    default: return -EINVAL;
+    }
+  }
   __wasi_fdstat_t s;
   __wasi_errno_t e = __wasi_fd_fdstat_get(fd, &s);
   if (e) return -e;
@@ -459,6 +633,33 @@ int __syscall_chdir(const char *path)
   return 0;
 }
 
+/* The path DIRFD was opened from: a preopened directory, or a path
+   relative to a directory opened from one. */
+static int path_of_fd(int fd, char *out, int depth)
+{
+  load_preopens();
+  for (int i = 0; i < npreopens; i++)
+    if (preopens[i].fd == fd) {
+      snprintf(out, PATH_MAX, "/%s", preopens[i].name);
+      return 0;
+    }
+  if (depth > 16 || fd < 0 || fd >= MAX_FD || !opened[fd].rel) return -EBADF;
+  int r = path_of_fd(opened[fd].dirfd, out, depth + 1);
+  if (r) return r;
+  size_t n = strlen(out);
+  if (n + 1 + strlen(opened[fd].rel) >= PATH_MAX) return -ENAMETOOLONG;
+  out[n] = '/';
+  strcpy(out + n + 1, opened[fd].rel);
+  return 0;
+}
+
+int __syscall_fchdir(int fd)
+{
+  char path[PATH_MAX];
+  int r = path_of_fd(fd, path, 0);
+  return r ? r : __syscall_chdir(path);
+}
+
 int __syscall_getcwd(char *buf, size_t size)
 {
   size_t n = strlen(cwd) + 1;
@@ -552,9 +753,15 @@ int __syscall_poll(struct pollfd *fds, nfds_t nfds, int timeout)
     return -ENOMEM;
   }
   size_t n = 0;
+  int ready = 0;
   for (nfds_t i = 0; i < nfds; i++) {
     fds[i].revents = 0;
     if (fds[i].fd < 0) continue;
+    if (is_pipe(fds[i].fd)) {
+      fds[i].revents = pipe_revents(fds[i].fd, fds[i].events);
+      if (fds[i].revents) ready++;
+      continue;
+    }
     if (fds[i].events & POLLIN) {
       subs[n].userdata = i;
       subs[n].type = __WASI_EVENTTYPE_FD_READ;
@@ -566,13 +773,14 @@ int __syscall_poll(struct pollfd *fds, nfds_t nfds, int timeout)
       subs[n++].u.fd_readwrite.file_descriptor = fds[i].fd;
     }
   }
+  /* (a pipe ready: the others are only checked) */
+  if (ready) timeout = 0;
   if (timeout >= 0) {
     subs[n].userdata = (__wasi_userdata_t)-1;
     subs[n].type = __WASI_EVENTTYPE_CLOCK;
     subs[n].u.clock.id = __WASI_CLOCKID_MONOTONIC;
     subs[n++].u.clock.timeout = (__wasi_timestamp_t)timeout * 1000000;
   }
-  int ready = 0;
   if (n > 0) {
     __wasi_size_t nev;
     __wasi_errno_t e = __wasi_poll_oneoff(subs, evs, n, &nev);
@@ -647,7 +855,6 @@ int __syscall_mprotect(size_t start, size_t len, int prot)
 }
 
 /* no pipes nor special files */
-int __syscall_pipe2(int fd[2], int flags) { (void)fd; (void)flags; return -ENOSYS; }
 
 int __syscall_mknodat(int dirfd, const char *path, mode_t mode, dev_t dev)
 {
@@ -672,6 +879,8 @@ NO_SOCKET(getpeername, int s, struct sockaddr *a, socklen_t *l, int x, int y, in
 NO_SOCKET(sendto, int s, const void *b, size_t n, int f, const struct sockaddr *a, socklen_t l)
 NO_SOCKET(recvfrom, int s, void *b, size_t n, int f, struct sockaddr *a, socklen_t *l)
 NO_SOCKET(shutdown, int s, int h, int w, int x, int y, int z)
+NO_SOCKET(sendmsg, int s, const struct msghdr *m, int f, int x, int y, int z)
+NO_SOCKET(recvmsg, int s, struct msghdr *m, int f, int x, int y, int z)
 
 /* name resolution (JavaScript in emscripten) */
 int getaddrinfo(const char *n, const char *s, const struct addrinfo *h, struct addrinfo **r) { return EAI_FAIL; }

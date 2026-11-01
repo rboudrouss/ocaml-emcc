@@ -193,9 +193,14 @@ With node, use `node:wasi` with `version: 'preview1'` and `preopens` (see
   same position, giving a copy with its own position. This is enough for a
   C library doing `fdopen(dup(fd))`, or to redirect `stdout` to a file. The
   standard streams cannot be duplicated.
+- Pipes (`Unix.pipe`) are buffers in memory, between descriptors of the
+  program: enough for the wake-up pipes of Async and lwt. Reading an empty
+  pipe fails with `EAGAIN` rather than block, as nothing else can fill it.
+  Each end takes a descriptor from the host, so a pipe needs a preopened
+  directory (`--dir`).
 
-**What does not:** sockets, `getaddrinfo`, pipes, processes and
-`Sys.command` fail with `ENOSYS`. There are no users: everything is owned
+**What does not:** sockets, `getaddrinfo`, processes and `Sys.command`
+fail with `ENOSYS`. There are no users: everything is owned
 by root, and `chmod` and `chown` do nothing. File locks (`fcntl`, `lockf`)
 always succeed, as there is a single process. `Unix.localtime` is UTC.
 
