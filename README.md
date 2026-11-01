@@ -98,6 +98,9 @@ works). Its files are in emscripten's in-memory file system, unless it is
 built with `--node-fs`, the build then only runs in node, sees the real
 file system and the environment variables (`Sys.getenv`), and the bytecode
 is written next to `main.js` instead of being embedded.
+Libraries that read files installed with them (why3's
+`share/why3`, frama-c's share directory, found with dune-site) need
+`--node-fs`.
 
 ### In a browser
 
