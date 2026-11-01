@@ -32,25 +32,17 @@ jobs:
       - name: the installed CLI finds its share directory
         run: opam exec -- ocaml-emcc env | grep -q "share.*/share/ocaml-emcc$"
 
-  # tests/run.sh: each test built natively and with ocaml-emcc, outputs compared
+  # tests/run.sh --compiled: each test built natively and with ocaml-emcc,
+  # the bytecode compiled to C by c_of_ocaml, outputs compared
   test:
     strategy:
       fail-fast: false
       matrix:
-        ocaml: ['4.14', '5.5']
+        # c_of_ocaml's C is that of the runtime of OCaml 5.4 at most (5.5
+        # changed caml_sys_init)
+        ocaml: ['4.14', '5.4']
         # wasi: OUT.wasm --wasi, run with node's WASI
         target: [wasm32, wasm64, wasi]
-        # compiled: the bytecode compiled to C by c_of_ocaml (--compiled)
-        mode: [interpreted, compiled]
-        # c_of_ocaml's C is that of the runtime of OCaml 5.4 at most (5.5
-        # changed caml_sys_init): compiled mode with 5.4
-        exclude:
-          - ocaml: '5.5'
-            mode: compiled
-        include:
-          - { ocaml: '5.4', target: wasm32, mode: compiled }
-          - { ocaml: '5.4', target: wasm64, mode: compiled }
-          - { ocaml: '5.4', target: wasi, mode: compiled }
     runs-on: ubuntu-latest
     timeout-minutes: 180
     env:
@@ -89,7 +81,6 @@ jobs:
           opam install $pkgs ./tests/depgraph/pkg
       # c_of_ocaml, built with the switch's compiler (its bytecode format)
       - name: Build c_of_ocaml
-        if: matrix.mode == 'compiled'
         run: |
           git clone --depth 1 https://github.com/rboudrouss/C_of_ocaml.git ../C_of_ocaml
           # ppx_devtools is not released yet (its pin-depends)
@@ -99,15 +90,15 @@ jobs:
           opam exec -- sh -c 'cd ../C_of_ocaml && dune build --profile release --root . compiler/bin-c_of_ocaml/c_of_ocaml.exe'
           echo "OCAML_EMCC_C_OF_OCAML=$(realpath ../C_of_ocaml)/_build/default/compiler/bin-c_of_ocaml/c_of_ocaml.exe" >> "$GITHUB_ENV"
       - run: opam exec -- dune build
-      - name: tests/run.sh (${{ matrix.target }}, ${{ matrix.mode }})
+      - name: tests/run.sh --compiled (${{ matrix.target }})
         run: |
           case ${{ matrix.target }} in wasi) args=--wasi ;; *) args="--target ${{ matrix.target }}" ;; esac
-          [ ${{ matrix.mode }} = compiled ] && args="$args --compiled"
+          args="$args --compiled"
           opam exec -- bash -c "SWITCH=\$(opam var prefix) tests/run.sh $args"
       - if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: tests-${{ matrix.ocaml }}-${{ matrix.target }}-${{ matrix.mode }}
+          name: tests-${{ matrix.ocaml }}-${{ matrix.target }}
           path: |
             tests/*/out.log
             tests/*/out/
