@@ -1,0 +1,17 @@
+wasm32: a minor heap of 1M words (4 MB) by default.
+
+The default of 256k words is 1 MB with 4-byte words, half the 2 MB of a
+64-bit native program: programs allocating much spent their time in minor
+collections (binary_trees: 1.26 s, 1.01 s with 1M words; a list pipeline:
+0.80 s, 0.44 s), for 3 ms and 3 MB more at startup.  wasm64 keeps 256k
+words of 8 bytes.  OCAMLRUNPARAM's s= still sets it.
+
+--- a/runtime/caml/config.h
++++ b/runtime/caml/config.h
+@@
+ /* Default size of the minor zone. (words)  */
++#ifdef __wasm32__
++#define Minor_heap_def 1048576
++#else
+ #define Minor_heap_def 262144
++#endif

@@ -25,6 +25,12 @@
   `.cmt` files (`ocamlc.byte`, merlin, odoc, toplevels failed with
   "Corrupted compiled interface") and compiler-libs' `Compression`.
   Existing runtimes: `ocaml-emcc setup --force`.
+- wasm32: the minor heap is 1M words (4 MB) by default instead of 256k
+  (1 MB, half a 64-bit native program's): programs allocating much spent
+  their time in minor collections (binary_trees compiled: 1.26 s, now
+  1.01 s; a list pipeline: 0.80 s, now 0.44 s), for 3 ms and 3 MB more at
+  startup. `OCAMLRUNPARAM=s=...` still sets it; wasm64 is unchanged.
+  Existing runtimes: `ocaml-emcc setup --force`.
 - `--wasi`: pipes are buffers in memory (Async's and lwt's wake-up pipes),
   `fchdir` works, `sendmsg` and `recvmsg` fail with `ENOSYS` instead of
   being imported from JavaScript, and a descriptor the host reports as a
