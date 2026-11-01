@@ -1,0 +1,14 @@
+--- a/src/config/config.ml
++++ b/src/config/config.ml
+@@
+-          [ "__linux__", C.C_define.Type.Switch; "_WIN32", C.C_define.Type.Switch ]
++          [ "__linux__", C.C_define.Type.Switch; "_WIN32", C.C_define.Type.Switch
++          ; "__EMSCRIPTEN__", C.C_define.Type.Switch ]
+       in
+       let vars =
+-        [ "POLL_CONF_LINUX", List.assoc "__linux__" platform
++        [ ( "POLL_CONF_LINUX"
++          , match List.assoc "__linux__" platform, List.assoc "__EMSCRIPTEN__" platform with
++            | C.C_define.Value.Switch l, C.C_define.Value.Switch e -> C.C_define.Value.Switch (l || e)
++            | v, _ -> v )
+         ; "POLL_CONF_WIN32", List.assoc "_WIN32" platform
