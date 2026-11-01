@@ -1,11 +1,12 @@
 ## Unreleased
 
-- Added recipes: bls12-381-unix, cairo, core_unix, cpu, eio_posix, faad,
-  ffmpeg, freetype, frei0r, gd, glfw3, hacl_func, lacaml, lame, libev,
-  libevent, libfontconfig, libjpeg, liblo, liblzo2, libogg, libopus,
-  libpng, libssl, mad, memcpy, miou, mirage-block-unix, ncurses, nlopt,
-  num, oniguruma, openblas, osdp, pixman, poll, rowex, scrypt, secp256k1,
-  setcore, shine. zlib installs its pkg-config file.
+- Added recipes: bls12-381-unix, bytesrw, cairo, class_group_vdf,
+  core_unix, cpu, eio_posix, faad, ffmpeg, freetype, frei0r, gd, glfw3,
+  hacl_func, lacaml, lame, libev, libevent, libfontconfig, libjpeg, liblo,
+  liblzo2, libogg, libopus, libpng, libssl, mad, memcpy, miou,
+  mirage-block-unix, ncurses, nlopt, num, oniguruma, openblas, osdp,
+  pixman, poll, rowex, scrypt, secp256k1, setcore, shine. zlib installs its
+  pkg-config file, gmp its C++ interface (gmpxx).
 - A primitive that no linked library defines (a stub written for one OS
   only: epoll, Windows...) becomes a stub raising `Failure "NAME not
   implemented"` when called, as with js_of_ocaml: `link` warns, and a
