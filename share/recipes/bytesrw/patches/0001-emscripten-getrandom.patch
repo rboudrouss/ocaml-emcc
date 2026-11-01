@@ -1,0 +1,25 @@
+--- a/src/sysrandom/bytesrw_sysrandom_stubs.c
++++ b/src/sysrandom/bytesrw_sysrandom_stubs.c
+@@
+   return Val_none;
+ }
+ 
++#elif defined (__EMSCRIPTEN__)
++
++/* emscripten has getentropy (at most 256 bytes a call), but neither
++   getrandom nor arc4random_buf */
++CAMLprim value ocaml_bytesrw_sysrandom_getrandom
++(value b, value first, value length)
++{
++  uint8_t *sub = ((uint8_t *)(Bytes_val (b))) + Long_val (first);
++  long rem = Long_val (length);
++  while (rem > 0) {
++    long n = rem > 256 ? 256 : rem;
++    if (getentropy (sub, n))
++      return caml_alloc_some (caml_copy_string ("getentropy error"));
++    sub += n; rem -= n;
++  }
++  return Val_none;
++}
++
+ #elif (defined (OCAML_BYTESRW_DARWIN) || defined (OCAML_BYTESRW_POSIX))
