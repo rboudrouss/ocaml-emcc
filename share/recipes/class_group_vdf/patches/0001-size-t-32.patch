@@ -1,0 +1,8 @@
+--- a/src/bindings/cg_vdf_bindings_stubs.cpp
++++ b/src/bindings/cg_vdf_bindings_stubs.cpp
+@@
+ #define ctypes_copy_size_t integers_copy_uint64
++#elif SIZE_MAX == UINT32_MAX
++#define ctypes_size_t_val Uint32_val
++#define ctypes_copy_size_t integers_copy_uint32
+ #else

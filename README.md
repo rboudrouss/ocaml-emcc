@@ -344,7 +344,7 @@ A recipe is built once per switch and target, and is not rebuilt when it changes
 
 | recipe | for (opam) | notes |
 |--------|------------|-------|
-| `gmp`, `mpfr` | zarith, mlmpfr, mlgmpidl, apron... | |
+| `gmp`, `mpfr` | zarith, mlmpfr, mlgmpidl, apron, class_group_vdf (gmpxx)... | gmp with its C++ interface |
 | `zlib` | camlzip, zlib | |
 | `sqlite3` | sqlite3 | amalgamation, single-threaded, FTS3/4/5, R-tree, math functions (`SQLITE_CFLAGS`) |
 | `libffi` | ctypes-foreign | |
@@ -394,7 +394,7 @@ variant), `mlcuddidl` (its bundled CUDD, and the stubs camlidl generates),
 called), and packages whose sources need a change for wasm, described in
 their `share/recipes/<name>/` directory: `mirage-crypto` (and `-ec`,
 `-rng`), `lwt`, `cryptokit`, `secp256k1-internal`, `lmdb`, `mccs`,
-`core_unix`, `eio_posix`, `num`, `rowex`, `mirage-block-unix`, `miou`, `osdp`, `bls12-381-unix`, `lacaml`, `setcore`, `cpu`, `memcpy`, `scrypt`, `poll`, `bytesrw`, `ocaml-lua` and `raylib` (see [raylib in a
+`core_unix`, `eio_posix`, `num`, `rowex`, `mirage-block-unix`, `miou`, `osdp`, `bls12-381-unix`, `lacaml`, `setcore`, `cpu`, `memcpy`, `scrypt`, `poll`, `bytesrw`, `class_group_vdf`, `ocaml-lua` and `raylib` (see [raylib in a
 browser](#raylib-in-a-browser)).
 
 ### Project recipes
