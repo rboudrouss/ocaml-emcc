@@ -1,6 +1,7 @@
 # OpenSSL (conf-libssl): libssl and libcrypto, generic C (no-asm), without
 # threads.  OpenSSL knows emscripten: its entropy comes from getentropy.
-# No secure heap (mlock), no dynamic engines or providers (no dlopen).
+# No secure heap (mlock), no dynamic engines or providers (no dlopen): the
+# builtin engines only (the ENGINE API: async_ssl).
 
 SOURCE=system:libssl
 PKGCONFIG=openssl
@@ -18,7 +19,7 @@ build() {
   local target=linux-generic32
   [ "$TARGET" = wasm64 ] && target=linux-generic64
   log "Configure ($target)"
-  ./Configure "$target" no-asm no-threads no-shared no-dso no-engine no-afalgeng no-secure-memory \
+  ./Configure "$target" no-asm no-threads no-shared no-dso no-afalgeng no-secure-memory \
     no-ui-console no-tests no-docs no-apps --prefix="$SYSROOT" --libdir=lib \
     CC="$EMCC" AR="$EMAR" RANLIB="$EMSDK_BIN/emranlib" CFLAGS="$CFLAGS" \
     > configure.log 2>&1 || { tail -30 configure.log; die "Configure failed"; }
