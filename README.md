@@ -378,6 +378,7 @@ A recipe is built once per switch and target, and is not rebuilt when it changes
 | `lame` | lame | libmp3lame, no assembly |
 | `libevent` | libevent | poll and select backends, no threads or OpenSSL |
 | `liblzo2` | lzo | |
+| `nlopt` | nlopt | its C algorithms (not StoGO or AGS, in C++) |
 | `clang` | programs embedding clang's frontend | see [docs/recipes.md](docs/recipes.md#the-clang-recipe) |
 
 These recipes take the sources of the opam package
