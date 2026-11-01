@@ -1,0 +1,41 @@
+In_thread without threads: the jobs run synchronously.
+
+emscripten's single-threaded runtime cannot create threads
+(Thread.create: Not supported), and Async's thread pool then has none:
+In_thread.run raised "Async's thread pool was unable to create a single
+thread", for the writes to stdout already.  The jobs run instead in the
+async thread, to completion, as lwt's blocking jobs do with ocaml-emcc.
+
+--- a/src/in_thread.ml
++++ b/src/in_thread.ml
+@@
+ let run_after_scheduler_is_started
+   ~priority
+   ~thread
+   ~(when_finished : When_finished.t)
+   ~name
+   ~t
+   f
+   =
++  if not (Lazy.force threads_available)
++  then return (Result.try_with f) >>| Result.ok_exn
++  else (
+   let ivar = Ivar.create () in
+@@
+   maybe_mark_thread_pool_stuck t;
+-  Ivar.read ivar >>| Result.ok_exn
++  Ivar.read ivar >>| Result.ok_exn)
+ ;;
+@@
+-let run_after_scheduler_is_started
++(* whether threads can be created (not under emscripten) *)
++let threads_available =
++  lazy
++    (match Thread.create ~on_uncaught_exn:`Print_to_stderr ignore () with
++     | thread ->
++       Thread.join thread;
++       true
++     | exception _ -> false)
++;;
++
++let run_after_scheduler_is_started

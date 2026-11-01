@@ -36,6 +36,9 @@
 #   SHA256   checksum of the tarball (url: sources)
 #   REF      git tag, branch or commit (git: sources; default: HEAD)
 #   DEPENDS  space separated recipe names built first
+#   PATCH_OCAML  1: for SOURCE=opam:<package>, patches/ changes its OCaml
+#            libraries as well: they are rebuilt for the target with them
+#            (in $SYSROOT/lib/findlib, as for ctypes: Shadow)
 # and must define a `build` function (or include one: `include_recipe NAME`,
 # with an optional `pre_build` function run before it).  `build` runs inside
 # a fresh copy of the sources with the helpers below available (install_lib, install_headers,
@@ -308,7 +311,7 @@ write_toolchain() { "$OCAML_EMCC_EXE" internal toolchain; }
 # ----------------------------------------------------------------- recipes
 
 # The variables a recipe may set, and the functions it may define.
-RECIPE_VARS="SOURCE SHA256 REF DEPENDS HEADER VERSION_MACROS PKGCONFIG RELEASES TARBALL COMPAT OPAM_SOURCES LINK LIB_PATTERNS USE_CFLAGS"
+RECIPE_VARS="SOURCE SHA256 REF DEPENDS PATCH_OCAML HEADER VERSION_MACROS PKGCONFIG RELEASES TARBALL COMPAT OPAM_SOURCES LINK LIB_PATTERNS USE_CFLAGS"
 
 # load_recipe <name>: read the recipe in the current shell
 load_recipe() {

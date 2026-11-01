@@ -1,12 +1,12 @@
 ## Unreleased
 
-- Added recipes: bls12-381-unix, bytesrw, cairo, class_group_vdf,
-  core_unix, cpu, eio_posix, faad, ffmpeg, freetype, frei0r, gd, glfw3,
-  hacl_func, lacaml, lame, libev, libevent, libfontconfig, libjpeg, liblo,
-  liblzo2, libogg, libopus, libpng, libssl, mad, memcpy, miou,
-  mirage-block-unix, ncurses, nlopt, num, oniguruma, openblas, osdp,
-  pixman, poll, rowex, scrypt, secp256k1, setcore, shine. zlib installs its
-  pkg-config file, gmp its C++ interface (gmpxx).
+- Added recipes: async_unix, bls12-381-unix, bytesrw, cairo,
+  class_group_vdf, core_unix, cpu, eio_posix, faad, ffmpeg, freetype,
+  frei0r, gd, glfw3, hacl_func, lacaml, lame, libev, libevent,
+  libfontconfig, libjpeg, liblo, liblzo2, libogg, libopus, libpng, libssl,
+  mad, memcpy, miou, mirage-block-unix, ncurses, nlopt, num, oniguruma,
+  openblas, osdp, pixman, poll, rowex, scrypt, secp256k1, setcore, shine.
+  zlib installs its pkg-config file, gmp its C++ interface (gmpxx).
 - Jane Street's libraries on wasm32: jst-config, the libraries reading its
   configuration (time_now, core, core_unix) and those compiled against an
   interface that differs there (the async stack) are rebuilt for the
@@ -14,7 +14,8 @@
   `int`, where Base has an `int64` on wasm32 (a crash in `caml_int64_div`
   in async). The configuration is the host's but for the word size and
   endianness. core and async run on wasm32, interpreted or compiled, in
-  node and with `--wasi`.
+  node and with `--wasi`. Without threads, Async's thread pool runs its
+  jobs synchronously (async_unix recipe), as lwt does.
 - dune-configurator's C tests in the wasm context read the runtime's
   `caml/config.h`, not the host's (its `-I` of the host's standard library
   is replaced).
@@ -27,9 +28,10 @@
   `fchdir` works, `sendmsg` and `recvmsg` fail with `ENOSYS` instead of
   being imported from JavaScript, and a descriptor the host reports as a
   socket is a FIFO (node's piped standard streams).
-- Recipes: the patches of an `opam:` recipe are also applied to the builds
-  for the target of ctypes users and Jane Street's libraries (core_unix's
-  C stubs), whose stamps record them.
+- Recipes: `PATCH_OCAML=1` rebuilds the OCaml libraries of the package of an
+  `opam:` recipe for the target with its patches. These patches are also
+  applied to the builds for the target of ctypes users and Jane Street's
+  libraries (core_unix's C stubs), whose stamps record them.
 - A primitive that no linked library defines (a stub written for one OS
   only: epoll, Windows...) becomes a stub raising `Failure "NAME not
   implemented"` when called, as with js_of_ocaml: `link` warns, and a

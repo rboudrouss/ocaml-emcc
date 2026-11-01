@@ -32,9 +32,16 @@ let deps pkg =
       |> List.sort_uniq compare
 
 (* The packages whose build depends on the target, whatever their users:
-   ctypes, and jst-config on wasm32 (the 64-bit host's config.h is right
-   for wasm64) *)
-let roots () = "ctypes" :: (if !Env.target = "wasm32" then [ "jst-config" ] else [])
+   ctypes, jst-config on wasm32 (the 64-bit host's config.h is right for
+   wasm64), and those whose recipe patches their OCaml libraries
+   (async_unix) *)
+let roots_l =
+  lazy
+    (("ctypes" :: (if !Env.target = "wasm32" then [ "jst-config" ] else []))
+    @ (Hashtbl.fold (fun p _ acc -> p :: acc) (Lazy.force Switch.installed) []
+      |> List.filter Shadow.patches_ocaml |> List.sort compare))
+
+let roots () = Lazy.force roots_l
 
 (* The roots and the packages depending on them, directly or not *)
 let target_users =

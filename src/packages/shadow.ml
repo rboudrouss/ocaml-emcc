@@ -59,6 +59,16 @@ let patches pkg =
       Files.find (Filename.concat d "patches") (fun f -> Filename.check_suffix f ".patch")
   | _ -> []
 
+(* Whether the recipe of [pkg] patches its OCaml libraries (PATCH_OCAML=1):
+   they are then rebuilt for the target with its patches *)
+let patches_ocaml pkg =
+  match Recipe.find pkg with
+  | Some d ->
+      let s = Files.contents (Recipe.script d) in
+      Str_util.find s ("SOURCE=opam:" ^ pkg) <> None
+      && List.exists (fun l -> String.trim l = "PATCH_OCAML=1") (String.split_on_char '\n' s)
+  | None -> false
+
 (* "patch=<checksum>" of [patches], in the stamp: a change builds it again *)
 let patch_tag pkg =
   "patch=" ^ match patches pkg with [] -> "" | l -> Recipe.checksum (String.concat "" (List.map Compat.read_file l))
@@ -113,7 +123,7 @@ let build ?(force = false) ?(needed = fun () -> true) ?(direct = true) pkg =
       Source.sh "mkdir" [ "-p"; Filename.dirname work ];
       ignore (Source.opam_source pkg work);
       Stubs.apply_patches ~cwd:work (patches pkg);
-      let layouts = computes_layouts work || reads_jst_config pkg work in
+      let layouts = computes_layouts work || reads_jst_config pkg work || patches_ocaml pkg in
       if layouts then status := "failed";
       if (not layouts) && Lazy.force unneeded then
         log "%s: nothing computed for the target, and the interfaces it was compiled against are the same for %s: not rebuilt" pkg !Env.target

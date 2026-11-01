@@ -59,6 +59,10 @@ The recipe should install a pkg-config file in `$SYSROOT/lib/pkgconfig`
   package), `system:NAME` (see above), `fetch` (the recipe defines a
   `fetch DEST` function), `none`
 - `DEPENDS=`: other recipes to build first
+- `PATCH_OCAML=1`: with `SOURCE=opam:PACKAGE`, its `patches/` change the
+  OCaml libraries of the package as well: they are rebuilt for the target
+  with them, into the sysroot's findlib directory, as for
+  [ctypes](internals.md#ctypes-layouts) (`async_unix`)
 - `LINK=`: makes the recipe a C library, built for the `-lX` it provides
   (implied by `SOURCE=system:`)
 - `LIB_PATTERNS=`: globs of more library names the recipe is built for
@@ -91,8 +95,8 @@ several, stops the build, and one already applied is skipped.
 
 The patches of a recipe with `SOURCE=opam:PACKAGE` are also applied when
 the OCaml libraries of the package are rebuilt for the target (ctypes
-users, Jane Street's configuration): core_unix's C stubs, which such a
-build compiles too.
+users, Jane Street's configuration, `PATCH_OCAML=1`): core_unix's C
+stubs, which such a build compiles too.
 
 ## The clang recipe
 

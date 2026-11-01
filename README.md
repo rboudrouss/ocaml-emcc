@@ -244,7 +244,9 @@ configuration, or were compiled against one whose interface differs
 (core, and with it the async stack), for the target, as for ctypes (see
 [internals](docs/internals.md#jane-streets-configuration)): the first
 build of an async program takes some tens of minutes. core and async then
-run on wasm32, interpreted or compiled, in node and with `--wasi`.
+run on wasm32, interpreted or compiled, in node and with `--wasi`. Without
+threads, the jobs of Async's thread pool (`In_thread.run`: file I/O...)
+run synchronously.
 
 ## Compiled mode
 
@@ -295,7 +297,8 @@ Besides 31-bit integers on wasm32:
 
 - **No threads.** `Thread.create` and `Domain.spawn` fail, while `Mutex`
   and `Condition` work. lwt runs its blocking jobs (`Lwt_unix` file
-  operations...) synchronously, and `Lwt_preemptive` fails.
+  operations...) synchronously, and `Lwt_preemptive` fails. So does Async
+  with those of its thread pool (`In_thread.run`).
 - **ctypes structs**: ctypes and the packages using it are rebuilt for the
   target, so that their structs have its layouts (see
   [ctypes layouts](docs/internals.md#ctypes-layouts)). Those that cannot be
@@ -405,7 +408,7 @@ variant), `mlcuddidl` (its bundled CUDD, and the stubs camlidl generates),
 called), and packages whose sources need a change for wasm, described in
 their `share/recipes/<name>/` directory: `mirage-crypto` (and `-ec`,
 `-rng`), `lwt`, `cryptokit`, `secp256k1-internal`, `lmdb`, `mccs`,
-`core_unix`, `eio_posix`, `num`, `rowex`, `mirage-block-unix`, `miou`, `osdp`, `bls12-381-unix`, `lacaml`, `setcore`, `cpu`, `memcpy`, `scrypt`, `poll`, `bytesrw`, `class_group_vdf`, `ocaml-lua` and `raylib` (see [raylib in a
+`core_unix`, `async_unix`, `eio_posix`, `num`, `rowex`, `mirage-block-unix`, `miou`, `osdp`, `bls12-381-unix`, `lacaml`, `setcore`, `cpu`, `memcpy`, `scrypt`, `poll`, `bytesrw`, `class_group_vdf`, `ocaml-lua` and `raylib` (see [raylib in a
 browser](#raylib-in-a-browser)).
 
 ### Project recipes
