@@ -52,11 +52,17 @@ let reads_jst_config pkg work =
         && List.exists (fun f -> has f "%%import") (Files.find ~skip work ml))
 
 (* The patches of the recipe of [pkg] that it is built with (core_unix's C
-   stubs), if it has one for its opam sources *)
+   stubs), if it has one for its opam sources: patches/*.patch, as
+   `apply_patches DIR` applies them (not the subdirectories, which its
+   build chooses by version: raylib's until-2.3) *)
 let patches pkg =
   match Recipe.find pkg with
   | Some d when Str_util.find (Files.contents (Recipe.script d)) ("SOURCE=opam:" ^ pkg) <> None ->
-      Files.find (Filename.concat d "patches") (fun f -> Filename.check_suffix f ".patch")
+      let dir = Filename.concat d "patches" in
+      (try Array.to_list (Sys.readdir dir) with Sys_error _ -> [])
+      |> List.filter (fun f -> Filename.check_suffix f ".patch")
+      |> List.sort compare
+      |> List.map (Filename.concat dir)
   | _ -> []
 
 (* Whether the recipe of [pkg] patches its OCaml libraries (PATCH_OCAML=1):
