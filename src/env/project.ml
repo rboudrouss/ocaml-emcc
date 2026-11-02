@@ -9,6 +9,7 @@
      js-files: js/prims.js           primitives implemented in JavaScript
      cflags: -DFOO                   extra C flags (stubs and recipes)
      threads: yes                    link with --threads
+     wasix: yes                      --wasi links with --wasix (sockets)
 
    Without a configuration file, `emcc-recipes/` next to the nearest
    dune-project is still picked up as a recipe directory. *)
@@ -22,9 +23,10 @@ type t = {
   js_files : string list;  (** absolute paths *)
   cflags : string list;
   threads : bool;
+  wasix : bool;
 }
 
-let empty = { dir = None; target = None; recipes = []; requires = []; link_flags = []; js_files = []; cflags = []; threads = false }
+let empty = { dir = None; target = None; recipes = []; requires = []; link_flags = []; js_files = []; cflags = []; threads = false; wasix = false }
 
 let rec find_up dir names =
   match List.find_opt (fun n -> Sys.file_exists (Filename.concat dir n)) names with
@@ -60,6 +62,7 @@ let load () =
       let kv = parse_file (Filename.concat dir name) in
       let get k = List.filter_map (fun (k', v) -> if k = k' then Some v else None) kv in
       let words k = Compat.concat_map Str_util.words (get k) in
+      let yes k = List.mem (match get k with [] -> "" | l -> List.nth l (List.length l - 1)) [ "yes"; "true" ] in
       let recipes = List.map (absolute dir) (words "recipes") in
       {
         dir = Some dir;
@@ -69,7 +72,8 @@ let load () =
         link_flags = words "link-flags";
         js_files = List.map (absolute dir) (words "js-files");
         cflags = words "cflags";
-        threads = List.mem (match get "threads" with [] -> "" | l -> List.nth l (List.length l - 1)) [ "yes"; "true" ];
+        threads = yes "threads";
+        wasix = yes "wasix";
       }
   | None -> (
       match find_up cwd [ "dune-project" ] with

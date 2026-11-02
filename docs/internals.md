@@ -105,6 +105,17 @@ one, which WASI hosts do not implement: binaryen translates the module to
 the standard one (exnref) as emcc finishes it
 (`-sBINARYEN_EXTRA_PASSES=--translate-to-exnref,--emit-exnref`).
 
+Sockets: `wasi.c`'s socket calls only use preview 1's (`sock_accept`,
+`sock_recv`, `sock_send`, `sock_shutdown`, on the sockets the host
+preopens). They are weak: `--wasix` adds `share/runtime/wasix.c`, which
+defines them with WASIX's imports (`wasix_32v1.sock_open`, `sock_bind`,
+`sock_connect`, `resolve`...), converting addresses and options as
+wasix-libc does. wasmer reads the ports of addresses in host order but
+writes them in network order (7.5, still so upstream): `wasix.c` binds a
+socket and reads its port back once to know. It also defines musl's
+`__lookup_name`, which emscripten's libc replaces with its JavaScript's
+(`gethostbyname`), and WASIX's `fd_dup` gives `dup` a real duplicate.
+
 When the program's own C (its stubs, `-l` archives, `c_library_flags`)
 defines one of the functions of `wasi.c`, `compat.c` or `dlsym.c`
 (`__syscall_getcwd` or `getaddrinfo` for instance), `link` leaves

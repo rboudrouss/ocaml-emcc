@@ -1,0 +1,1 @@
+(executable (name ls) (modes byte exe) (libraries lwt lwt.unix))

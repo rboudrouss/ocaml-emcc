@@ -25,6 +25,7 @@
 #include <string.h>
 #include <time.h>
 #include <sys/resource.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/uio.h>
 #include <unistd.h>
@@ -53,14 +54,19 @@ static void strip_name(char *s)
   while (n > 0 && s[n - 1] == '/') s[--n] = 0;
 }
 
-/* The preopened directories, fd 3 and up (the host numbers them so). */
+/* The preopened directories, fd 3 and up (the host numbers them so,
+   with the sockets it preopens: wasmtime's -S tcplisten). */
 static void load_preopens(void)
 {
   if (npreopens >= 0) return;
   npreopens = 0;
   for (int fd = 3; npreopens < MAX_PREOPENS; fd++) {
     __wasi_prestat_t ps;
-    if (__wasi_fd_prestat_get(fd, &ps) != 0) break;
+    __wasi_fdstat_t st;
+    if (__wasi_fd_prestat_get(fd, &ps) != 0) {
+      if (__wasi_fd_fdstat_get(fd, &st) == 0) continue;
+      break;
+    }
     if (ps.pr_type != __WASI_PREOPENTYPE_DIR) continue;
     char *name = malloc(ps.u.dir.pr_name_len + 1);
     if (!name) break;
@@ -391,12 +397,28 @@ int __syscall_openat(int dirfd, const char *path, int flags, ...)
   return open_rel(rel_fd, rel, flags);
 }
 
+/* A real duplicate: WASIX's (wasix.c), else none */
+__attribute__((weak)) int ocaml_emcc_fd_dup(int fd)
+{
+  (void)fd;
+  return -ENOSYS;
+}
+
 /* WASI cannot duplicate a descriptor: a file opened here is opened again,
    at the same position.  The copy has a position of its own, unlike a real
    duplicate, which is enough for the usual dup + fdopen.  Descriptors not
    opened here (the standard streams) cannot be duplicated. */
 static int reopen(int fd)
 {
+  int d = ocaml_emcc_fd_dup(fd);
+  if (d != -ENOSYS) {
+    if (d >= 0 && d < MAX_FD && fd >= 0 && fd < MAX_FD && opened[fd].rel) {
+      free(opened[d].rel);
+      opened[d] = opened[fd];
+      opened[d].rel = strdup(opened[fd].rel);
+    }
+    return d;
+  }
   if (fd < 0 || fd >= MAX_FD || !opened[fd].rel) return -ENOSYS;
   __wasi_fdstat_t s;
   if (__wasi_fd_fdstat_get(fd, &s) != 0) return -EBADF;
@@ -431,7 +453,8 @@ int __syscall_dup3(int oldfd, int newfd, int flags)
   return newfd;
 }
 
-static void fill_stat(struct stat *st, const __wasi_filestat_t *f)
+/* (fd: the descriptor stat'ed, -1 for a path) */
+static void fill_stat(struct stat *st, const __wasi_filestat_t *f, int fd)
 {
   memset(st, 0, sizeof *st);
   st->st_dev = f->dev;
@@ -445,11 +468,10 @@ static void fill_stat(struct stat *st, const __wasi_filestat_t *f)
   case __WASI_FILETYPE_SYMBOLIC_LINK: st->st_mode = S_IFLNK | 0777; break;
   case __WASI_FILETYPE_CHARACTER_DEVICE: st->st_mode = S_IFCHR | 0666; break;
   case __WASI_FILETYPE_BLOCK_DEVICE: st->st_mode = S_IFBLK | 0666; break;
-  /* node reports the standard streams piped so; they cannot be used as
-     sockets here (no socket calls), a library treating them as such
-     fails (Async's writers) */
+  /* (sockets, but node reports the standard streams piped so: pipes for
+     the libraries treating them as sockets, which fails, Async's writers) */
   case __WASI_FILETYPE_SOCKET_STREAM:
-  case __WASI_FILETYPE_SOCKET_DGRAM: st->st_mode = S_IFIFO | 0666; break;
+  case __WASI_FILETYPE_SOCKET_DGRAM: st->st_mode = (fd >= 0 && fd <= 2 ? S_IFIFO : S_IFSOCK) | 0666; break;
   default: st->st_mode = S_IFREG | 0644; break;
   }
   st->st_atim.tv_sec = f->atim / 1000000000;
@@ -472,7 +494,10 @@ int __syscall_fstat64(int fd, struct stat *st)
   __wasi_filestat_t f;
   __wasi_errno_t e = __wasi_fd_filestat_get(fd, &f);
   if (e) return -e;
-  fill_stat(st, &f);
+  /* (wasmer's sockets: the type is fdstat's) */
+  __wasi_fdstat_t s;
+  if (f.filetype == __WASI_FILETYPE_UNKNOWN && __wasi_fd_fdstat_get(fd, &s) == 0) f.filetype = s.fs_filetype;
+  fill_stat(st, &f, fd);
   return 0;
 }
 
@@ -484,7 +509,7 @@ int __syscall_newfstatat(int dirfd, const char *path, struct stat *st, int flags
   __wasi_lookupflags_t look = (flags & AT_SYMLINK_NOFOLLOW) ? 0 : __WASI_LOOKUPFLAGS_SYMLINK_FOLLOW;
   __wasi_errno_t e = __wasi_path_filestat_get(rel_fd, look, rel, strlen(rel), &f);
   if (e) return -e;
-  fill_stat(st, &f);
+  fill_stat(st, &f, -1);
   return 0;
 }
 
@@ -824,7 +849,8 @@ static int poll_once(struct pollfd *fds, nfds_t nfds, int timeout)
     subs[n].userdata = (__wasi_userdata_t)-1;
     subs[n].type = __WASI_EVENTTYPE_CLOCK;
     subs[n].u.clock.id = __WASI_CLOCKID_MONOTONIC;
-    subs[n++].u.clock.timeout = (__wasi_timestamp_t)timeout * 1000000;
+    /* (1 µs for 0: wasmer 7.5 waits for a socket regardless of a clock of 0) */
+    subs[n++].u.clock.timeout = timeout ? (__wasi_timestamp_t)timeout * 1000000 : 1000;
   }
   if (n > 0) {
     __wasi_size_t nev;
@@ -965,33 +991,167 @@ int __syscall_mknodat(int dirfd, const char *path, mode_t mode, dev_t dev)
   return -ENOSYS;
 }
 
-/* Sockets: preview1 can only use sockets the host preopens, which these
-   calls cannot create nor name. */
-#define NO_SOCKET(name, ...) int __syscall_##name(__VA_ARGS__) { return -ENOSYS; }
+/* Sockets: preview1 can only use the sockets the host preopens (listening
+   ones: wasmtime -S tcplisten=ADDR, descriptors 3...), accept connections
+   on them and read, write, shut them down.  Nothing creates nor names a
+   socket: no addresses (accept's peer is an empty one), options ignored.
+   Weak: wasix.c (--wasix) has the real ones. */
+
+int32_t ocaml_emcc_sock_accept(int32_t fd, int32_t flags, int32_t *nfd)
+    __attribute__((import_module("wasi_snapshot_preview1"), import_name("sock_accept")));
+
+static int is_socket(int fd)
+{
+  __wasi_fdstat_t s;
+  __wasi_errno_t e = __wasi_fd_fdstat_get(fd, &s);
+  if (e) return -e;
+  return s.fs_filetype == __WASI_FILETYPE_SOCKET_STREAM || s.fs_filetype == __WASI_FILETYPE_SOCKET_DGRAM
+         ? s.fs_filetype : -ENOTSOCK;
+}
+
+/* (the host makes them non-blocking, Unix's sockets block at first) */
+__attribute__((constructor)) static void preopened_sockets_block(void)
+{
+  __wasi_fdstat_t st;
+  for (int fd = 3; __wasi_fd_fdstat_get(fd, &st) != __WASI_ERRNO_BADF; fd++)
+    if ((st.fs_filetype == __WASI_FILETYPE_SOCKET_STREAM || st.fs_filetype == __WASI_FILETYPE_SOCKET_DGRAM)
+        && st.fs_flags & __WASI_FDFLAGS_NONBLOCK)
+      (void)__wasi_fd_fdstat_set_flags(fd, st.fs_flags & ~__WASI_FDFLAGS_NONBLOCK);
+}
+
+#define WEAK __attribute__((weak))
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-parameter"
+
+#define NO_SOCKET(name, ...) WEAK int __syscall_##name(__VA_ARGS__) { return -ENOSYS; }
 NO_SOCKET(socket, int a, int b, int c, int d, int e, int f)
+NO_SOCKET(socketpair, int a, int b, int c, int fd[2], int e, int f)
 NO_SOCKET(bind, int s, const struct sockaddr *a, socklen_t l, int x, int y, int z)
 NO_SOCKET(connect, int s, const struct sockaddr *a, socklen_t l, int x, int y, int z)
-NO_SOCKET(listen, int s, int b, int w, int x, int y, int z)
-NO_SOCKET(accept4, int s, struct sockaddr *a, socklen_t *l, int f, int y, int z)
-NO_SOCKET(getsockopt, int s, int lv, int o, void *v, socklen_t *l, int z)
-NO_SOCKET(setsockopt, int s, int lv, int o, const void *v, socklen_t l, int z)
-NO_SOCKET(getsockname, int s, struct sockaddr *a, socklen_t *l, int x, int y, int z)
-NO_SOCKET(getpeername, int s, struct sockaddr *a, socklen_t *l, int x, int y, int z)
-NO_SOCKET(sendto, int s, const void *b, size_t n, int f, const struct sockaddr *a, socklen_t l)
-NO_SOCKET(recvfrom, int s, void *b, size_t n, int f, struct sockaddr *a, socklen_t *l)
-NO_SOCKET(shutdown, int s, int h, int w, int x, int y, int z)
-NO_SOCKET(sendmsg, int s, const struct msghdr *m, int f, int x, int y, int z)
-NO_SOCKET(recvmsg, int s, struct msghdr *m, int f, int x, int y, int z)
 
-/* name resolution (JavaScript in emscripten) */
-int getaddrinfo(const char *n, const char *s, const struct addrinfo *h, struct addrinfo **r) { return EAI_FAIL; }
-int getnameinfo(const struct sockaddr *a, socklen_t al, char *h, socklen_t hl, char *s, socklen_t sl, int f) { return EAI_FAIL; }
-struct protoent *getprotobyname(const char *n) { return NULL; }
-struct protoent *getprotobynumber(int p) { return NULL; }
+WEAK int __syscall_getsockname(int s, struct sockaddr *a, socklen_t *l, int x, int y, int z)
+{
+  int t = is_socket(s);
+  return t < 0 ? t : -EOPNOTSUPP;
+}
+
+WEAK int __syscall_getpeername(int s, struct sockaddr *a, socklen_t *l, int x, int y, int z)
+{
+  int t = is_socket(s);
+  return t < 0 ? t : -EOPNOTSUPP;
+}
+
+/* (a preopened socket listens already) */
+WEAK int __syscall_listen(int s, int b, int w, int x, int y, int z)
+{
+  int t = is_socket(s);
+  return t < 0 ? t : 0;
+}
+
+WEAK int __syscall_accept4(int s, struct sockaddr *a, socklen_t *l, int flags, int y, int z)
+{
+  int32_t fd;
+  int e = ocaml_emcc_sock_accept(s, flags & SOCK_NONBLOCK ? __WASI_FDFLAGS_NONBLOCK : 0, &fd);
+  if (e) return -e;
+  if (a && l) *l = 0;
+  return fd;
+}
+
+WEAK int __syscall_getsockopt(int s, int lv, int o, void *v, socklen_t *l, int z)
+{
+  int t = is_socket(s), x;
+  if (t < 0) return t;
+  if (lv != SOL_SOCKET) return -ENOPROTOOPT;
+  switch (o) {
+  case SO_TYPE: x = t == __WASI_FILETYPE_SOCKET_STREAM ? SOCK_STREAM : SOCK_DGRAM; break;
+  case SO_ERROR: x = 0; break;
+  default: return -ENOPROTOOPT;
+  }
+  memcpy(v, &x, *l < sizeof x ? *l : sizeof x);
+  *l = sizeof x;
+  return 0;
+}
+
+WEAK int __syscall_setsockopt(int s, int lv, int o, const void *v, socklen_t l, int z)
+{
+  int t = is_socket(s);
+  return t < 0 ? t : 0;
+}
+
+static int sock_recv_iov(int s, struct iovec *iov, int n, int flags)
+{
+  __wasi_size_t k;
+  __wasi_roflags_t ro;
+  __wasi_riflags_t ri = (flags & MSG_PEEK ? __WASI_RIFLAGS_RECV_PEEK : 0) | (flags & MSG_WAITALL ? __WASI_RIFLAGS_RECV_WAITALL : 0);
+  __wasi_errno_t e = __wasi_sock_recv(s, (const __wasi_iovec_t *)iov, n, ri, &k, &ro);
+  return e ? -e : (int)k;
+}
+
+static int sock_send_iov(int s, const struct iovec *iov, int n)
+{
+  __wasi_size_t k;
+  __wasi_errno_t e = __wasi_sock_send(s, (const __wasi_ciovec_t *)iov, n, 0, &k);
+  return e ? -e : (int)k;
+}
+
+WEAK int __syscall_recvfrom(int s, void *b, size_t n, int f, struct sockaddr *a, socklen_t *l)
+{
+  struct iovec iov = { b, n };
+  int r = sock_recv_iov(s, &iov, 1, f);
+  if (r >= 0 && a && l) *l = 0;
+  return r;
+}
+
+WEAK int __syscall_sendto(int s, const void *b, size_t n, int f, const struct sockaddr *a, socklen_t l)
+{
+  struct iovec iov = { (void *)b, n };
+  return sock_send_iov(s, &iov, 1);
+}
+
+WEAK int __syscall_recvmsg(int s, struct msghdr *m, int f, int x, int y, int z)
+{
+  int r = sock_recv_iov(s, m->msg_iov, m->msg_iovlen, f);
+  if (r >= 0) m->msg_namelen = m->msg_controllen = m->msg_flags = 0;
+  return r;
+}
+
+WEAK int __syscall_sendmsg(int s, const struct msghdr *m, int f, int x, int y, int z)
+{
+  return m->msg_controllen ? -EOPNOTSUPP : sock_send_iov(s, m->msg_iov, m->msg_iovlen);
+}
+
+WEAK int __syscall_shutdown(int s, int how, int w, int x, int y, int z)
+{
+  return -__wasi_sock_shutdown(s, how == SHUT_RD ? __WASI_SDFLAGS_RD : how == SHUT_WR ? __WASI_SDFLAGS_WR
+                                                                      : __WASI_SDFLAGS_RD | __WASI_SDFLAGS_WR);
+}
+
+/* name resolution (JavaScript in emscripten): none */
+WEAK int getaddrinfo(const char *n, const char *s, const struct addrinfo *h, struct addrinfo **r) { return EAI_FAIL; }
+WEAK int getnameinfo(const struct sockaddr *a, socklen_t al, char *h, socklen_t hl, char *s, socklen_t sl, int f) { return EAI_FAIL; }
 uint32_t _emscripten_lookup_name(const char *name) { return 0; }
 #pragma clang diagnostic pop
+
+/* the protocols (JavaScript in emscripten) */
+static struct protoent *protocol(const char *name, int number)
+{
+  static const struct { const char *name; int number; } known[] = {
+    { "ip", 0 }, { "icmp", 1 }, { "tcp", 6 }, { "udp", 17 }, { "ipv6", 41 }, { "icmpv6", 58 },
+  };
+  static _Thread_local struct protoent p;
+  static _Thread_local char *aliases[2];
+  for (size_t i = 0; i < sizeof known / sizeof known[0]; i++)
+    if (name ? !strcmp(name, known[i].name) : number == known[i].number) {
+      p.p_name = (char *)known[i].name;
+      aliases[0] = p.p_name;
+      p.p_aliases = aliases;
+      p.p_proto = known[i].number;
+      return &p;
+    }
+  return NULL;
+}
+struct protoent *getprotobyname(const char *name) { return protocol(name, -1); }
+struct protoent *getprotobynumber(int number) { return protocol(NULL, number); }
 
 /* system(): no shell (system(NULL) tells so) */
 int _emscripten_system(const char *command)

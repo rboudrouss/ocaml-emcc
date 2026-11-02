@@ -56,10 +56,14 @@ targets.
 | `domains`   | `Domain.spawn` in parallel (OCaml 5.3+): Atomic, a mutex shared by domains, collections while they allocate, `Domain.DLS`, a thread in a domain |
 | `threadsweb` | `threads` in headless Chromium, on a cross-origin isolated page |
 | `lwtthreads` | lwt with `--threads`: jobs in its pool of threads (several at once), `Lwt_preemptive.detach` while timers run |
+| `sockets`   | WASIX's sockets (`wasix: yes`, `--wasi` only): a TCP server and its client in one program, options, `select`, channels, UDP, `getaddrinfo`, `gethostbyname` |
+| `lwtsockets` | lwt's sockets with WASIX: a server and three clients at once, a read timing out, a refused connection |
+| `threadsockets` | WASIX's sockets with `--threads`: a server thread accepting, a thread per connection, client threads |
 
 Under `--wasi`, `threads` and `domains` need a wasmtime with wasi-threads
 (46 or older, removed in 47): `$WASMTIME_THREADS`; they are skipped
-otherwise.
+otherwise. `sockets`, `lwtsockets` and `threadsockets` run in wasmer
+(`$WASMER`, or in `PATH`), skipped without it.
 
 `jsdom`, `dynweb` and `threadsweb` need playwright and its Chromium (`npm i playwright`,
 `npx playwright install chromium-headless-shell`), found through
@@ -81,12 +85,13 @@ them. The zarith test also ran unmodified in Chrome, on both targets.
 ## WASI
 
 `tests/run.sh --wasi` builds the tests marked `wasi` in `run.sh` (from
-`stubs` to `camlzip`, `cstanza`, `lwt`, `binio` and the threads tests) with
-`--wasi`, and runs them with wasmtime (`$WASMTIME`, or the one in `PATH`),
-else with node's WASI. They passed with wasmtime 50 on every OCaml version
-for 0.3.0 (`ocaml5` from 5.0, `syslibs` before 5.0), and with node 24's WASI
-on OCaml 4.14. `ctypes` cannot pass, as libffi's emscripten port makes its
-calls in JavaScript, and the other tests from `clibs` on were not tried.
+`stubs` to `camlzip`, `cstanza`, `lwt`, `binio`, the threads tests and the
+socket tests) with `--wasi`, and runs them with wasmtime (`$WASMTIME`, or
+the one in `PATH`), else with node's WASI. They passed with wasmtime 50 on
+every OCaml version for 0.3.0 (`ocaml5` from 5.0, `syslibs` before 5.0),
+and with node 24's WASI on OCaml 4.14. `ctypes` cannot pass, as libffi's
+emscripten port makes its calls in JavaScript, and the other tests from
+`clibs` on were not tried.
 
 ## Versions of the dependencies
 

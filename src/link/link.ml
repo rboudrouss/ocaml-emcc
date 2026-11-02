@@ -32,6 +32,7 @@ type opts = {
   auto_deps : bool;
   check : bool;
   wasi : bool;  (** OUT.wasm for a WASI host (share/runtime/wasi.c) *)
+  wasix : bool;  (** wasi, with WASIX's sockets (wasmer, share/runtime/wasix.c) *)
   compiled : bool;  (** compiled to C by c_of_ocaml rather than interpreted *)
   missing_prims : bool;  (** primitives no library defines raise Failure (else: link error) *)
   js_files : string list;  (** JavaScript files implementing primitives *)
@@ -695,13 +696,15 @@ let runtime_object ~emcc ~flags ~lib_syms ~work ?(defs = []) name =
 
 (* The host of a standalone module provides its imports: the WASI ones,
    and with emscripten's glue, emscripten's JavaScript functions (env). *)
-let report_imports ~wasi ~threads output =
+let report_imports ~wasi ~wasix ~threads output =
   match Wasm.imports output with
   | exception Failure e -> Env.log "note: could not read the imports of %s (%s)" output e
   | imports -> (
       (* (threads: the shared memory, wasi-threads) *)
       let threads_import = function "env", "memory" | "wasi", "thread-spawn" -> threads | _ -> false in
-      let others = List.filter (fun (m, f) -> m <> "wasi_snapshot_preview1" && not (threads_import (m, f))) imports in
+      let others =
+        List.filter (fun (m, f) -> m <> "wasi_snapshot_preview1" && not (threads_import (m, f) || (wasix && m = "wasix_32v1"))) imports
+      in
       let names l =
         let shown = Compat.filteri (fun i _ -> i < 12) l in
         String.concat " " (List.map (fun (m, f) -> m ^ "." ^ f) shown) ^ if List.length l > 12 then " ..." else ""
@@ -932,7 +935,8 @@ let run o =
     if not o.wasi then []
     else
       runtime_object "wasi"
-      :: (if o.threads then [ runtime_object "wasi_threads" ~defs:[ "-DOCAML_EMCC_THREAD_STACK_SIZE=" ^ string_of_int thread_stack_size ] ]
+      :: (if o.wasix then [ runtime_object "wasix" ] else [])
+      @ (if o.threads then [ runtime_object "wasi_threads" ~defs:[ "-DOCAML_EMCC_THREAD_STACK_SIZE=" ^ string_of_int thread_stack_size ] ]
           else [])
   in
   (* the main thread frees the workers of exited threads while blocked *)
@@ -1166,7 +1170,7 @@ let run o =
   if code <> 0 then Env.fail "emcc failed (exit %d)" code;
   if foreign <> None then keep_raw_exports o.output;
   if o.dynlink && not o.threads then tls_exports_for_plugins o.output;
-  if standalone then report_imports ~wasi:o.wasi ~threads:o.threads o.output
+  if standalone then report_imports ~wasi:o.wasi ~wasix:o.wasix ~threads:o.threads o.output
 
 (* ---------------------------------------------------------------- plugins *)
 

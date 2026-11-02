@@ -96,23 +96,26 @@ jobs:
           opam exec -- sh -c 'cd ../C_of_ocaml && dune build --profile release --root . compiler/bin-c_of_ocaml/c_of_ocaml.exe'
           echo "OCAML_EMCC_C_OF_OCAML=$(realpath ../C_of_ocaml)/_build/default/compiler/bin-c_of_ocaml/c_of_ocaml.exe" >> "$GITHUB_ENV"
       - run: opam exec -- dune build
+      # under WASI, wasi-threads needs wasmtime <= 46, sockets wasmer
+      - name: Install wasmtime 46 (wasi-threads) and wasmer (WASIX)
+        if: matrix.target == 'wasi'
+        run: |
+          mkdir -p ../wasmtime ../wasmer && cd ../wasmtime
+          curl -sSLf https://github.com/bytecodealliance/wasmtime/releases/download/v46.0.0/wasmtime-v46.0.0-x86_64-linux.tar.xz | tar xJ
+          echo "WASMTIME_THREADS=$(pwd)/wasmtime-v46.0.0-x86_64-linux/wasmtime" >> "$GITHUB_ENV"
+          cd ../wasmer
+          curl -sSLf https://github.com/wasmerio/wasmer/releases/download/v7.5.0/wasmer-linux-amd64.tar.gz | tar xz
+          echo "WASMER=$(pwd)/bin/wasmer" >> "$GITHUB_ENV"
       - name: tests/run.sh --compiled (${{ matrix.target }})
         run: |
           case ${{ matrix.target }} in wasi) args=--wasi ;; *) args="--target ${{ matrix.target }}" ;; esac
           args="$args --compiled"
           opam exec -- bash -c "SWITCH=\$(opam var prefix) tests/run.sh $args"
-      # threads: interpreted only for now; under WASI, wasi-threads needs
-      # wasmtime <= 46
-      - name: Install wasmtime 46 (wasi-threads)
-        if: matrix.target == 'wasi'
-        run: |
-          mkdir -p ../wasmtime && cd ../wasmtime
-          curl -sSLf https://github.com/bytecodealliance/wasmtime/releases/download/v46.0.0/wasmtime-v46.0.0-x86_64-linux.tar.xz | tar xJ
-          echo "WASMTIME_THREADS=$(pwd)/wasmtime-v46.0.0-x86_64-linux/wasmtime" >> "$GITHUB_ENV"
-      - name: tests/run.sh threads (${{ matrix.target }}, interpreted)
+      # the runtime's threads and sockets, interpreted too
+      - name: tests/run.sh threads sockets (${{ matrix.target }}, interpreted)
         run: |
           case ${{ matrix.target }} in wasi) args=--wasi ;; *) args="--target ${{ matrix.target }}" ;; esac
-          opam exec -- bash -c "SWITCH=\$(opam var prefix) tests/run.sh $args threads domains threadsweb lwtthreads"
+          opam exec -- bash -c "SWITCH=\$(opam var prefix) tests/run.sh $args threads domains threadsweb lwtthreads sockets"
       - if: failure()
         uses: actions/upload-artifact@v7
         with:

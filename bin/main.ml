@@ -23,7 +23,10 @@ link options (build and link):
   --stack-size S  C stack size (default 8MB)
   --no-deps       do not build missing stub libraries automatically
   --wasi          OUT.wasm for a WASI host (wasmtime, node:wasi...): files,
-                  clocks, sleep... on WASI instead of emscripten's JS (wasm32)
+                  clocks, sleep... on WASI instead of emscripten's JS (wasm32);
+                  sockets: only those the host preopens (accept)
+  --wasix         --wasi with WASIX's sockets (socket, connect, bind,
+                  getaddrinfo...): a module for wasmer (wasmer run --net)
   --compiled      compile the bytecode to C with c_of_ocaml instead of
                   interpreting it (faster; OCaml >= 4.14)
   --dynlink       with --compiled: a program loading plugins (Emcc_dynlink
@@ -185,7 +188,8 @@ let cmd_dune args =
 let default_link_opts : Link.opts =
   {
     bc = ""; output = ""; lib_dirs = []; libs = []; emcc_flags = []; mode = Link.Embed;
-    opt = "-O2"; stack_size = "8MB"; auto_deps = true; check = true; wasi = false; compiled = false;
+    opt = "-O2"; stack_size = "8MB"; auto_deps = true; check = true; wasi = false; wasix = false;
+    compiled = false;
     missing_prims = true; js_files = []; dynlink = false; effects = None; threads = false;
   }
 
@@ -203,6 +207,7 @@ let parse_link_opts ?(extra = fun _ -> None) args =
     | "--stack-size" :: s :: rest -> go { o with stack_size = s } pos rest
     | "--no-deps" :: rest -> go { o with auto_deps = false } pos rest
     | "--wasi" :: rest -> go { o with wasi = true } pos rest
+    | "--wasix" :: rest -> go { o with wasi = true; wasix = true } pos rest
     | "--compiled" :: rest -> go { o with compiled = true } pos rest
     | "--dynlink" :: rest -> go { o with dynlink = true } pos rest
     | "--threads" :: rest -> go { o with threads = true } pos rest
@@ -227,7 +232,8 @@ let parse_link_opts ?(extra = fun _ -> None) args =
 let with_config_flags (o : Link.opts) =
   let env_flags = Option.fold ~none:[] ~some:Str_util.words (Env.getenv_opt "OCAML_EMCC_LDFLAGS") in
   let p = Project.get () in
-  { o with emcc_flags = p.link_flags @ env_flags @ o.emcc_flags; js_files = p.js_files @ o.js_files; threads = o.threads || p.threads }
+  { o with emcc_flags = p.link_flags @ env_flags @ o.emcc_flags; js_files = p.js_files @ o.js_files; threads = o.threads || p.threads;
+    wasix = o.wasix || (o.wasi && p.wasix) }
 
 let cmd_link args =
   let out = ref "" in

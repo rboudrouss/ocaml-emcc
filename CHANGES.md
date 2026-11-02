@@ -10,6 +10,14 @@
   stay single-threaded): existing runtimes and recipes are built again.
   The mpfr, libssl, libevent, pixman and fontconfig recipes are
   thread-safe, liblo has its server thread.
+- Sockets with WASI: `--wasix` (or `wasix: yes` in `ocaml-emcc.conf` for
+  `--wasi`) makes a module for wasmer (`wasmer run --net`) with WASIX's
+  sockets: `Unix.socket`, `connect`, `bind`, `listen`, `accept`, options,
+  addresses, UDP, `getaddrinfo` and `gethostbyname`, and lwt's sockets,
+  with or without threads. With `--wasi` alone, the program accepts
+  connections on the sockets its host preopens (wasmtime 46:
+  `-S preview2=n -S tcplisten=ADDR`), the descriptors after the standard
+  streams.
 - `--wasi`: lwt works (`Lwt_unix`, `Lwt_io`): `poll` with no timeout
   failed (emscripten's new probe, `ENOSYS`), as did `fdatasync`
   (imported from JavaScript) and, with node's WASI, waiting for a file.
@@ -61,9 +69,9 @@
   startup. `OCAMLRUNPARAM=s=...` still sets it; wasm64 is unchanged.
   Existing runtimes: `ocaml-emcc setup --force`.
 - `--wasi`: pipes are buffers in memory (Async's and lwt's wake-up pipes),
-  `fchdir` works, `sendmsg` and `recvmsg` fail with `ENOSYS` instead of
-  being imported from JavaScript, and a descriptor the host reports as a
-  socket is a FIFO (node's piped standard streams).
+  `fchdir` works, `sendmsg` and `recvmsg` are no longer imported from
+  JavaScript, and a standard stream the host reports as a socket is a FIFO
+  (node's piped standard streams).
 - Recipes: `PATCH_OCAML=1` rebuilds the OCaml libraries of the package of an
   `opam:` recipe for the target with its patches. These patches are also
   applied to the builds for the target of ctypes users and Jane Street's

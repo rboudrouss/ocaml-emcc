@@ -22,12 +22,17 @@ TARGET_COL=$TARGET; [ $WASI = yes ] && TARGET=wasm32 TARGET_COL=wasi
 # the WASI host: $WASMTIME, wasmtime in PATH, else node:wasi.  Programs
 # with threads (threads: yes in their ocaml-emcc.conf) need wasi-threads:
 # $WASMTIME_THREADS, a wasmtime <= 46 (47 removed it).  The program's
-# temporary files go to /tmp, which is preopened (not $TMPDIR).
+# temporary files go to /tmp, which is preopened (not $TMPDIR).  Programs
+# with sockets (wasix: yes) run in $WASMER (wasmer in PATH), with network
+# (and the tail calls of --compiled).
 WASMTIME=${WASMTIME:-$(command -v wasmtime || true)}
 WASMTIME_THREADS=${WASMTIME_THREADS:-$WASMTIME}
+WASMER=${WASMER:-$(command -v wasmer || true)}
 wasi_run() {
   local -x TMPDIR=/tmp
-  if grep -qs '^threads: *yes' ocaml-emcc.conf; then
+  if grep -qs '^wasix: *yes' ocaml-emcc.conf; then
+    "$WASMER" run --net --enable-tail-call "$1" -- "${@:2}"
+  elif grep -qs '^threads: *yes' ocaml-emcc.conf; then
     "$WASMTIME_THREADS" run -W exceptions=y,threads=y,shared-memory=y -S threads=y --dir . --dir /tmp -S inherit-env=y "$@" 2> >(grep -v '^WARNING: the `-Sthreads` flag' >&2)
   elif [ -n "$WASMTIME" ]; then "$WASMTIME" run -W exceptions=y --dir . --dir /tmp -S inherit-env=y "$@"
   else "$NODE" --no-warnings "$TESTS_DIR/wasi-run.mjs" "$@"; fi
@@ -88,6 +93,9 @@ threads   | th       |            | wasi-threads                | wasm32 wasm64 
 domains   | dm       |            | ocaml>=5.3 wasi-threads     | wasm32 wasm64 wasi |
 threadsweb | th      |            | playwright                  | wasm32 wasm64      |
 lwtthreads | lt      |            | lwt                         | wasm32 wasm64      |
+sockets   | sk       |            | wasmer                      | wasi               |
+lwtsockets | ls      |            | lwt wasmer                  | wasi               |
+threadsockets | ts   |            | wasmer                      | wasi               |
 '
 # wasi (tests/run.sh --wasi): OUT.wasm --wasi, the tests checked that way.
 # ctypes needs libffi's JavaScript functions, no WASI host has them.
@@ -99,6 +107,9 @@ lwtthreads | lt      |            | lwt                         | wasm32 wasm64 
 # threads and domains (--threads) under --wasi need a wasmtime with
 # wasi-threads ($WASMTIME_THREADS, <= 46); threadsweb runs threads in
 # Chromium, as jsdom.  Compiled: c_of_ocaml 69880cea or later.
+# sockets, lwtsockets and threadsockets (WASIX's, wasix: yes) are for
+# --wasi only: they run in wasmer ($WASMER), a TCP server and its clients,
+# UDP, names, with Lwt, with threads.
 # jsdom runs in headless Chromium (its check.mjs): it needs playwright,
 # PLAYWRIGHT_DIR (the directory of its node_modules) and
 # PLAYWRIGHT_BROWSERS_PATH.
@@ -107,6 +118,7 @@ has_pkg() {
   case $1 in
     compiled) [ -n "$COMPILED" ] ;;
     interpreted) [ -z "$COMPILED" ] ;;
+    wasmer) [ -n "$WASMER" ] ;;
     wasi-threads) [ $WASI = no ] || { [ -n "$WASMTIME_THREADS" ] && [ "$("$WASMTIME_THREADS" --version | sed 's/^wasmtime \([0-9]*\).*/\1/')" -le 46 ]; } ;;
     playwright) [ -n "${PLAYWRIGHT_DIR:-}" ] && [ -d "$PLAYWRIGHT_DIR/node_modules/playwright" ] ;;
     ocaml\>=*) [ "$(printf '%s\n' "${1#ocaml>=}" "$(ocamlc -vnum)" | sort -V | head -1)" = "${1#ocaml>=}" ] ;;
