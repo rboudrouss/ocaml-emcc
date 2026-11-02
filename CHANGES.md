@@ -18,6 +18,10 @@
   connections on the sockets its host preopens (wasmtime 46:
   `-S preview2=n -S tcplisten=ADDR`), the descriptors after the standard
   streams.
+- The local time zone has its file, `/etc/localtime`, which core's
+  `Timezone.local` reads: under node the host's (and that of `$TZ`), in
+  browsers one made from the browser's time zone (its offsets from 1970 to
+  2037). It was missing, outside `--node-fs`.
 - `--wasi`: lwt works (`Lwt_unix`, `Lwt_io`): `poll` with no timeout
   failed (emscripten's new probe, `ENOSYS`), as did `fdatasync`
   (imported from JavaScript) and, with node's WASI, waiting for a file.

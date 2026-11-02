@@ -1001,9 +1001,14 @@ let run o =
     ]
   in
   let defaults = List.filter (( <> ) "") defaults in
-  (* the standard streams of node, as bytes (not for a standalone .wasm) *)
+  (* the standard streams of node, as bytes (not for a standalone .wasm),
+     and /etc/localtime (not with node's files) *)
   let defaults =
     if standalone then defaults else defaults @ [ "--pre-js"; Filename.concat (Env.share ()) "runtime/node_stdio.js" ]
+  in
+  let defaults =
+    if standalone || o.mode = Node_rawfs then defaults
+    else defaults @ [ "--pre-js"; Filename.concat (Env.share ()) "runtime/localtime.js" ]
   in
   (* compiled code runs on the wasm engine's stack: a large one under node.
      malloc and free are exported, as with the interpreter (whose file
