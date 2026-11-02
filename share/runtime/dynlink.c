@@ -24,6 +24,13 @@ extern void caml_fatal_uncaught_exception(value exn);
 
 #ifdef OCAML_EMCC_DYNLINK
 
+#ifdef OCAML_EMCC_DOUBLE_TRANSLATION
+/* Exported by a program compiled with effects (--effects
+   double-translation): `ocaml-emcc plugin --main` compiles its plugins the
+   same way, which camlc_plugin_init requires */
+EMSCRIPTEN_KEEPALIVE void ocaml_emcc_double_translation(void) {}
+#endif
+
 static void fail_dl(const char *what, const char *file)
 {
   char buf[1024];

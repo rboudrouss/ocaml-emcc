@@ -36,6 +36,7 @@ type opts = {
   missing_prims : bool;  (** primitives no library defines raise Failure (else: link error) *)
   js_files : string list;  (** JavaScript files implementing primitives *)
   dynlink : bool;  (** compiled: a main module loading plugins (Emcc_dynlink) *)
+  effects : string option;  (** compiled: c_of_ocaml's --effects *)
 }
 
 (* C prototype of a primitive as the interpreter calls it. *)
@@ -268,7 +269,7 @@ type compiled = {
 (* PROG.bc -> PROG.c (c_of_ocaml), compiled with the runtime support of the
    generated code (camlc.h, camlc_runtime.c, which defines main), to be
    linked with libcamlrun.a: its interpreter is not used. *)
-let compile_to_c ?(dynlink = false) ~emcc ~flags ~tail_calls ~work ~base ~bc bc_path =
+let compile_to_c ?(dynlink = false) ?effects ~emcc ~flags ~tail_calls ~work ~base ~bc bc_path =
   let cooc = c_of_ocaml () in
   let support = Filename.concat work "c_of_ocaml" in
   if not (Sys.file_exists support) then Unix.mkdir support 0o755;
@@ -283,7 +284,8 @@ let compile_to_c ?(dynlink = false) ~emcc ~flags ~tail_calls ~work ~base ~bc bc_
   (* --dynlink: every compilation unit kept whole and registered by name,
      for plugins *)
   let dynlink = if dynlink then [ "--dynlink" ] else [] in
-  Env.run_exn cooc (debug @ word_size @ dynlink @ [ bc_path; "--split"; c_dir ]);
+  let effects = match effects with Some e -> [ "--effects"; e ] | None -> [] in
+  Env.run_exn cooc (debug @ word_size @ dynlink @ effects @ [ bc_path; "--split"; c_dir ]);
   let parts =
     Sys.readdir c_dir |> Array.to_list
     |> List.filter (fun f -> Filename.check_suffix f ".c")
@@ -782,7 +784,8 @@ let run o =
          [ runtime_object ~emcc ~lib_syms ~work "dynlink"
              ~flags:
                (Env.manifest_flags "cflags" @ [ o.opt; "-I" ^ Env.sysroot_file "lib/ocaml" ]
-               @ if o.dynlink then [ "-DOCAML_EMCC_DYNLINK" ] else []) ])
+               @ (if o.dynlink then [ "-DOCAML_EMCC_DYNLINK" ] else [])
+               @ if o.effects = Some "double-translation" then [ "-DOCAML_EMCC_DOUBLE_TRANSLATION" ] else []) ])
   in
   if o.check then (
     let syms = defined_symbols (archives @ user_archives () @ flag_archives @ Lazy.force jsoo_objs @ Lazy.force dynlink_objs) in
@@ -822,7 +825,7 @@ let run o =
       let asyncify f = Str_util.starts_with ~prefix:"-sASYNCIFY" f && f <> "-sASYNCIFY=0" in
       let tail_calls = List.exists jspi all || not (List.exists asyncify all) in
       if not tail_calls then Env.log "asyncify: compiled without wasm tail calls";
-      Some (compile_to_c ~dynlink:o.dynlink ~emcc ~flags:(cflags @ [ o.opt ] @ inc) ~tail_calls ~work ~base ~bc o.bc))
+      Some (compile_to_c ~dynlink:o.dynlink ?effects:o.effects ~emcc ~flags:(cflags @ [ o.opt ] @ inc) ~tail_calls ~work ~base ~bc o.bc))
     else None
   in
   if compiled = None then
@@ -1052,13 +1055,25 @@ let run o =
    position-independent code.  With [main] (the program's OUT.js or
    OUT.wasm), the symbols the plugin imports are checked against those the
    program exports. *)
-let plugin ~input ~output ~main ~opt =
+let plugin ?effects ~input ~output ~main ~opt () =
   if not (Env.toolchain_ready ()) then
     Env.fail "no wasm runtime in %s, run `ocaml-emcc setup` first" (Env.sysroot ());
   check_compiled ();
   if not (Filename.check_suffix input ".cma" || Filename.check_suffix input ".cmo") then
     Env.fail "plugin: %s is not a .cma or .cmo file" input;
   if not (Sys.file_exists input) then Env.fail "plugin: %s: no such file" input;
+  (* the program's exports, and the effects of the program: a plugin is
+     compiled as the program was *)
+  let main_wasm = Option.map (fun m -> if Filename.check_suffix m ".js" then Filename.chop_suffix m ".js" ^ ".wasm" else m) main in
+  let main_exports = Option.map Wasm.exports main_wasm in
+  let effects =
+    match (effects, main_exports) with
+    | Some e, _ -> Some e
+    | None, Some l when List.mem "ocaml_emcc_double_translation" l ->
+        Env.log "the program is compiled with effects (double translation): so is the plugin";
+        Some "double-translation"
+    | None, _ -> None
+  in
   let emcc = Env.emcc () in
   let out_dir = Filename.dirname output in
   let base = Filename.remove_extension (Filename.basename output) in
@@ -1072,7 +1087,8 @@ let plugin ~input ~output ~main ~opt =
   Env.log "compiling %s to C (c_of_ocaml)" (Filename.basename input);
   let word_size = if !Env.target = "wasm64" then [ "--word-size"; "64" ] else [] in
   (* the locations of backtraces, when compiled with -g *)
-  Env.run_exn cooc (word_size @ [ "--debug-info"; input; "--split"; c_dir ]);
+  let effects = match effects with Some e -> [ "--effects"; e ] | None -> [] in
+  Env.run_exn cooc (word_size @ effects @ [ "--debug-info"; input; "--split"; c_dir ]);
   let parts =
     Sys.readdir c_dir |> Array.to_list
     |> List.filter (fun f -> Filename.check_suffix f ".c")
@@ -1094,12 +1110,11 @@ let plugin ~input ~output ~main ~opt =
   in
   Env.log "linking the plugin %s" output;
   Env.run_exn emcc (Env.manifest_flags "ldflags" @ [ opt; "-sSIDE_MODULE=1" ] @ objs @ [ "-o"; output ]);
-  match main with
-  | None -> ()
-  | Some m -> (
-      let wasm = if Filename.check_suffix m ".js" then Filename.chop_suffix m ".js" ^ ".wasm" else m in
+  match (main_wasm, main_exports) with
+  | None, _ | _, None -> ()
+  | Some wasm, Some exports -> (
       let exported = Hashtbl.create 4096 in
-      List.iter (fun s -> Hashtbl.replace exported s ()) (Wasm.exports wasm);
+      List.iter (fun s -> Hashtbl.replace exported s ()) exports;
       let missing =
         Wasm.imports output
         |> List.filter_map (fun (m, f) ->

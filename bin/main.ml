@@ -29,6 +29,10 @@ link options (build and link):
   --dynlink       with --compiled: a program loading plugins (Emcc_dynlink
                   of ocaml-emcc.dynlink); its bytecode must be linked with
                   -linkall
+  --effects MODE  with --compiled: effect handlers, c_of_ocaml's
+                  double-translation or disabled (default: double
+                  translation when the program performs effects; disabled
+                  with --dynlink)
   --no-missing-primitives
                   fail to link when a primitive is defined by no library
                   (default: a stub raising Failure when called, and a warning)
@@ -46,10 +50,10 @@ step by step (scripts, Makefiles, projects without dune):
   deps PROG.bc [-L DIR]...     build the missing stub libraries of PROG.bc
   doctor PROG.bc [-L DIR]...   stub libraries, primitives, 31-bit literals
   link PROG.bc -o OUT.js [LINK OPTIONS] [-- EMCC-ARGS...]
-  plugin LIB.cma|M.cmo -o OUT.wasm [--main PROG.js] [-O FLAG]
+  plugin LIB.cma|M.cmo -o OUT.wasm [--main PROG.js] [--effects MODE] [-O FLAG]
                                a plugin for a program linked with --dynlink;
                                --main checks that the program exports what
-                               it needs
+                               it needs, and gives its effects mode
   env [--cflags|--sysroot]     paths and configuration; --cflags prints the
                                flags to compile C stubs with emcc
 
@@ -172,7 +176,7 @@ let default_link_opts : Link.opts =
   {
     bc = ""; output = ""; lib_dirs = []; libs = []; emcc_flags = []; mode = Link.Embed;
     opt = "-O2"; stack_size = "8MB"; auto_deps = true; check = true; wasi = false; compiled = false;
-    missing_prims = true; js_files = []; dynlink = false;
+    missing_prims = true; js_files = []; dynlink = false; effects = None;
   }
 
 (* Options shared by `link` and `build`; [extra] handles command-specific
@@ -191,6 +195,7 @@ let parse_link_opts ?(extra = fun _ -> None) args =
     | "--wasi" :: rest -> go { o with wasi = true } pos rest
     | "--compiled" :: rest -> go { o with compiled = true } pos rest
     | "--dynlink" :: rest -> go { o with dynlink = true } pos rest
+    | "--effects" :: e :: rest -> go { o with effects = Some e } pos rest
     | "--no-missing-primitives" :: rest -> go { o with missing_prims = false } pos rest
     | "--emcc-flag" :: f :: rest -> go { o with emcc_flags = o.emcc_flags @ [ f ] } pos rest
     | "--js-file" :: f :: rest -> go { o with js_files = o.js_files @ [ f ] } pos rest
@@ -223,10 +228,12 @@ let cmd_link args =
   | _ -> die_usage ()
 
 let cmd_plugin args =
+  let effects = ref None in
   let rec go out main opt pos = function
     | "-o" :: f :: rest -> go (Some f) main opt pos rest
     | "--main" :: f :: rest -> go out (Some f) opt pos rest
     | "-O" :: f :: rest -> go out main f pos rest
+    | "--effects" :: e :: rest -> effects := Some e; go out main opt pos rest
     | x :: rest when not (Str_util.starts_with ~prefix:"-" x) -> go out main opt (x :: pos) rest
     | [] -> (out, main, opt, List.rev pos)
     | x :: _ -> Env.fail "unexpected argument %s" x
@@ -234,7 +241,7 @@ let cmd_plugin args =
   match go None None "-O2" [] args with
   | Some output, main, opt, [ input ] ->
       ensure_setup ();
-      Link.plugin ~input ~output ~main ~opt
+      Link.plugin ?effects:!effects ~input ~output ~main ~opt ()
   | _ -> die_usage ()
 
 (* ----------------------------------------------------------------- build *)
