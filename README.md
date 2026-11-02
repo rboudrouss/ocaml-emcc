@@ -214,7 +214,8 @@ defined (`wasmtime -W unknown-imports-trap=y` runs it until one is called).
 ### js_of_ocaml's library
 
 Programs using [js_of_ocaml](https://ocsigen.org/js_of_ocaml)'s library
-(`Js`, `Dom_html`, `Js.Unsafe`, its ppx's `o##m x`, `object%js`...) build
+(`Js`, `Dom_html`, `Js.Unsafe`, its ppx's `o##m x`, `object%js`...), and
+libraries built on it (js_of_ocaml-lwt, [Brr](https://erratique.ch/software/brr)), build
 as is, interpreted or compiled, on both targets: ocaml-emcc implements
 its primitives (`share/runtime/jsoo.c`, on top of the emscripten library
 `jsoo.js`) instead of linking their stubs, which only abort outside

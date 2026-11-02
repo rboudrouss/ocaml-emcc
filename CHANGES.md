@@ -1,7 +1,7 @@
 ## Unreleased
 
 - js_of_ocaml's JavaScript primitives: programs using the libraries
-  js_of_ocaml (`Js`, `Dom_html`, its ppx, `Js_of_ocaml_lwt`...) run in
+  js_of_ocaml (`Js`, `Dom_html`, its ppx, js_of_ocaml-lwt, Brr...) run in
   browsers and node, interpreted or compiled, on both targets, with the
   conventions of wasm_of_ocaml for JavaScript values. Callbacks keep
   running after the main program, JavaScript exceptions are
