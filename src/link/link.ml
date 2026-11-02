@@ -267,13 +267,13 @@ let threads_flags ~wasi =
        wasi_threads.c's.) *)
     [ "-Wl,--export-memory" ]
   else
-    (* Workers started before main: a thread created by a program that then
-       waits for it (join, a mutex) would never start in a browser, where a
-       new worker only loads once the main thread returns to its event loop.
-       Beyond the pool, threads still start, asynchronously (node starts
-       them at once).  8: OCaml's tick thread, and 7 others at the same
-       time (-sPTHREAD_POOL_SIZE=N sets it). *)
-    [ "-sDEFAULT_PTHREAD_STACK_SIZE=" ^ string_of_int thread_stack_size; "-sPTHREAD_POOL_SIZE=8";
+    (* In a browser, workers started before main: a thread created by a
+       program that then waits for it (join, a mutex) would never start,
+       a new worker only loading once the main thread returns to its event
+       loop.  8: OCaml's tick thread, and 7 others at the same time
+       (-sPTHREAD_POOL_SIZE=N sets it).  None under node, which starts a
+       worker at once: the pool would cost 200 ms and 140 MB at startup. *)
+    [ "-sDEFAULT_PTHREAD_STACK_SIZE=" ^ string_of_int thread_stack_size; "-sPTHREAD_POOL_SIZE=ENVIRONMENT_IS_NODE?0:8";
       "--js-library"; Filename.concat (Env.share ()) "runtime/threads.js" ]
 
 (* The primitives called by the generated C, with the arity of their call
@@ -754,6 +754,8 @@ let js_prims_c ~arity names =
 let run o =
   if not (Env.toolchain_ready ()) then
     Env.fail "no wasm runtime in %s, run `ocaml-emcc setup` first" (Env.sysroot ());
+  (* emcc's -pthread among the user's flags: the program's threads *)
+  let o = if List.mem "-pthread" o.emcc_flags then { o with threads = true } else o in
   let emcc = Env.emcc () in
   let bc = Bytecode.parse o.bc in
   check_magic ~bc_path:o.bc bc;
@@ -804,6 +806,8 @@ let run o =
   let flags_of_libs = Compat.concat_map Deps.link_flags (List.map fst libs @ [ "camlrun" ]) in
   let lib_dirs = Deps.search_dirs ~extra_dirs:o.lib_dirs ~bc_path:o.bc bc in
   let flags_of_libs = flags_of_libs @ cclib_flags ~auto_deps:o.auto_deps ~dirs:lib_dirs o.bc in
+  (* (the program's link decides whether it has threads, not a library) *)
+  let flags_of_libs = List.filter (( <> ) "-pthread") flags_of_libs in
   (* the archives of those flags: paths (c_library_flags) and -lX *)
   let flag_archives =
     List.filter_map
