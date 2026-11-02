@@ -1,0 +1,1 @@
+(executable (name sj) (modes byte exe js) (libraries js_of_ocaml))

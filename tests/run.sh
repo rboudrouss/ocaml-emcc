@@ -89,6 +89,7 @@ dynweb    | main     |            | compiled playwright         | wasm32 wasm64 
 jsoo      | js       |            | js_of_ocaml-ppx             | wasm32 wasm64      |
 jsprims   | jp       |            | js_of_ocaml                 | wasm32 wasm64      |
 jsdom     | page     |            | js_of_ocaml-ppx playwright  | wasm32 wasm64      |
+sysjs     | sj       |            | js_of_ocaml                 | wasm32 wasm64      |
 threads   | th       |            | wasi-threads                | wasm32 wasm64 wasi |
 domains   | dm       |            | ocaml>=5.3 wasi-threads     | wasm32 wasm64 wasi |
 threadsweb | th      |            | playwright                  | wasm32 wasm64      |

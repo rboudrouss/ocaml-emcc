@@ -211,6 +211,18 @@ program then only unwinds: the runtime stays alive for the event loop
 (under node, the process ends once it is empty). An `ExitStatus` leaving a
 callback ends the node process.
 
+`Sys_js`: a redirected channel gets the descriptor of a new device of
+emscripten's file system (`FS.registerDevice`, `/dev/ocaml-channel-N`),
+whose `write` gives the bytes to the function as a byte string and whose
+`read` asks it for more; a mounted path wraps `FS.lookupPath`, which asks
+the function for a missing file under it and writes it. The function runs
+inside a system call, which the runtime usually makes in a blocking section
+(`caml_write_fd`, `caml_sys_open`), where OCaml may not run (OCaml 5's
+domain lock, the master lock of threads): `jsoo.c` wraps the hooks of
+blocking sections to know, and leaves the section around the call. An
+exception cannot unwind the C of the system call: it is printed, and the
+call fails with `EIO`.
+
 For `--js-file`, `link` lists the names the files provide, generates for each
 primitive of the program that no library defines a C stub with the prototype
 of its call site, calling `ocaml_emcc_js_prim("NAME", n, args)`, and a

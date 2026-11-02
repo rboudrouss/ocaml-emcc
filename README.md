@@ -278,6 +278,10 @@ So code written for wasm_of_ocaml works unchanged:
 - `Js.export` sets a global of the page (`module.exports` under node).
 - `Js.Unsafe.js_expr` and the like evaluate their string when called, in
   the global scope.
+- `Sys_js.set_channel_flusher` and `set_channel_filler` redirect a channel
+  to an OCaml function (`stdout` to the page, for instance), and
+  `Sys_js.mount` gives the files under a path on demand, in emscripten's
+  file system (`create_file` and `read_file` use it too).
 
 The differences with js_of_ocaml:
 
@@ -287,7 +291,10 @@ The differences with js_of_ocaml:
   `Js.strict_equals` (as `Js.Opt` does).
 - Typed arrays and bigarrays (`Typed_array`) are copied, not shared: the
   wasm memory can move when it grows.
-- `Sys_js`'s channel redirections and mount points are not implemented.
+- An exception raised by the function of a `Sys_js` channel or mount point
+  does not reach the program: the function is called from a system call,
+  which fails (`Sys_error`), and the exception is printed on the console.
+  `Sys_js.mount_point` only lists the paths mounted by the program.
 
 ### Primitives in JavaScript
 

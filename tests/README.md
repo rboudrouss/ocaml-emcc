@@ -52,6 +52,7 @@ targets.
 | `jsoo`      | js_of_ocaml's library and ppx under node: properties, methods, strings, numbers, arrays, callbacks, OCaml values and exceptions through JavaScript, JavaScript errors, typed arrays, timers and promises after the main program |
 | `jsprims`   | primitives implemented in a JavaScript file (`js-files:` in `ocaml-emcc.conf`) |
 | `jsdom`     | a web page in headless Chromium (`check.mjs`, playwright): DOM, an event handler, `Js.export` |
+| `sysjs`     | `Sys_js`: `stderr` and `stdin` redirected to functions, `create_file`, a mounted path giving files on demand (its `expected.txt` is js_of_ocaml's output) |
 | `threads`   | `--threads`: Thread, Mutex, Condition, Event, `Thread.delay`, exceptions and `Thread.exit` in threads (node, WASI) |
 | `domains`   | `Domain.spawn` in parallel (OCaml 5.3+): Atomic, a mutex shared by domains, collections while they allocate, `Domain.DLS`, a thread in a domain |
 | `threadsweb` | `threads` in headless Chromium, on a cross-origin isolated page |

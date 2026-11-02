@@ -433,4 +433,126 @@ addToLibrary({
     var v = ocamlJs.val(t, x);
     return v.byteLength | 0;
   },
+
+  // Sys_js (see jsoo.c): OCaml functions called from the file system, in
+  // a system call, with the runtime
+  $ocamlJsFs__deps: ['$ocamlJs', '$FS', '$ExitStatus', 'ocaml_emcc_js_runtime_enter', 'ocaml_emcc_js_runtime_exit', 'ocaml_emcc_js_bytes',
+                     'ocaml_emcc_js_new_string', 'malloc', 'free'],
+  $ocamlJsFs: {
+    devices: 0,
+    mounts: null,
+    loading: false,
+
+    // (an exception cannot cross the system call: it is reported, and the
+    // call fails, EIO)
+    callOCaml(f) {
+      var b = _ocaml_emcc_js_runtime_enter();
+      try {
+        return f();
+      } catch (e) {
+        if (e instanceof ExitStatus || e == 'unwind') throw e;
+        console.error('Sys_js: in a function of a channel or mount:', String(e.message || e).replace(/^Fatal error: /, ''));
+        throw new FS.ErrnoError({{{ cDefs.EIO }}});
+      } finally {
+        _ocaml_emcc_js_runtime_exit(b);
+      }
+    },
+
+    // the bytes of an OCaml string, or its option (null: None), or of a
+    // byte string
+    bytesOf(v) {
+      var J = ocamlJs;
+      if (typeof v == 'string') return Uint8Array.from(v, (c) => c.charCodeAt(0));
+      if (!(v instanceof J.OcamlValue)) return null;
+      var n = _ocaml_emcc_js_bytes(v.cell);
+      if (n < 0) return null;
+      var p = HEAPF64[J.retAddr / 8];
+      return HEAPU8.slice(p, p + n);
+    },
+
+    // an OCaml string of a JavaScript string (bytes in UTF-8)
+    ocamlString(s) {
+      var J = ocamlJs, b = new TextEncoder().encode(s), p = _malloc(b.length + 1);
+      HEAPU8.set(b, p);
+      var o = new J.OcamlValue(_ocaml_emcc_js_new_string(p, b.length));
+      _free(p);
+      if (J.registry) J.registry.register(o, o.cell);
+      return o;
+    },
+
+    // a byte string of written bytes
+    byteString(b) {
+      var s = '';
+      for (var i = 0; i < b.length; i += 8192) s += String.fromCharCode.apply(null, b.subarray(i, i + 8192));
+      return s;
+    },
+
+    // files under a mounted path asked for when missing
+    hook() {
+      var F = ocamlJsFs, lookup = FS.lookupPath;
+      F.mounts = [];
+      FS.lookupPath = (path, opts = {}) => {
+        try {
+          return lookup(path, opts);
+        } catch (e) {
+          if (!(e instanceof FS.ErrnoError) || e.errno != {{{ cDefs.ENOENT }}} || F.loading) throw e;
+          var abs = PATH_FS.resolve(path);
+          var m = F.mounts.find((m) => abs.startsWith(m.prefix));
+          if (!m) throw e;
+          var bytes;
+          F.loading = true;
+          try {
+            bytes = F.callOCaml(() => F.bytesOf(m.f(F.ocamlString(m.prefix), F.ocamlString(abs.slice(m.prefix.length)))));
+          } catch (e2) {
+            if (!(e2 instanceof FS.ErrnoError)) throw e2;
+            throw e;
+          } finally {
+            F.loading = false;
+          }
+          if (!bytes) throw e;
+          FS.mkdirTree(PATH.dirname(abs));
+          FS.writeFile(abs, bytes);
+          return lookup(path, opts);
+        }
+      };
+    },
+  },
+
+  // a descriptor of a new device calling f
+  ocaml_js_channel__deps: ['$ocamlJs', '$ocamlJsFs', '$FS'],
+  ocaml_js_channel: (t, x, input) => {
+    var F = ocamlJsFs, f = ocamlJs.val(t, x), id = ++F.devices;
+    var dev = FS.makedev(64, id), pending = new Uint8Array(0), pos = 0;
+    FS.registerDevice(dev, {
+      read(stream, buffer, offset, length) {
+        if (pos >= pending.length) {
+          pending = F.callOCaml(() => F.bytesOf(f())) || new Uint8Array(0);
+          pos = 0;
+        }
+        var n = Math.min(length, pending.length - pos);
+        // (the memory may have grown while OCaml ran)
+        (buffer.byteLength ? buffer : HEAP8).set(pending.subarray(pos, pos + n), offset);
+        pos += n;
+        return n;
+      },
+      write(stream, buffer, offset, length) {
+        var s = F.byteString(new Uint8Array(buffer.buffer, buffer.byteOffset + offset, length));
+        F.callOCaml(() => f(s));
+        return length;
+      },
+    });
+    var path = '/dev/ocaml-channel-' + id;
+    FS.mkdev(path, input ? 0o444 : 0o222, dev);
+    return FS.open(path, input ? 'r' : 'w').fd;
+  },
+
+  // mounts f at path (or unmounts path: ft 0)
+  ocaml_js_mount__deps: ['$ocamlJs', '$ocamlJsFs', '$FS', '$PATH', '$PATH_FS'],
+  ocaml_js_mount: (p, len, ft, fx) => {
+    var F = ocamlJsFs, prefix = PATH_FS.resolve(ocamlJs.decode(p, len));
+    if (!prefix.endsWith('/')) prefix += '/';
+    if (!F.mounts) F.hook();
+    F.mounts = F.mounts.filter((m) => m.prefix != prefix);
+    if (ft) F.mounts.push({ prefix, f: ocamlJs.val(ft, fx) });
+  },
 });

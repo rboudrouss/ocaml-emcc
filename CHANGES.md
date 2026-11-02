@@ -26,8 +26,9 @@
   browsers and node, interpreted or compiled, on both targets, with the
   conventions of wasm_of_ocaml for JavaScript values. Callbacks keep
   running after the main program, JavaScript exceptions are
-  `Js_error.Exn` (or `Failure`), and `Js.export` gives functions to the
-  page. Their stubs, which only abort, are no longer linked.
+  `Js_error.Exn` (or `Failure`), `Js.export` gives functions to the
+  page, and `Sys_js` redirects channels to functions and mounts files
+  given on demand. Their stubs, which only abort, are no longer linked.
 - `--js-file FILE` (and `js-files:` in `ocaml-emcc.conf`): primitives of
   the program implemented in JavaScript, called with JavaScript values.
 - Plugins, in compiled mode: `ocaml-emcc plugin LIB.cma -o LIB.wasm`

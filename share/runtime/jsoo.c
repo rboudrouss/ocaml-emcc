@@ -10,6 +10,8 @@
 #include <string.h>
 #include <stdio.h>
 #include <errno.h>
+#include <limits.h>
+#include <sys/stat.h>
 #include <emscripten.h>
 #include <caml/mlvalues.h>
 #include <caml/memory.h>
@@ -19,6 +21,7 @@
 #include <caml/callback.h>
 #include <caml/bigarray.h>
 #include <caml/printexc.h>
+#include <caml/signals.h>
 
 /* jsoo.js */
 extern void ocaml_js_init(double ret, double out, int bits);
@@ -60,6 +63,8 @@ extern int ocaml_js_ta_create(int kind, double p, int n, int buffer);
 extern void ocaml_js_ta_copy(int t, double x, double p);
 extern int ocaml_js_ta_bytes(int t, double x);
 extern int ocaml_js_prim(double name, double p, int n);
+extern int ocaml_js_channel(int t, double x, int input);
+extern void ocaml_js_mount(double p, int len, int ft, double fx);
 
 #define ADDR(p) ((double)(uintptr_t)(p))
 
@@ -716,6 +721,14 @@ static void file_error(value name)
 
 CAMLprim value caml_create_file(value name, value content)
 {
+  /* (its directories too, as js_of_ocaml's) */
+  char dir[PATH_MAX];
+  snprintf(dir, sizeof dir, "%s", String_val(name));
+  for (char *p = dir + 1; (p = strchr(p, '/')) != NULL; p++) {
+    *p = 0;
+    mkdir(dir, 0777);
+    *p = '/';
+  }
   FILE *f = fopen(String_val(name), "wb");
   if (f == NULL) file_error(name);
   fwrite(String_val(content), 1, caml_string_length(content), f);
@@ -739,10 +752,142 @@ CAMLprim value caml_read_file_content(value name)
   CAMLreturn(s);
 }
 
+/* Sys_js.set_channel_flusher and set_channel_filler: the channel's
+   descriptor becomes a device of emscripten's file system calling the
+   JavaScript function (jsoo.js), with the bytes written or for bytes to
+   read.  Sys_js.mount: a missing file under the path is asked for to the
+   function.  Both run OCaml from a system call, which the runtime makes
+   in a blocking section (caml_write_fd, caml_read_fd, caml_sys_open...)
+   or not (a C library's fopen): the hooks of blocking sections tell, and
+   OCaml then runs with the runtime again. */
+
+/* (internals of the runtime, caml/signals.h and caml/io.h: the hooks, and
+   the descriptor of a channel, the first field of its struct channel) */
+CAMLextern void (*caml_enter_blocking_section_hook)(void);
+CAMLextern void (*caml_leave_blocking_section_hook)(void);
+#define Channel_fd(v) (**(int **)Data_custom_val(v))
+
+static _Thread_local int blocking;
+static void (*prev_enter_hook)(void), (*prev_leave_hook)(void);
+static void enter_hook(void) { prev_enter_hook(); blocking = 1; }
+static void leave_hook(void) { blocking = 0; prev_leave_hook(); }
+
+/* (once the threads library, which sets the hooks, is initialized) */
+static void track_blocking(void)
+{
+  if (prev_enter_hook) return;
+  prev_enter_hook = caml_enter_blocking_section_hook;
+  prev_leave_hook = caml_leave_blocking_section_hook;
+  caml_enter_blocking_section_hook = enter_hook;
+  caml_leave_blocking_section_hook = leave_hook;
+}
+
+EMSCRIPTEN_KEEPALIVE int ocaml_emcc_js_runtime_enter(void)
+{
+  if (!blocking) return 0;
+  caml_leave_blocking_section();
+  return 1;
+}
+
+EMSCRIPTEN_KEEPALIVE void ocaml_emcc_js_runtime_exit(int was_blocking)
+{
+  if (was_blocking) caml_enter_blocking_section_no_pending();
+}
+
+/* The bytes of the OCaml string at cell, or of its option (-1: None) */
+EMSCRIPTEN_KEEPALIVE int ocaml_emcc_js_bytes(double cell)
+{
+  value v = *(value *)(uintptr_t)cell;
+  if (Is_long(v)) return -1;
+  if (Tag_val(v) != String_tag) v = Field(v, 0);
+  ret_slot = ADDR(String_val(v));
+  return caml_string_length(v);
+}
+
+/* A root of a new OCaml string (the arguments of a mount's function) */
+EMSCRIPTEN_KEEPALIVE double ocaml_emcc_js_new_string(double p, int len)
+{
+  return new_cell(caml_alloc_initialized_string(len, (const char *)(uintptr_t)p));
+}
+
+extern value caml_ml_flush(value chan);
+
+static void set_channel(value chan, value f, int input)
+{
+  JS(f);
+  init();
+  track_blocking();
+  if (!input) caml_ml_flush(chan);
+  int fd = ocaml_js_channel(JSV(f), input);
+  if (fd < 0) caml_failwith("Sys_js: cannot redirect the channel");
+  Channel_fd(chan) = fd;
+}
+
+CAMLprim value caml_ml_set_channel_output(value chan, value f)
+{
+  set_channel(chan, f, 0);
+  return Val_unit;
+}
+
+CAMLprim value caml_ml_set_channel_refill(value chan, value f)
+{
+  set_channel(chan, f, 1);
+  return Val_unit;
+}
+
+/* the mounted paths, ending with a slash (as js_of_ocaml's) */
+static value mounts = Val_emptylist;
+
+static value with_slash(value path)
+{
+  mlsize_t n = caml_string_length(path);
+  if (n > 0 && String_val(path)[n - 1] == '/') return path;
+  value s = caml_alloc_string(n + 1);
+  memcpy(Bytes_val(s), String_val(path), n);
+  Bytes_val(s)[n] = '/';
+  return s;
+}
+
+CAMLprim value caml_mount_autoload(value path, value f)
+{
+  CAMLparam2(path, f);
+  CAMLlocal1(cell);
+  JS(f);
+  init();
+  track_blocking();
+  ocaml_js_mount(ADDR(String_val(path)), caml_string_length(path), JSV(f));
+  if (mounts == Val_emptylist) caml_register_generational_global_root(&mounts);
+  path = with_slash(path);
+  cell = caml_alloc_small(2, Tag_cons);
+  Field(cell, 0) = path;
+  Field(cell, 1) = mounts;
+  caml_modify_generational_global_root(&mounts, cell);
+  CAMLreturn(Val_unit);
+}
+
+CAMLprim value caml_unmount(value path)
+{
+  CAMLparam1(path);
+  CAMLlocal3(l, kept, cell);
+  init();
+  ocaml_js_mount(ADDR(String_val(path)), caml_string_length(path), 0, 0);
+  path = with_slash(path);
+  for (l = mounts; l != Val_emptylist; l = Field(l, 1))
+    if (caml_string_length(Field(l, 0)) != caml_string_length(path)
+        || memcmp(String_val(Field(l, 0)), String_val(path), caml_string_length(path))) {
+      cell = caml_alloc_small(2, Tag_cons);
+      Field(cell, 0) = Field(l, 0);
+      Field(cell, 1) = kept;
+      kept = cell;
+    }
+  if (mounts != Val_emptylist) caml_modify_generational_global_root(&mounts, kept);
+  CAMLreturn(Val_unit);
+}
+
 CAMLprim value caml_list_mount_point(value unit)
 {
   (void)unit;
-  return Val_emptylist;
+  return mounts;
 }
 
 /* Typed arrays: copies, the wasm memory moves when it grows */

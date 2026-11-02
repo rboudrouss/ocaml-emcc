@@ -1,0 +1,14 @@
+[hello][ world\n][42\233]
+read "line 1"
+read "line 2"
+read "partial line"
+read "no newline"
+end of input
+read_file: created
+mounted: true
+asked for dir/a.txt in /virtual/
+a.txt: the content of a
+a.txt again (no ask): true
+asked for missing in /virtual/
+missing: false
+after unmount: false, mounted: false
