@@ -1,7 +1,7 @@
 # fontconfig (conf-libfontconfig), with expat, on top of the freetype
 # recipe.  Its configuration is in the sysroot (etc/fonts), and finds the
 # fonts of the host's usual directories (/usr/share/fonts...) where the
-# file system is the host's (node).  Without threads, as pixman.  It needs
+# file system is the host's (node).  Thread-safe, as pixman.  It needs
 # gperf.
 
 SOURCE=system:libfontconfig
@@ -16,7 +16,6 @@ LIB_PATTERNS=fontconfig
 
 build() {
   command -v gperf >/dev/null || die "fontconfig needs gperf"
-  apply_patches "$BASE_RECIPE_DIR/patches"
   meson_setup -Ddoc=disabled -Dnls=disabled -Dtests=disabled -Dtools=disabled -Dcache-build=disabled \
     -Dxml-backend=expat
   log "ninja"

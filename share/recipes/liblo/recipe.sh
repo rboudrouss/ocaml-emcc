@@ -1,5 +1,6 @@
 # liblo (conf-liblo), Open Sound Control over UDP and TCP (emscripten's
-# sockets: under node, through its WebSocket emulation), without threads.
+# sockets: under node, through its WebSocket emulation).  Its server
+# thread (lo_server_thread) needs a program linked with --threads.
 
 SOURCE=system:liblo
 PKGCONFIG=liblo
@@ -14,7 +15,7 @@ releases() {
 build() {
   log "configure (emconfigure)"
   emconfigure ./configure --host=none --prefix="$SYSROOT" --enable-static --disable-shared \
-    --disable-threads --disable-tests --disable-examples --disable-network-tests --disable-doc \
+    --disable-tests --disable-examples --disable-network-tests --disable-doc \
     CFLAGS="$CFLAGS" > configure.log 2>&1 || { tail -30 configure.log; die "configure failed"; }
   log "make"
   emmake make -j"$NPROC" -C src liblo.la > make.log 2>&1 || { tail -30 make.log; die "make failed"; }

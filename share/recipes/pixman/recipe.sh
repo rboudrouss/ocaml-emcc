@@ -1,6 +1,6 @@
-# pixman, for cairo.  Generic C (no SIMD), without threads: meson's threads
-# dependency is -pthread for emscripten, which would make its users'
-# programs threaded wasm.
+# pixman, for cairo.  Generic C (no SIMD), thread-safe (meson's threads
+# dependency: its -pthread does not make its users' programs threaded, the
+# link of the program decides).
 
 SOURCE=system:pixman
 PKGCONFIG=pixman-1
@@ -10,7 +10,6 @@ RELEASES=https://www.cairographics.org/releases/
 LINK=-lpixman-1
 
 build() {
-  apply_patches "$BASE_RECIPE_DIR/patches"
   local o off=
   for o in loongson-mmi mmx sse2 ssse3 vmx arm-simd neon a64-neon mips-dspr2 rvv gnu-inline-asm \
     openmp gtk libpng tests demos; do off+=" -D$o=disabled"; done

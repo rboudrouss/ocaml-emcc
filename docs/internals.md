@@ -143,6 +143,25 @@ first, in assembly, then TLS and the thread's state) in a new instance on
 a new thread. Its pipes are protected by a lock, a blocking read or a
 `poll` waits for another thread to write.
 
+### Threads in the libraries
+
+The C libraries and stubs are compiled with `-pthread` as well, but the
+program decides at link time: those whose threads are only locks or
+thread-local variables have them (they are needed with domains), those
+that would start threads by themselves do not, as a program linked
+without `--threads` cannot.
+
+| where | threads | why |
+|-------|---------|-----|
+| mpfr, OpenSSL, libevent (`libevent_pthreads`), pixman, fontconfig | yes | locks and thread-local variables only |
+| liblo | yes | its server thread (`lo_server_thread`) fails without `--threads`, as `Thread.create` does |
+| lwt (`lwt_unix_start_job`) | when the program has them | decided when the job starts (`emscripten_has_threading_support`): without, the job runs synchronously |
+| async_unix (`In_thread`) | when the program has them | it tries to start a thread, and runs the jobs synchronously when it cannot |
+| ffmpeg, OpenBLAS, argon2 | no | they start threads themselves (a codec's, at `avcodec_open2`; a pool at startup; parallel lanes), which would fail without `--threads` |
+| fftw3 | no | its threads are a separate library (`libfftw3_threads`) its binding does not use |
+| `-fopenmp` | no (dropped) | emscripten has no OpenMP runtime |
+| OCaml 5.0 to 5.2 | no domains | the number of domains is a constant (their minor heaps are allocated at startup); threads work |
+
 ## JavaScript primitives
 
 When the bytecode links js_of_ocaml's stub libraries (`jsoo_runtime_stubs`,

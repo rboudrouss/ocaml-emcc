@@ -1,4 +1,5 @@
-# GNU MPFR (conf-mpfr), on top of the gmp recipe.
+# GNU MPFR (conf-mpfr), on top of the gmp recipe.  Thread-safe (its caches
+# and flags in thread-local variables), for programs with threads.
 
 SOURCE=system:mpfr
 DEPENDS=gmp
@@ -8,7 +9,7 @@ RELEASES=https://ftp.gnu.org/gnu/mpfr/
 
 build() {
   log "configure (emconfigure)"
-  emconfigure ./configure --host=none --enable-static --disable-shared --disable-thread-safe \
+  emconfigure ./configure --host=none --enable-static --disable-shared \
     --with-gmp="$SYSROOT" --prefix="$SYSROOT" CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" > configure.log 2>&1 \
     || { tail -30 configure.log; die "configure failed"; }
   log "make"
