@@ -1,5 +1,14 @@
 ## Unreleased
 
+- js_of_ocaml's JavaScript primitives: programs using the libraries
+  js_of_ocaml (`Js`, `Dom_html`, its ppx, `Js_of_ocaml_lwt`...) run in
+  browsers and node, interpreted or compiled, on both targets, with the
+  conventions of wasm_of_ocaml for JavaScript values. Callbacks keep
+  running after the main program, JavaScript exceptions are
+  `Js_error.Exn` (or `Failure`), and `Js.export` gives functions to the
+  page. Their stubs, which only abort, are no longer linked.
+- `--js-file FILE` (and `js-files:` in `ocaml-emcc.conf`): primitives of
+  the program implemented in JavaScript, called with JavaScript values.
 - Added recipes: async_unix, bls12-381-unix, bytesrw, cairo,
   class_group_vdf, core_unix, cpu, eio_posix, faad, ffmpeg, freetype,
   frei0r, gd, glfw3, hacl_func, lacaml, lame, libev, libevent,

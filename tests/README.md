@@ -46,6 +46,14 @@ targets.
 | `lmdb`      | lmdb + liblmdb: a database file, cursors, transactions |
 | `sdl`       | tsdl + sdl2: timer, events, surfaces, RWops (wasm64) |
 | `raylib`    | raylib (raylib-ocaml): its vendored raylib built for the web, ctypes structs holding pointers; images, colors, collisions, text, without a window |
+| `jsoo`      | js_of_ocaml's library and ppx under node: properties, methods, strings, numbers, arrays, callbacks, OCaml values and exceptions through JavaScript, JavaScript errors, typed arrays, timers and promises after the main program |
+| `jsprims`   | primitives implemented in a JavaScript file (`js-files:` in `ocaml-emcc.conf`) |
+| `jsdom`     | a web page in headless Chromium (`check.mjs`, playwright): DOM, an event handler, `Js.export` |
+
+`jsdom` needs playwright and its Chromium (`npm i playwright`,
+`npx playwright install chromium-headless-shell`), found through
+`PLAYWRIGHT_DIR` (the directory of its `node_modules`) and
+`PLAYWRIGHT_BROWSERS_PATH`; it is skipped otherwise.
 
 They pass on both targets, except `hello` (it checks 63-bit ints on
 purpose) and `sdl` (not tried on wasm32 yet), which are wasm64 only, and

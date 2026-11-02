@@ -209,6 +209,87 @@ the `dlsym` of ctypes-foreign) keep importing them. `link` lists the
 imports that are not WASI, and such a module only runs where they are
 defined (`wasmtime -W unknown-imports-trap=y` runs it until one is called).
 
+## JavaScript
+
+### js_of_ocaml's library
+
+Programs using [js_of_ocaml](https://ocsigen.org/js_of_ocaml)'s library
+(`Js`, `Dom_html`, `Js.Unsafe`, its ppx's `o##m x`, `object%js`...) build
+as is, interpreted or compiled, on both targets: ocaml-emcc implements
+its primitives (`share/runtime/jsoo.c`, on top of the emscripten library
+`jsoo.js`) instead of linking their stubs, which only abort outside
+JavaScript.
+
+```ocaml
+open Js_of_ocaml
+
+let () =
+  let button = Dom_html.createButton Dom_html.document in
+  button##.textContent := Js.some (Js.string "click");
+  button##.onclick := Dom_html.handler (fun _ -> print_endline "clicked"; Js._true);
+  Dom.appendChild Dom_html.document##.body button;
+  Js.export "add" (Js.wrap_callback (fun a b -> a + b))   (* add(1, 2) in the page *)
+```
+
+JavaScript values follow the conventions of wasm_of_ocaml: in a table on
+the JavaScript side, a custom block on the OCaml side, released by the GC.
+So code written for wasm_of_ocaml works unchanged:
+
+- A JavaScript number that is an integer (31 bits on wasm32, 53 on wasm64)
+  is an OCaml `int`, and an `int` given to JavaScript is a number. Other
+  numbers are JavaScript values: use `Js.float_of_number`/`Js.number_of_float`
+  (an OCaml float given to JavaScript is a number too).
+- Strings are converted (`Js.string`, `Js.to_string`), in UTF-8.
+- Any other OCaml value given to JavaScript is an opaque object, and comes
+  back as the same OCaml value.
+- `Js.wrap_callback` and the other callbacks make JavaScript functions.
+  Once the main program is done, the program keeps running them (event
+  handlers, timers, promises), as with js_of_ocaml. Under node, the
+  process then ends when nothing is left to run. `exit` in a callback ends
+  it.
+- A JavaScript exception is `Js_error.Exn` in OCaml when it is an `Error`,
+  else `Failure`. An OCaml exception crossing JavaScript (raised in a
+  callback) comes back as itself.
+- `Js.export` sets a global of the page (`module.exports` under node).
+- `Js.Unsafe.js_expr` and the like evaluate their string when called, in
+  the global scope.
+
+The differences with js_of_ocaml:
+
+- Each call goes from wasm to JavaScript and back: 0.1 to 0.5 µs.
+- `==` between two JavaScript values is physical equality of the OCaml
+  blocks, false for two handles on the same object: use `Js.equals` or
+  `Js.strict_equals` (as `Js.Opt` does).
+- Typed arrays and bigarrays (`Typed_array`) are copied, not shared: the
+  wasm memory can move when it grows.
+- `Sys_js`'s channel redirections and mount points are not implemented.
+
+### Primitives in JavaScript
+
+The primitives of a program can be written in JavaScript, in files
+given with `--js-file FILE` or listed in `js-files:` in
+[`ocaml-emcc.conf`](#configuration) (`tests/jsprims`). Each `function NAME`
+of the file, or name declared by a `//Provides: NAME` comment as in
+js_of_ocaml's runtime files, implements the primitive `NAME`, which no
+library defines. Its arguments and result are JavaScript values as above.
+Values the file declares are `Js.Unsafe.runtime_value "NAME"`.
+
+```js
+// prims.js
+function my_greet(s) { return "hello " + s; }
+```
+
+```ocaml
+external greet : Js.js_string Js.t -> Js.js_string Js.t = "my_greet"
+```
+
+ocamlc checks that the primitives of an executable exist: link it with
+`-no-check-prims` (`(link_flags (-no-check-prims))` with dune), as for
+js_of_ocaml. Primitives can also be written in C and linked with `-l`.
+These files use the conventions above, not those of js_of_ocaml's runtime
+(whose strings are not JavaScript strings, among other differences): the
+JavaScript files of js_of_ocaml libraries are not linked.
+
 ## wasm32 or wasm64
 
 The bytecode is always the one of your switch, compiled for 64 bits. The

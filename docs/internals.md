@@ -110,6 +110,41 @@ defines one of the functions of `wasi.c`, `compat.c` or `dlsym.c`
 (`__syscall_getcwd` or `getaddrinfo` for instance), `link` leaves
 ocaml-emcc's out and says so: the program's definition is the one linked.
 
+## JavaScript primitives
+
+When the bytecode links js_of_ocaml's stub libraries (`jsoo_runtime_stubs`,
+`js_of_ocaml_stubs`), or with `--js-file`, `link` compiles
+`share/runtime/jsoo.c` in and links the emscripten library
+`share/runtime/jsoo.js` (`--js-library`) instead of those libraries, also
+named by the `-cclib` flags of the bytecode.
+
+A JavaScript value lives in a table of `jsoo.js` and is, in OCaml, a custom
+block holding its index, whose finalizer frees the entry. `undefined`,
+`null`, `true`, `false` and `globalThis` have fixed indexes and one block
+each. C and JavaScript exchange values as a pair (tag, double): a number, an
+index, or the address of a GC root holding an OCaml value (wrapped in an
+`OcamlValue` object on the JavaScript side, which releases the root through a
+`FinalizationRegistry`). The functions of `jsoo.js` take and return only
+`int`s and `double`s, so nothing changes on wasm64 (no `BigInt`). A result
+is an int: an index, or a code whose payload `jsoo.js` stores at an address
+`jsoo.c` gave it once (an integer, a root, an exception).
+
+A callback is a JavaScript function holding a root on the OCaml closure.
+When called, it calls the exported `ocaml_emcc_js_callback`, which fetches
+the arguments one by one and applies the closure with `caml_callbackN_exn`.
+An OCaml exception leaving it is thrown as an `OcamlExn` holding a root on
+it, and raised again in OCaml when it gets back to a primitive. The first
+callback calls `runtimeKeepalivePush()`. The `exit` at the end of the main
+program then only unwinds: the runtime stays alive for the event loop
+(under node, the process ends once it is empty). An `ExitStatus` leaving a
+callback ends the node process.
+
+For `--js-file`, `link` lists the names the files provide, generates for each
+primitive of the program that no library defines a C stub with the prototype
+of its call site, calling `ocaml_emcc_js_prim("NAME", n, args)`, and a
+JavaScript table `ocamlEmccJsPrims` of the files' functions, after them in
+the `--pre-js` files.
+
 ## Signature adapters
 
 A wasm indirect call traps on any signature mismatch, while native code
