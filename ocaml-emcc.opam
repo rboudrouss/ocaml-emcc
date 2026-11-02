@@ -6,7 +6,7 @@ description:
   "ocaml-emcc runs OCaml bytecode on an emscripten build of ocamlrun and links the C stubs of the program and of its dependencies statically, which makes FFI-heavy libraries (zarith/gmp, apron, libclang...) usable in the browser and in node. The runtime is rebuilt from the sources of the switch's own compiler (any version from 4.08, including 5.x), C libraries come from recipes. Requires the emscripten SDK (emsdk) in PATH."
 maintainer: ["rboudrouss <r.boudrouss@gmail.com>"]
 authors: ["rboudrouss <r.boudrouss@gmail.com>"]
-license: "MIT"
+license: ["MIT" "LGPL-2.1-or-later WITH OCaml-LGPL-linking-exception"]
 homepage: "https://github.com/rboudrouss/ocaml-emcc"
 bug-reports: "https://github.com/rboudrouss/ocaml-emcc/issues"
 depends: [

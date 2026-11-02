@@ -731,6 +731,15 @@ and 0.4, lmdb 1.1, dune 3.12 to 3.24 and mccs 1.1+13 to 1.1+19.
   still need a libffi without JavaScript. WASI preview 2 (components) is not
   targeted.
 
+## License
+
+ocaml-emcc is distributed under the MIT license (`LICENSE`), except
+`share/runtime/jsoo.js`, the JavaScript side of js_of_ocaml's primitives,
+parts of which are adapted from js_of_ocaml's runtime. It is distributed
+under js_of_ocaml's license: the GNU LGPL version 2.1 or later, with a
+linking exception (`share/runtime/jsoo.js.LICENSE`). The exception lets a
+program linked with it be distributed under any terms.
+
 ## Development
 
 ```

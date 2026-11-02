@@ -1,3 +1,30 @@
+// ocaml-emcc: JavaScript side of js_of_ocaml's primitives
+//
+// Parts of this file are adapted from the runtime of js_of_ocaml
+// (runtime/js/jslib.js, jslib_js_of_ocaml.js and promise.js of
+// https://github.com/ocsigen/js_of_ocaml): the callback wrappers, the
+// evaluation of expressions and variables, caml_js_html_entities and the
+// wrapping of promises.
+//
+// Js_of_ocaml library
+// http://www.ocsigen.org/js_of_ocaml/
+// Copyright (C) 2010 Jérôme Vouillon
+// Laboratoire PPS - CNRS Université Paris Diderot
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, with linking exception;
+// either version 2.1 of the License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Lesser General Public License for more details.
+//
+// Unlike the rest of ocaml-emcc (MIT), this file is distributed under
+// these terms: see jsoo.js.LICENSE, js_of_ocaml's license (the GNU LGPL
+// 2.1 and its linking exception).
+
 // JavaScript side of js_of_ocaml's primitives (jsoo.c), an emscripten
 // library (--js-library), linked by `ocaml-emcc link` with jsoo.c.
 //

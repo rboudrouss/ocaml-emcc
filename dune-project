@@ -1,7 +1,7 @@
 (lang dune 3.11)
 (name ocaml-emcc)
 (generate_opam_files true)
-(license MIT)
+(license MIT "LGPL-2.1-or-later WITH OCaml-LGPL-linking-exception")
 (authors "rboudrouss <r.boudrouss@gmail.com>")
 (maintainers "rboudrouss <r.boudrouss@gmail.com>")
 (source (github rboudrouss/ocaml-emcc))
