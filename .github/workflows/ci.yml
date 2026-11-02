@@ -73,12 +73,20 @@ jobs:
           pkgs="$pkgs checkseum bigstringaf mirage-crypto-ec mirage-crypto-pk mirage-crypto-rng"
           pkgs="$pkgs lwt cryptokit minisat ocaml-lua stb_image extunix snappy argon2 ocaml-expat lmdb glpk fftw3"
           pkgs="$pkgs secp256k1-internal tsdl mlcuddidl hacl-star posix-time2 posix-socket posix-stat mccs raylib"
+          pkgs="$pkgs js_of_ocaml js_of_ocaml-ppx"
           # argon2 binds libargon2 with ctypes-foreign and has no conf package
           sudo apt-get install -y libargon2-dev
           # mlmpfr does not build with OCaml 5 (upstream issue)
           case ${{ matrix.ocaml }} in 4.*) pkgs="$pkgs mlmpfr" ;; esac
           # the package of tests/depgraph (mpfr through pkg-config, zarith)
           opam install $pkgs ./tests/depgraph/pkg
+      # tests/jsdom runs a page in headless Chromium
+      - name: Install playwright
+        if: matrix.target != 'wasi'
+        run: |
+          mkdir -p ../pw && cd ../pw && npm init -y >/dev/null && npm i playwright@1
+          npx playwright install --with-deps chromium-headless-shell
+          echo "PLAYWRIGHT_DIR=$(pwd)" >> "$GITHUB_ENV"
       # c_of_ocaml, built with the switch's compiler (its bytecode format)
       - name: Build c_of_ocaml
         run: |
