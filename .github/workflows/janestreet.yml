@@ -1,0 +1,72 @@
+name: Jane Street
+
+# core, async and async with threads (tests/core, async, asyncthreads):
+# their libraries are rebuilt for the target the first time (about an
+# hour), too long for each push.  Weekly, and by hand.
+on:
+  schedule:
+    - cron: '0 10 * * 0'
+  workflow_dispatch:
+
+env:
+  EMSDK_VERSION: 6.0.11
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [wasm32, wasm64, wasi]
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    env:
+      OPAMKEEPBUILDDIR: true
+      EMSDK: ${{ github.workspace }}/../emsdk
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: '5.4'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - uses: actions/cache@v6
+        with:
+          path: ${{ env.EMSDK }}
+          key: emsdk-${{ runner.os }}-${{ env.EMSDK_VERSION }}
+      - name: Install emsdk
+        run: |
+          [ -d "$EMSDK" ] || git clone --depth 1 https://github.com/emscripten-core/emsdk.git "$EMSDK"
+          "$EMSDK/emsdk" install "$EMSDK_VERSION"
+          "$EMSDK/emsdk" activate "$EMSDK_VERSION"
+      - run: opam install ocamlfind core core_unix async ppx_jane
+      - name: Build c_of_ocaml
+        run: |
+          git clone --depth 1 https://github.com/rboudrouss/C_of_ocaml.git ../C_of_ocaml
+          opam pin add -n -y ppx_devtools-optcomp.dev "git+https://github.com/ocsigen/ppx_devtools.git#f62719d5087fa8d7f2bd0616c1fa91fd660eb27e"
+          opam install -y --deps-only ../C_of_ocaml/js_of_ocaml-compiler.opam
+          opam exec -- sh -c 'cd ../C_of_ocaml && dune build --profile release --root . compiler/bin-c_of_ocaml/c_of_ocaml.exe'
+          echo "OCAML_EMCC_C_OF_OCAML=$(realpath ../C_of_ocaml)/_build/default/compiler/bin-c_of_ocaml/c_of_ocaml.exe" >> "$GITHUB_ENV"
+      - run: opam exec -- dune build
+      - name: Install wasmtime 46 (wasi-threads)
+        if: matrix.target == 'wasi'
+        run: |
+          mkdir -p ../wasmtime && cd ../wasmtime
+          curl -sSLf https://github.com/bytecodealliance/wasmtime/releases/download/v46.0.0/wasmtime-v46.0.0-x86_64-linux.tar.xz | tar xJ
+          echo "WASMTIME_THREADS=$(pwd)/wasmtime-v46.0.0-x86_64-linux/wasmtime" >> "$GITHUB_ENV"
+      - name: tests/run.sh core async asyncthreads (${{ matrix.target }})
+        run: |
+          case ${{ matrix.target }} in wasi) args=--wasi ;; *) args="--target ${{ matrix.target }}" ;; esac
+          opam exec -- bash -c "SWITCH=\$(opam var prefix) tests/run.sh $args core async asyncthreads"
+      - name: tests/run.sh --compiled core async asyncthreads (${{ matrix.target }})
+        if: ${{ !cancelled() }}
+        run: |
+          case ${{ matrix.target }} in wasi) args=--wasi ;; *) args="--target ${{ matrix.target }}" ;; esac
+          opam exec -- bash -c "SWITCH=\$(opam var prefix) tests/run.sh $args --compiled core async asyncthreads"
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: janestreet-${{ matrix.target }}
+          path: |
+            tests/*/out.log
+            tests/*/out/

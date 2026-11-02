@@ -22,7 +22,8 @@ TARGET_COL=$TARGET; [ $WASI = yes ] && TARGET=wasm32 TARGET_COL=wasi
 # the WASI host: $WASMTIME, wasmtime in PATH, else node:wasi.  Programs
 # with threads (threads: yes in their ocaml-emcc.conf) need wasi-threads:
 # $WASMTIME_THREADS, a wasmtime <= 46 (47 removed it).  The program's
-# temporary files go to /tmp, which is preopened (not $TMPDIR).  Programs
+# temporary files go to /tmp, which is preopened (not $TMPDIR), as is /etc
+# (the local time zone).  Programs
 # with sockets (wasix: yes) run in $WASMER (wasmer in PATH), with network
 # (and the tail calls of --compiled).
 WASMTIME=${WASMTIME:-$(command -v wasmtime || true)}
@@ -33,8 +34,8 @@ wasi_run() {
   if grep -qs '^wasix: *yes' ocaml-emcc.conf; then
     "$WASMER" run --net --enable-tail-call "$1" -- "${@:2}"
   elif grep -qs '^threads: *yes' ocaml-emcc.conf; then
-    "$WASMTIME_THREADS" run -W exceptions=y,threads=y,shared-memory=y -S threads=y --dir . --dir /tmp -S inherit-env=y "$@" 2> >(grep -v '^WARNING: the `-Sthreads` flag' >&2)
-  elif [ -n "$WASMTIME" ]; then "$WASMTIME" run -W exceptions=y --dir . --dir /tmp -S inherit-env=y "$@"
+    "$WASMTIME_THREADS" run -W exceptions=y,threads=y,shared-memory=y -S threads=y --dir . --dir /tmp --dir /etc -S inherit-env=y "$@" 2> >(grep -v '^WARNING: the `-Sthreads` flag' >&2)
+  elif [ -n "$WASMTIME" ]; then "$WASMTIME" run -W exceptions=y --dir . --dir /tmp --dir /etc -S inherit-env=y "$@"
   else "$NODE" --no-warnings "$TESTS_DIR/wasi-run.mjs" "$@"; fi
 }
 
@@ -91,6 +92,9 @@ jsprims   | jp       |            | js_of_ocaml                 | wasm32 wasm64 
 jsdom     | page     |            | js_of_ocaml-ppx playwright  | wasm32 wasm64      |
 sysjs     | sj       |            | js_of_ocaml                 | wasm32 wasm64      |
 localtime | tz       |            |                             | wasm32 wasm64      |
+core      | cr       |            | core                        | wasm32 wasm64 wasi |
+async     | as       |            | async core_unix             | wasm32 wasm64 wasi |
+asyncthreads | at    |            | async core_unix wasi-threads | wasm32 wasm64 wasi |
 threads   | th       |            | wasi-threads                | wasm32 wasm64 wasi |
 domains   | dm       |            | ocaml>=5.3 wasi-threads     | wasm32 wasm64 wasi |
 threadsweb | th      |            | playwright                  | wasm32 wasm64      |

@@ -53,6 +53,9 @@ targets.
 | `jsprims`   | primitives implemented in a JavaScript file (`js-files:` in `ocaml-emcc.conf`) |
 | `jsdom`     | a web page in headless Chromium (`check.mjs`, playwright): DOM, an event handler, `Js.export` |
 | `localtime` | the local time zone's file (`/etc/localtime`, or that of `$TZ`) gives the offsets of `Unix.localtime` |
+| `core`      | core: `Int63` (an `int64` on wasm32), times, maps, bin_prot, sexps, dates, the local time zone |
+| `async`     | async: the scheduler, a timer, deferreds, a pipe, writers |
+| `asyncthreads` | async with `--threads`: `In_thread.run` jobs in threads, at once |
 | `sysjs`     | `Sys_js`: `stderr` and `stdin` redirected to functions, `create_file`, a mounted path giving files on demand (its `expected.txt` is js_of_ocaml's output) |
 | `threads`   | `--threads`: Thread, Mutex, Condition, Event, `Thread.delay`, exceptions and `Thread.exit` in threads (node, WASI) |
 | `domains`   | `Domain.spawn` in parallel (OCaml 5.3+): Atomic, a mutex shared by domains, collections while they allocate, `Domain.DLS`, a thread in a domain |
@@ -64,8 +67,12 @@ targets.
 
 Under `--wasi`, `threads` and `domains` need a wasmtime with wasi-threads
 (46 or older, removed in 47): `$WASMTIME_THREADS`; they are skipped
-otherwise. `sockets`, `lwtsockets` and `threadsockets` run in wasmer
-(`$WASMER`, or in `PATH`), skipped without it.
+otherwise. `core`, `async` and `asyncthreads` need core, core_unix and
+async, whose libraries are rebuilt for the target the first time (about an
+hour): the CI runs them in a workflow of their own
+(`.github/workflows/janestreet.yml`, weekly and by hand). `sockets`,
+`lwtsockets` and `threadsockets` run in wasmer (`$WASMER`, or in `PATH`),
+skipped without it.
 
 `jsdom`, `dynweb` and `threadsweb` need playwright and its Chromium (`npm i playwright`,
 `npx playwright install chromium-headless-shell`), found through

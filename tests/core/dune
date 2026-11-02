@@ -1,0 +1,1 @@
+(executable (name cr) (modes byte exe) (libraries core) (preprocess (pps ppx_jane)))
