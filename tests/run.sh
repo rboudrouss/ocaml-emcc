@@ -21,10 +21,12 @@ export OCAML_EMCC_TARGET=$TARGET
 TARGET_COL=$TARGET; [ $WASI = yes ] && TARGET=wasm32 TARGET_COL=wasi
 # the WASI host: $WASMTIME, wasmtime in PATH, else node:wasi.  Programs
 # with threads (threads: yes in their ocaml-emcc.conf) need wasi-threads:
-# $WASMTIME_THREADS, a wasmtime <= 46 (47 removed it).
+# $WASMTIME_THREADS, a wasmtime <= 46 (47 removed it).  The program's
+# temporary files go to /tmp, which is preopened (not $TMPDIR).
 WASMTIME=${WASMTIME:-$(command -v wasmtime || true)}
 WASMTIME_THREADS=${WASMTIME_THREADS:-$WASMTIME}
 wasi_run() {
+  local -x TMPDIR=/tmp
   if grep -qs '^threads: *yes' ocaml-emcc.conf; then
     "$WASMTIME_THREADS" run -W exceptions=y,threads=y,shared-memory=y -S threads=y --dir . --dir /tmp -S inherit-env=y "$@" 2> >(grep -v '^WARNING: the `-Sthreads` flag' >&2)
   elif [ -n "$WASMTIME" ]; then "$WASMTIME" run -W exceptions=y --dir . --dir /tmp -S inherit-env=y "$@"
