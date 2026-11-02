@@ -1,0 +1,4 @@
+loaded out/p.wasm
+out/nodt.wasm: Failure c_of_ocaml: the program is compiled with double translation, not the plugin
+asked: 6
+twice: 45
