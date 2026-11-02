@@ -71,6 +71,9 @@ cudd      | cu       |            | cudd                        | wasm32 wasm64 
 hacl      | hc       |            | hacl-star                   | wasm32 wasm64      |
 posix     | px       |            | posix-time2 posix-socket posix-stat | wasm32 wasm64      |
 mccs      | mc       |            | mccs                        | wasm32 wasm64      |
+jsoo      | js       |            | js_of_ocaml-ppx             | wasm32 wasm64      |
+jsprims   | jp       |            | js_of_ocaml                 | wasm32 wasm64      |
+jsdom     | page     |            | js_of_ocaml-ppx playwright  | wasm32 wasm64      |
 '
 # wasi (tests/run.sh --wasi): OUT.wasm --wasi, the tests checked that way.
 # ctypes needs libffi's JavaScript functions, no WASI host has them.
@@ -78,9 +81,13 @@ mccs      | mc       |            | mccs                        | wasm32 wasm64 
 # too, for now: its ctypes structs, laid out with the sizes of the host
 # before ctypes was rebuilt for wasm32 (as yaml's are), were not tried since.
 # depgraph needs its package installed: opam install ./tests/depgraph/pkg
+# jsdom runs in headless Chromium (its check.mjs): it needs playwright,
+# PLAYWRIGHT_DIR (the directory of its node_modules) and
+# PLAYWRIGHT_BROWSERS_PATH.
 
 has_pkg() {
   case $1 in
+    playwright) [ -n "${PLAYWRIGHT_DIR:-}" ] && [ -d "$PLAYWRIGHT_DIR/node_modules/playwright" ] ;;
     ocaml\>=*) [ "$(printf '%s\n' "${1#ocaml>=}" "$(ocamlc -vnum)" | sort -V | head -1)" = "${1#ocaml>=}" ] ;;
     *) ocamlfind query "$1" >/dev/null 2>&1 || [ -d "$OPAM_SWITCH_PREFIX/lib/$1" ] ;;
   esac
@@ -112,7 +119,13 @@ while IFS='|' read -r name target args pkgs targets differ; do
     if [ -f expected.txt ]; then cp expected.txt out/native.txt
     else "./_build/default/$target.exe" $args > out/native.txt || echo "exit=$?" >> out/native.txt; fi
     if [ $WASI = yes ]; then run() { wasi_run "$@"; }; else run() { "$NODE" "$@"; }; fi
-    run "$js" $args > out/wasm.txt 2> out/wasm.err || echo "exit=$?" >> out/wasm.txt
+    if [ -f check.mjs ]; then
+      # a web page: index.html, the program, and check.mjs driving a browser
+      cp index.html out/
+      "$NODE" check.mjs out > out/wasm.txt 2> out/wasm.err || echo "exit=$?" >> out/wasm.txt
+    else
+      run "$js" $args > out/wasm.txt 2> out/wasm.err || echo "exit=$?" >> out/wasm.txt
+    fi
   ) > "$name/out.log" 2>&1
   if [ -n "$differ" ]; then filt() { grep -Ev "$differ" "$1"; }; else filt() { cat "$1"; }; fi
   if [ -f "$name/out/wasm.txt" ] && diff <(filt "$name/out/native.txt") <(filt "$name/out/wasm.txt") > "$name/out/diff.txt"; then

@@ -1,0 +1,7 @@
+add: 42
+greet: hello wörld (5 chars)
+apply: 16
+error: boom
+same: true
+six: 1-2-3-4-5-6
+config: prims.js 3

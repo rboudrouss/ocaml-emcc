@@ -6,6 +6,7 @@
      recipes: emcc-recipes vendor/r  recipe directories (relative to the file)
      requires: cjson                 recipes built before build/link
      link-flags: -lcjson -sMODULARIZE=1
+     js-files: js/prims.js           primitives implemented in JavaScript
      cflags: -DFOO                   extra C flags (stubs and recipes)
 
    Without a configuration file, `emcc-recipes/` next to the nearest
@@ -17,10 +18,11 @@ type t = {
   recipes : string list;  (** absolute paths *)
   requires : string list;
   link_flags : string list;
+  js_files : string list;  (** absolute paths *)
   cflags : string list;
 }
 
-let empty = { dir = None; target = None; recipes = []; requires = []; link_flags = []; cflags = [] }
+let empty = { dir = None; target = None; recipes = []; requires = []; link_flags = []; js_files = []; cflags = [] }
 
 let rec find_up dir names =
   match List.find_opt (fun n -> Sys.file_exists (Filename.concat dir n)) names with
@@ -63,6 +65,7 @@ let load () =
         recipes = (if recipes = [] then default_recipes dir else recipes);
         requires = words "requires";
         link_flags = words "link-flags";
+        js_files = List.map (absolute dir) (words "js-files");
         cflags = words "cflags";
       }
   | None -> (

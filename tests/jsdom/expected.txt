@@ -1,0 +1,4 @@
+after clicks: clicked 2
+ocamlAdd(2, 3) = 5
+ocamlUpper("abc") = ABC
+console: main done

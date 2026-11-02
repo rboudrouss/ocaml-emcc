@@ -1,0 +1,30 @@
+x=42 name=héllo wörld
+name=changed add=2.5
+split: a|b|c
+length=5 upper=A,B,C
+bytestring="\233\000z"
+max=9 pow=1.41421
+bool=true false
+null: false true
+undefined: false
+typeof=object instanceof=true
+int32=-2147483643
+array: 4 [1;2;3;4]
+map: [2;4;6;8]
+reduce: 10
+call: 42
+unsafe callback: 5
+meth callback: 107
+opaque: 5 same=true
+js error: TypeError / boom
+failure: a string
+Not_found through JavaScript
+raised: mine
+typed: 3 -2
+back: 3 300
+bytes: abc abc
+json: [0,1,"a",[254,2.5]]
+parse: 12
+main done
+promise: 3
+timeouts: 3

@@ -1,0 +1,5 @@
+; -no-check-prims: the primitives of prims.js exist only in the wasm link
+(executable
+ (name jp)
+ (libraries js_of_ocaml)
+ (link_flags (-no-check-prims)))

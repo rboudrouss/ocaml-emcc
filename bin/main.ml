@@ -29,6 +29,10 @@ link options (build and link):
   --no-missing-primitives
                   fail to link when a primitive is defined by no library
                   (default: a stub raising Failure when called, and a warning)
+  --js-file F     JavaScript file defining primitives of the program (its
+                  `function NAME` and `//Provides: NAME`), called with
+                  JavaScript values as js_of_ocaml's (repeatable; also
+                  `js-files:` in ocaml-emcc.conf)
   --emcc-flag F   extra emcc link flag (repeatable); also everything after
                   `--`, $OCAML_EMCC_LDFLAGS and `link-flags:` in ocaml-emcc.conf
 
@@ -53,7 +57,7 @@ global options:
   -v                      show the commands run
 
 A project can have an ocaml-emcc.conf (target, recipes, requires, link-flags,
-cflags) and an emcc-recipes/ directory, found from the current directory.
+js-files, cflags) and an emcc-recipes/ directory, found from the current directory.
 |}
 
 let die_usage () = prerr_string usage; exit 2
@@ -161,7 +165,7 @@ let default_link_opts : Link.opts =
   {
     bc = ""; output = ""; lib_dirs = []; libs = []; emcc_flags = []; mode = Link.Embed;
     opt = "-O2"; stack_size = "8MB"; auto_deps = true; check = true; wasi = false; compiled = false;
-    missing_prims = true;
+    missing_prims = true; js_files = [];
   }
 
 (* Options shared by `link` and `build`; [extra] handles command-specific
@@ -181,6 +185,7 @@ let parse_link_opts ?(extra = fun _ -> None) args =
     | "--compiled" :: rest -> go { o with compiled = true } pos rest
     | "--no-missing-primitives" :: rest -> go { o with missing_prims = false } pos rest
     | "--emcc-flag" :: f :: rest -> go { o with emcc_flags = o.emcc_flags @ [ f ] } pos rest
+    | "--js-file" :: f :: rest -> go { o with js_files = o.js_files @ [ f ] } pos rest
     | "--" :: rest -> ({ o with emcc_flags = o.emcc_flags @ rest }, List.rev pos)
     | l -> (
         match extra l with
@@ -197,7 +202,8 @@ let parse_link_opts ?(extra = fun _ -> None) args =
    command line (emcc keeps the last -s setting) *)
 let with_config_flags (o : Link.opts) =
   let env_flags = Option.fold ~none:[] ~some:Str_util.words (Env.getenv_opt "OCAML_EMCC_LDFLAGS") in
-  { o with emcc_flags = (Project.get ()).link_flags @ env_flags @ o.emcc_flags }
+  let p = Project.get () in
+  { o with emcc_flags = p.link_flags @ env_flags @ o.emcc_flags; js_files = p.js_files @ o.js_files }
 
 let cmd_link args =
   let out = ref "" in
