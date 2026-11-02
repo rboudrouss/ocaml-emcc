@@ -15,12 +15,16 @@
    too.  The main thread runs it when it waits (a mutex, a join), but not in
    poll and select, which never wait there: a main thread looping on them
    (Lwt_main, Async's scheduler) waiting for a job of another thread to
-   finish (Lwt_unix.stat) never ran the job's stat.  They run it first. */
+   finish (Lwt_unix.stat) never ran the job's stat.  They run it first.
+   Without descriptors, they only wait: in the calling thread, rather than
+   on the main one (OCaml 4.14's tick thread sleeps with select, which never
+   returned while the main thread computed: no preemption). */
 
 #include <errno.h>
 #include <poll.h>
 #include <stdlib.h>
 #include <sys/select.h>
+#include <time.h>
 #include <emscripten/em_js.h>
 #include <emscripten/proxying.h>
 #include <emscripten/syscalls.h>
@@ -42,7 +46,18 @@ static void run_queued_calls(void) {
   if (emscripten_is_main_runtime_thread()) emscripten_main_thread_process_queued_calls();
 }
 
+static int sleep_ms(int timeout) {
+  if (timeout < 0) {
+    errno = EINVAL;
+    return -1;
+  }
+  struct timespec t = { timeout / 1000, (long)(timeout % 1000) * 1000000 };
+  nanosleep(&t, NULL);
+  return 0;
+}
+
 int poll(struct pollfd *fds, nfds_t n, int timeout) {
+  if (n == 0) return sleep_ms(timeout);
   run_queued_calls();
   int r = __syscall_poll(fds, n, timeout);
   if (r < 0) {
@@ -59,6 +74,7 @@ int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struc
     return -1;
   }
   int timeout = tv ? tv->tv_sec * 1000 + tv->tv_usec / 1000 : -1;
+  if (!(readfds || writefds || exceptfds) || nfds == 0) return sleep_ms(timeout);
   struct pollfd *fds = calloc(nfds ? nfds : 1, sizeof *fds);
   if (!fds) {
     errno = ENOMEM;
