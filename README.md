@@ -460,8 +460,10 @@ Limitations:
   `Stdlib.Effect` (and every other module) whole. That doubles the size of
   the program (1.4 to 2.8 MB for `tests/dynlink`), though its speed
   hardly changes. A plugin built in the other mode is refused when loaded.
-- Compiled mode only, without asyncify (the plugin is compiled with tail
-  calls).
+- Compiled mode only. A program linked with asyncify (`-sASYNCIFY`, as
+  raylib's) loads plugins, but must not suspend while the code of a plugin
+  is on the stack: asyncify only instruments the program. JSPI (`-sJSPI`)
+  has no such limit.
 
 ## Threads
 
