@@ -6,7 +6,7 @@ OE_LIB ?= $(abspath ../../_build/install/default/lib)
 export OCAMLPATH := $(OE_LIB):$(OCAMLPATH)
 export CAML_LD_LIBRARY_PATH := $(OE_LIB)/stublibs:$(CAML_LD_LIBRARY_PATH)
 OCAMLC = ocamlfind ocamlc -package str,ocaml-emcc.dynlink
-PLUGINS = out/a.wasm out/b.wasm out/raises.wasm out/late.wasm
+PLUGINS = out/a.wasm out/b.wasm out/raises.wasm out/stale.wasm out/late.wasm
 
 # the plugins are read from the real file system (--node-fs)
 out/main.js: main.bc $(PLUGINS:.wasm=.src)
@@ -24,6 +24,11 @@ out/b.src: b1.ml b2.ml out/a.src
 	mkdir -p out; $(OCAMLC) -c b1.ml b2.ml; $(OCAMLC) -a b1.cmo b2.cmo -o b.cma; echo b.cma > $@
 out/raises.src: raises.ml main.bc
 	mkdir -p out; $(OCAMLC) -c raises.ml; echo raises.cmo > $@
+# compiled against another version of App
+# (raises.ml: refused before it runs)
+out/stale.src: raises.ml main.bc
+	mkdir -p out/stale; cp app.ml raises.ml out/stale/; echo 'let extra = 0' >> out/stale/app.ml
+	(cd out/stale && $(OCAMLC) -c app.ml raises.ml); echo out/stale/raises.cmo > $@
 out/late.src: late.ml out/b.src
 	mkdir -p out; $(OCAMLC) -c late.ml; echo late.cmo > $@
 

@@ -13,6 +13,7 @@ let () =
   load "out/b.wasm";
   load "out/a.wasm";
   load "out/raises.wasm";
+  load "out/stale.wasm";
   load "out/nothing.wasm";
   App.run_all ();
   Emcc_dynlink.load_url "out/late.wasm" (function
