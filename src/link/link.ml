@@ -258,7 +258,7 @@ let max_domains = 8
    interpreter, and that of compiled code's locals in memory *)
 let thread_stack_size = 1024 * 1024
 
-let threads_flags ~wasi =
+let threads_flags ~wasi ~proxy_to_pthread =
   [ "-pthread"; "-Wno-pthreads-mem-growth" ]
   @
   if wasi then
@@ -267,14 +267,26 @@ let threads_flags ~wasi =
        wasi_threads.c's.) *)
     [ "-Wl,--export-memory" ]
   else
-    (* In a browser, workers started before main: a thread created by a
-       program that then waits for it (join, a mutex) would never start,
-       a new worker only loading once the main thread returns to its event
-       loop.  8: OCaml's tick thread, and 7 others at the same time
-       (-sPTHREAD_POOL_SIZE=N sets it).  None under node, which starts a
-       worker at once: the pool would cost 200 ms and 140 MB at startup. *)
-    [ "-sDEFAULT_PTHREAD_STACK_SIZE=" ^ string_of_int thread_stack_size; "-sPTHREAD_POOL_SIZE=ENVIRONMENT_IS_NODE?0:8";
+    [ "-sDEFAULT_PTHREAD_STACK_SIZE=" ^ string_of_int thread_stack_size;
       "--js-library"; Filename.concat (Env.share ()) "runtime/threads.js" ]
+    @
+    if proxy_to_pthread then
+      (* main runs in a pthread: the main thread of JavaScript stays free
+         for what the other threads ask it (emscripten runs their system
+         calls on files there: a write to stdout, the mmap of a new
+         domain), and to start their workers.  A main thread waiting for
+         another (a loop on a flag, Domain.join) or computing would
+         otherwise never run them. *)
+      [ "-sPROXY_TO_PTHREAD" ]
+    else
+      (* (js_of_ocaml: main on the page's thread) In a browser, workers
+         started before main: a thread created by a program that then waits
+         for it (join, a mutex) would never start, a new worker only loading
+         once the main thread returns to its event loop.  8: OCaml's tick
+         thread, and 7 others at the same time (-sPTHREAD_POOL_SIZE=N sets
+         it).  None under node, which starts a worker at once: the pool
+         would cost 200 ms and 140 MB at startup. *)
+      [ "-sPTHREAD_POOL_SIZE=ENVIRONMENT_IS_NODE?0:8" ]
 
 (* The primitives called by the generated C, with the arity of their call
    sites (-1: an array and its length), from its declarations
@@ -844,6 +856,9 @@ let run o =
   if jsoo && standalone then
     Env.fail "%s: js_of_ocaml's primitives and --js-file need the JavaScript glue: link OUT.js, not a standalone .wasm"
       (if o.js_files <> [] then "--js-file" else o.bc);
+  (* threads with the JavaScript glue: the program runs in a pthread,
+     unless it needs the page (js_of_ocaml's primitives) *)
+  let proxy_to_pthread = o.threads && (not o.wasi) && not jsoo in
   let jsoo_objs =
     lazy
       (if not jsoo then []
@@ -993,7 +1008,8 @@ let run o =
     if standalone || compiled = None then defaults
     else
       defaults
-      @ [ "--pre-js"; Filename.concat (Env.share ()) "runtime/node_stack.js"; "-sEXPORTED_FUNCTIONS=_main,_malloc,_free" ]
+      @ [ "--pre-js"; Filename.concat (Env.share ()) ("runtime/" ^ if proxy_to_pthread then "node_threads_stack.js" else "node_stack.js");
+          "-sEXPORTED_FUNCTIONS=_main,_malloc,_free" ]
   in
   (* WASI: no emscripten imports at all (PURE_WASI: memory growth without
      telling JS), and the standard exception handling instructions
@@ -1004,7 +1020,7 @@ let run o =
     if o.wasi then defaults @ [ "-sPURE_WASI=1"; "-sBINARYEN_EXTRA_PASSES=--translate-to-exnref,--emit-exnref" ]
     else defaults
   in
-  let defaults = if o.threads then defaults @ threads_flags ~wasi:o.wasi else defaults in
+  let defaults = if o.threads then defaults @ threads_flags ~wasi:o.wasi ~proxy_to_pthread else defaults in
   let program_objs =
     match compiled with
     | Some c -> c.c_objs @ [ c.support_obj ]

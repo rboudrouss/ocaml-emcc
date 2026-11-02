@@ -446,20 +446,25 @@ wasmtime run -W exceptions=y,threads=y,shared-memory=y -S threads=y --dir . main
 With `--threads` (or `threads: yes` in `ocaml-emcc.conf`), `Thread.create`
 starts a real thread, and so does `Domain.spawn` with OCaml 5.3 or later:
 domains run in parallel. `Mutex`, `Condition`, `Event`, `Atomic` and
-`Domain.DLS` work as natively. Interpreted mode only for now: the compiled
-mode does not support threads yet.
+`Domain.DLS` work as natively, interpreted or compiled (`--compiled`: the
+generated code then polls, in its loops and before its tail calls, so that
+a thread computing lets the others run).
 
 - **node and browsers**: threads are web workers sharing the memory of the
-  program (emscripten's pthreads). In a browser, the page must be
-  cross-origin isolated, served with the headers
-  `Cross-Origin-Opener-Policy: same-origin` and
-  `Cross-Origin-Embedder-Policy: require-corp` (SharedArrayBuffer). There,
-  workers are started before the program (8, OCaml's tick thread included,
-  `-sPTHREAD_POOL_SIZE=N` sets it): a browser only starts a new one once
-  the main thread is back in its event loop, so a program waiting for more
-  threads than that at once (`Thread.join`, a mutex) blocks forever. The
-  main thread waits by spinning. node starts each worker when its thread is
-  created.
+  program (emscripten's pthreads), and so is the program's main thread
+  (`-sPROXY_TO_PTHREAD`): the JavaScript thread stays free to run what the
+  others ask it (emscripten's file system is there) and to start their
+  workers. In a browser, the page must be cross-origin isolated, served
+  with the headers `Cross-Origin-Opener-Policy: same-origin` and
+  `Cross-Origin-Embedder-Policy: require-corp` (SharedArrayBuffer).
+  Programs using js_of_ocaml's primitives keep their main thread on the
+  page's, for the DOM: there, workers are started before the program (8,
+  OCaml's tick thread included, `-sPTHREAD_POOL_SIZE=N` sets it), as a
+  browser only starts a new one once that thread is back in its event
+  loop, so a program waiting for more threads than that at once blocks
+  forever; that thread waits by spinning, and only runs the other threads'
+  file operations when it waits. In compiled mode under node, every thread
+  gets the large stack of the main one (`$OCAML_EMCC_STACK_MB`).
 - **WASI**: threads use wasi-threads (`thread-spawn`), the ABI of
   wasi-libc's `wasm32-wasip1-threads`: wasmer (7.5; `--volume DIR:/DIR`
   for files) and wasmtime up to 46 (`-S threads=y`; 47 removed it) run

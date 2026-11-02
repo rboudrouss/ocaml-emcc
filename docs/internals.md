@@ -122,12 +122,21 @@ block is a plain data segment and the atomics act on an unshared memory:
 the link decides, and `--threads` adds `-pthread` to it. The stamps of the
 recipes record it (`abi=pthread`): those built before are built again.
 
-With emscripten's glue, threads are web workers (`-sPTHREAD_POOL_SIZE`
-of them started before `main`). OCaml's threads and domains are detached:
+With emscripten's glue, threads are web workers, and `main` runs in one
+too (`-sPROXY_TO_PTHREAD`), unless the program uses js_of_ocaml's
+primitives (the page's thread, for the DOM; `-sPTHREAD_POOL_SIZE` workers
+started before `main` in a browser). Without it, the JavaScript thread runs
+the program, and the other threads' system calls on files (emscripten's
+file system lives there) only when the program waits: one computing, or
+waiting for a flag another thread sets after a `prerr_endline`, never let
+them run; neither did OCaml 4.14's tick thread, whose `select` went there
+(it now sleeps in place: no descriptors). Under node, `node_threads_stack.js`
+gives each worker the large stack `node_stack.js` gives the program
+otherwise. OCaml's threads and domains are detached:
 an exiting one asks the main thread to take its worker back with a
-`postMessage`, which a main thread blocked in `Thread.join` never
+`postMessage`, which a JavaScript thread blocked in `Thread.join` never
 receives; `share/runtime/threads.c` and `threads.js` route it through
-emscripten's proxying queue, which the main thread runs while it waits.
+emscripten's proxying queue, which it runs while it waits.
 The system calls of the other threads on files run on the main thread
 through that queue too, which emscripten's `poll` and `select` do not
 run (they never wait on the main thread): a main thread looping on them
