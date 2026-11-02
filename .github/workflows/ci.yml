@@ -38,9 +38,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # c_of_ocaml's C is that of the runtime of OCaml 5.4 at most (5.5
-        # changed caml_sys_init)
-        ocaml: ['4.14', '5.4']
+        ocaml: ['4.14', '5.5']
         # wasi: OUT.wasm --wasi, run with node's WASI
         target: [wasm32, wasm64, wasi]
     runs-on: ubuntu-latest
