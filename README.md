@@ -400,9 +400,10 @@ ocaml-emcc plugin editor.cma -o editor.wasm --main app.js
 - `Emcc_dynlink.load_url` fetches a plugin, loads it and runs the
   initialization of its modules. `Emcc_dynlink.loadfile` does the same from a
   file of the program (under node, or with emscripten's file system). They
-  fail on a plugin that uses a module that is not loaded yet, or defines
-  one already loaded, as `Dynlink` does. A plugin can use the modules of
-  the plugins loaded before it.
+  fail on a plugin that uses a module that is not loaded yet, defines one
+  already loaded, or was compiled against another version of the
+  interface of a loaded module, as `Dynlink` does. A plugin can use the
+  modules of the plugins loaded before it.
 - `--dynlink` links the program as an emscripten main module. It exports
   the C symbols plugins import: the runtime, and the stubs and C
   libraries the program links. Its compilation units are kept whole and
@@ -413,9 +414,6 @@ Limitations:
 
 - The C stubs a plugin needs must be in the program, which links them
   when it uses their library (with `-linkall`, all of its modules).
-- The interfaces are not checked, unlike `Dynlink`: a plugin compiled
-  against another version of a module of the program crashes instead of
-  being refused.
 - Plugins cannot be unloaded. Effects (`--effects double-translation` of
   c_of_ocaml) are disabled in the program and its plugins.
 - Compiled mode only, without asyncify (the plugin is compiled with tail
