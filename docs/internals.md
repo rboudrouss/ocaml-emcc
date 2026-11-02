@@ -110,6 +110,39 @@ defines one of the functions of `wasi.c`, `compat.c` or `dlsym.c`
 (`__syscall_getcwd` or `getaddrinfo` for instance), `link` leaves
 ocaml-emcc's out and says so: the program's definition is the one linked.
 
+## Threads
+
+All the C code (runtime, recipes, stubs) is compiled with `-pthread`:
+atomics, and thread-local variables (`caml_state` in OCaml 5) in a TLS
+block. Objects built with and without it cannot be mixed: one built
+without reads the thread-local variables of the others as plain globals
+("no domain lock held"), and a link with a shared memory refuses it. Such
+objects still link into a program without shared memory, where the TLS
+block is a plain data segment and the atomics act on an unshared memory:
+the link decides, and `--threads` adds `-pthread` to it. The stamps of the
+recipes record it (`abi=pthread`): those built before are built again.
+
+With emscripten's glue, threads are web workers (`-sPTHREAD_POOL_SIZE`
+of them started before `main`). OCaml's threads and domains are detached:
+an exiting one asks the main thread to take its worker back with a
+`postMessage`, which a main thread blocked in `Thread.join` never
+receives; `share/runtime/threads.c` and `threads.js` route it through
+emscripten's proxying queue, which the main thread runs while it waits.
+The system calls of the other threads on files run on the main thread
+through that queue too, which emscripten's `poll` and `select` do not
+run (they never wait on the main thread): a main thread looping on them
+(`Lwt_main` waiting for a job's `stat`) never ran it. `threads.c`'s `poll`
+and `select` run it first. No worker pool under node, which starts a
+worker at once (the pool cost 200 ms and 140 MB at startup).
+
+A WASI module has no glue to start its threads: `share/runtime/wasi_threads.c`
+implements the JavaScript functions of emscripten's pthread library the C
+library imports (`__pthread_create_js`...) with wasi-threads' `thread-spawn`,
+the host running the module's `wasi_thread_start` export (stack pointer
+first, in assembly, then TLS and the thread's state) in a new instance on
+a new thread. Its pipes are protected by a lock, a blocking read or a
+`poll` waits for another thread to write.
+
 ## JavaScript primitives
 
 When the bytecode links js_of_ocaml's stub libraries (`jsoo_runtime_stubs`,
@@ -278,9 +311,8 @@ builds single-threaded.
   and the JS implementation would route every primitive call through JS
 - `-fwasm-exceptions`: C++ exceptions with the same wasm instructions
   (emscripten's JS exceptions cannot be thrown alongside)
-- no `-pthread` (lwt asks for it): the program is single-threaded, and
-  with it `caml_state` would be a thread-local variable, unlike in the
-  runtime
+- `-pthread` when compiling (the wrapper adds it, the recipes get it in
+  `CFLAGS`), not when linking: see [Threads](#threads)
 
 ## OCaml versions
 
@@ -294,9 +326,9 @@ The `ocaml` recipe works around these issues:
 | ≥ 4.14  | `runtime/sak` is a build-time tool | built with the host `cc` |
 | ≤ 4.11  | otherlibs ignore the configure `CFLAGS` | target flags passed in `CC` |
 | 5.x     | no `sigaltstack` in emscripten ("Failed to allocate signal stack") | `ac_cv_func_sigaction=no` |
-| 5.x     | configure adds `-pthread`: runtime and stubs disagree on `caml_state` ("no domain lock held") | `PTHREAD_CFLAGS=-D_REENTRANT` given to configure, which AX_PTHREAD keeps |
 | 5.x     | minor heap committed with `mmap(MAP_FIXED)` ("Failed to create main domain") | `patches/5.0/`, `patches/5.1+/`: committed with `mprotect`, as on Cygwin |
-| 5.x     | the minor heaps of all the possible domains (16 in wasm32, 128 in wasm64) reserved at startup, which emscripten's `mmap` allocates and clears, while `Domain.spawn` fails: 13 MB more memory and ~10 ms in wasm32, 300 MB and ~130 ms in wasm64 | `patches/5.0-5.2/`, `patches/5.3+/`: a single domain (`Max_domains`, the default of `OCAMLRUNPARAM=d` since 5.3) |
+| 5.x     | the minor heaps of all the possible domains (16 in wasm32, 128 in wasm64) reserved at startup, which emscripten's `mmap` allocates and clears: 13 MB more memory and ~10 ms in wasm32, 300 MB and ~130 ms in wasm64 | `patches/5.3+/`: the default of `OCAMLRUNPARAM=d` comes from the program (`caml_emcc_max_domains`, `compat.c`): 1, 8 with `--threads`; `patches/5.0-5.2/`: a single domain (`Max_domains` is a constant there) |
+| ≥ 5.3   | without POSIX signals, a new domain has no signal stack, which its thread takes for a failure ("Failed to create domain: signal stack") | `patches/5.3+/`: not checked |
 | 5.0     | configure only compiles its `pthread_getaffinity_np` test: undefined at link time | `patches/5.0/`: not called |
 | 5.0     | otherlibs stub archives without the `byt` suffix (5.1) | `libunix.a`, `libcamlstr.a`... |
 | ≥ 5.5   | `caml_byte_program_mode` and `caml_runtime_standard_library_default` come from the file ocamlc generates | weak definitions (`compat.c`) |

@@ -195,7 +195,9 @@ With node, use `node:wasi` with `version: 'preview1'` and `preopens` (see
   standard streams cannot be duplicated.
 - Pipes (`Unix.pipe`) are buffers in memory, between descriptors of the
   program: enough for the wake-up pipes of Async and lwt. Reading an empty
-  pipe fails with `EAGAIN` rather than block, as nothing else can fill it.
+  pipe fails with `EAGAIN` rather than block, as nothing else can fill it,
+  unless the program has threads (`--threads`): it then waits for another
+  thread to write, as `Unix.select` does.
   Each end takes a descriptor from the host, so a pipe needs a preopened
   directory (`--dir`).
 
@@ -432,14 +434,55 @@ Limitations:
 - Compiled mode only, without asyncify (the plugin is compiled with tail
   calls).
 
+## Threads
+
+```sh
+ocaml-emcc build main.js --threads
+ocaml-emcc build main.wasm --wasi --threads
+wasmtime run -W exceptions=y,threads=y,shared-memory=y -S threads=y --dir . main.wasm
+```
+
+With `--threads` (or `threads: yes` in `ocaml-emcc.conf`), `Thread.create`
+starts a real thread, and so does `Domain.spawn` with OCaml 5.3 or later:
+domains run in parallel. `Mutex`, `Condition`, `Event`, `Atomic` and
+`Domain.DLS` work as natively. Interpreted mode only for now: the compiled
+mode does not support threads yet.
+
+- **node and browsers**: threads are web workers sharing the memory of the
+  program (emscripten's pthreads). In a browser, the page must be
+  cross-origin isolated, served with the headers
+  `Cross-Origin-Opener-Policy: same-origin` and
+  `Cross-Origin-Embedder-Policy: require-corp` (SharedArrayBuffer). There,
+  workers are started before the program (8, OCaml's tick thread included,
+  `-sPTHREAD_POOL_SIZE=N` sets it): a browser only starts a new one once
+  the main thread is back in its event loop, so a program waiting for more
+  threads than that at once (`Thread.join`, a mutex) blocks forever. The
+  main thread waits by spinning. node starts each worker when its thread is
+  created.
+- **WASI**: threads use wasi-threads (`thread-spawn`), the ABI of
+  wasi-libc's `wasm32-wasip1-threads`: wasmtime up to 46 (`-S threads=y`;
+  47 removed it), WAMR, wasmer... The module imports its memory, shared.
+  `Domain.recommended_domain_count` is `$OCAML_EMCC_CPUS`, or 4.
+- The runtime reserves the minor heaps of the possible domains at startup:
+  8 by default (32 MB on wasm32, 16 MB on wasm64), `OCAMLRUNPARAM=d=N`
+  sets it.
+
+lwt runs its blocking jobs (`Lwt_unix` file operations...) in its pool of
+threads, and `Lwt_preemptive` works. Async only runs the jobs of its thread
+pool (`In_thread.run`) synchronously when it cannot start a thread (not
+tried with `--threads` yet).
+
+Without `--threads`, a program is single-threaded as before:
+`Thread.create` and `Domain.spawn` fail, while `Mutex` and `Condition` work.
+lwt and Async then run their jobs synchronously (`Lwt_preemptive` fails).
+The C code is compiled for threads either way (`-pthread`), with no
+measurable cost.
+
 ## Differences from native
 
 Besides 31-bit integers on wasm32:
 
-- **No threads.** `Thread.create` and `Domain.spawn` fail, while `Mutex`
-  and `Condition` work. lwt runs its blocking jobs (`Lwt_unix` file
-  operations...) synchronously, and `Lwt_preemptive` fails. So does Async
-  with those of its thread pool (`In_thread.run`).
+- **Threads** need `--threads` (see [Threads](#threads)).
 - **ctypes structs**: ctypes and the packages using it are rebuilt for the
   target, so that their structs have its layouts (see
   [ctypes layouts](docs/internals.md#ctypes-layouts)). Those that cannot be
@@ -606,6 +649,7 @@ requires: cjson                 # recipes built before building/linking
 link-flags: -lcjson -sINITIAL_MEMORY=64MB
 cflags: -DNDEBUG
 recipes: emcc-recipes           # recipe directories (default: ./emcc-recipes)
+threads: yes                    # link with --threads
 ```
 
 Emscripten link flags come from, in increasing precedence (emcc keeps the
@@ -717,9 +761,7 @@ and 0.4, lmdb 1.1, dune 3.12 to 3.24 and mccs 1.1+13 to 1.1+19.
 
 ## Next steps
 
-- Domains: a `--threads` variant (runtime, stubs and link with `-pthread`)
-  could enable `Domain.spawn`. It needs SharedArrayBuffer (COOP/COEP
-  headers on the web).
+- Threads in compiled mode (c_of_ocaml's runtime support).
 - Propose the patch of dune's `(ctypes)` stanza upstream
   ([ocaml/dune#13650](https://github.com/ocaml/dune/issues/13650)), so that
   the switch's dune can build it.
