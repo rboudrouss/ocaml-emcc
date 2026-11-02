@@ -19,10 +19,15 @@ done
 export OCAML_EMCC_TARGET=$TARGET
 # --wasi: a "wasi" entry in the targets column of the test
 TARGET_COL=$TARGET; [ $WASI = yes ] && TARGET=wasm32 TARGET_COL=wasi
-# the WASI host: $WASMTIME, wasmtime in PATH, else node:wasi
+# the WASI host: $WASMTIME, wasmtime in PATH, else node:wasi.  Programs
+# with threads (threads: yes in their ocaml-emcc.conf) need wasi-threads:
+# $WASMTIME_THREADS, a wasmtime <= 46 (47 removed it).
 WASMTIME=${WASMTIME:-$(command -v wasmtime || true)}
+WASMTIME_THREADS=${WASMTIME_THREADS:-$WASMTIME}
 wasi_run() {
-  if [ -n "$WASMTIME" ]; then "$WASMTIME" run -W exceptions=y --dir . --dir /tmp -S inherit-env=y "$@"
+  if grep -qs '^threads: *yes' ocaml-emcc.conf; then
+    "$WASMTIME_THREADS" run -W exceptions=y,threads=y,shared-memory=y -S threads=y --dir . --dir /tmp -S inherit-env=y "$@" 2> >(grep -v '^WARNING: the `-Sthreads` flag' >&2)
+  elif [ -n "$WASMTIME" ]; then "$WASMTIME" run -W exceptions=y --dir . --dir /tmp -S inherit-env=y "$@"
   else "$NODE" --no-warnings "$TESTS_DIR/wasi-run.mjs" "$@"; fi
 }
 
@@ -77,6 +82,9 @@ dynweb    | main     |            | compiled playwright         | wasm32 wasm64 
 jsoo      | js       |            | js_of_ocaml-ppx             | wasm32 wasm64      |
 jsprims   | jp       |            | js_of_ocaml                 | wasm32 wasm64      |
 jsdom     | page     |            | js_of_ocaml-ppx playwright  | wasm32 wasm64      |
+threads   | th       |            | wasi-threads                | wasm32 wasm64 wasi |
+domains   | dm       |            | ocaml>=5.3 wasi-threads     | wasm32 wasm64 wasi |
+threadsweb | th      |            | playwright                  | wasm32 wasm64      |
 '
 # wasi (tests/run.sh --wasi): OUT.wasm --wasi, the tests checked that way.
 # ctypes needs libffi's JavaScript functions, no WASI host has them.
@@ -85,6 +93,9 @@ jsdom     | page     |            | js_of_ocaml-ppx playwright  | wasm32 wasm64 
 # before ctypes was rebuilt for wasm32 (as yaml's are), were not tried since.
 # depgraph needs its package installed: opam install ./tests/depgraph/pkg
 # dynlink, dyneffects and dynweb (plugins) are for the compiled mode only.
+# threads and domains (--threads) under --wasi need a wasmtime with
+# wasi-threads ($WASMTIME_THREADS, <= 46); threadsweb runs threads in
+# Chromium, as jsdom.
 # jsdom runs in headless Chromium (its check.mjs): it needs playwright,
 # PLAYWRIGHT_DIR (the directory of its node_modules) and
 # PLAYWRIGHT_BROWSERS_PATH.
@@ -92,6 +103,7 @@ jsdom     | page     |            | js_of_ocaml-ppx playwright  | wasm32 wasm64 
 has_pkg() {
   case $1 in
     compiled) [ -n "$COMPILED" ] ;;
+    wasi-threads) [ $WASI = no ] || { [ -n "$WASMTIME_THREADS" ] && [ "$("$WASMTIME_THREADS" --version | sed 's/^wasmtime \([0-9]*\).*/\1/')" -le 46 ]; } ;;
     playwright) [ -n "${PLAYWRIGHT_DIR:-}" ] && [ -d "$PLAYWRIGHT_DIR/node_modules/playwright" ] ;;
     ocaml\>=*) [ "$(printf '%s\n' "${1#ocaml>=}" "$(ocamlc -vnum)" | sort -V | head -1)" = "${1#ocaml>=}" ] ;;
     *) ocamlfind query "$1" >/dev/null 2>&1 || [ -d "$OPAM_SWITCH_PREFIX/lib/$1" ] ;;

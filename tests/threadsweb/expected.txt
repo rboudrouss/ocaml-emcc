@@ -1,0 +1,5 @@
+counter 40000, results 0 1 4 9
+queue: 1000 items, sum 500500
+event: 10 20 30 40 50
+delay: true
+done
