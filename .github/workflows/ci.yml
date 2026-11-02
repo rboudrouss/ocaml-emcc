@@ -112,7 +112,7 @@ jobs:
       - name: tests/run.sh threads (${{ matrix.target }}, interpreted)
         run: |
           case ${{ matrix.target }} in wasi) args=--wasi ;; *) args="--target ${{ matrix.target }}" ;; esac
-          opam exec -- bash -c "SWITCH=\$(opam var prefix) tests/run.sh $args threads domains threadsweb"
+          opam exec -- bash -c "SWITCH=\$(opam var prefix) tests/run.sh $args threads domains threadsweb lwtthreads"
       - if: failure()
         uses: actions/upload-artifact@v7
         with:
