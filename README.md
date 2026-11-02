@@ -394,6 +394,9 @@ ocaml-emcc build app.js --compiled --dynlink     # or link app.bc ... --compiled
 ocaml-emcc plugin editor.cma -o editor.wasm --main app.js
 ```
 
+(Effect handlers need `--effects double-translation` for the program, see
+below.)
+
 - `ocaml-emcc plugin` compiles a `.cma` or `.cmo` to a wasm side module
   that emscripten's dynamic linker loads. `--main` checks that the program
   exports everything the plugin needs.
@@ -414,8 +417,18 @@ Limitations:
 
 - The C stubs a plugin needs must be in the program, which links them
   when it uses their library (with `-linkall`, all of its modules).
-- Plugins cannot be unloaded. Effects (`--effects double-translation` of
-  c_of_ocaml) are disabled in the program and its plugins.
+- Plugins cannot be unloaded.
+- Effect handlers (OCaml 5) are disabled by default in a program with
+  plugins and in its plugins. `--effects double-translation` enables them
+  (`tests/dyneffects`), and a plugin built with `--main` follows the
+  program. An effect can then be performed by a plugin under a handler of
+  the program, and the other way round. The choice is made when the
+  program is built: its plugins may perform effects through any of its
+  functions (`List.iter`...), which must then have their CPS version,
+  and the program's own code cannot tell, since `-linkall` keeps
+  `Stdlib.Effect` (and every other module) whole. That doubles the size of
+  the program (1.4 to 2.8 MB for `tests/dynlink`), though its speed
+  hardly changes. A plugin built in the other mode is refused when loaded.
 - Compiled mode only, without asyncify (the plugin is compiled with tail
   calls).
 

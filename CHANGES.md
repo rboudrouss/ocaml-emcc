@@ -13,7 +13,9 @@
   compiles a library to a wasm side module, which a program linked with
   `--dynlink` loads with the new library `ocaml-emcc.dynlink`
   (`Emcc_dynlink.loadfile`, or `load_url` to fetch it in a web page),
-  checking their interfaces as `Dynlink` does.
+  checking their interfaces as `Dynlink` does. Effect handlers with
+  `--effects double-translation`, which plugins built with `--main`
+  follow.
 - Added recipes: async_unix, bls12-381-unix, bytesrw, cairo,
   class_group_vdf, core_unix, cpu, eio_posix, faad, ffmpeg, freetype,
   frei0r, gd, glfw3, hacl_func, lacaml, lame, libev, libevent,
