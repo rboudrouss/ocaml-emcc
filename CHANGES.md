@@ -4,10 +4,12 @@
   `Thread.create` starts a real thread and, with OCaml 5.3 or later,
   `Domain.spawn` a domain running in parallel, in node, browsers
   (cross-origin isolated pages) and WASI hosts with wasi-threads (wasmer,
-  wasmtime up to 46), in interpreted mode. lwt then runs its jobs in its threads,
-  and `Lwt_preemptive` works. The C code of the runtime, recipes and stubs
-  is now compiled with `-pthread` (programs without `--threads` stay
-  single-threaded): existing runtimes and recipes are built again.
+  wasmtime up to 46), in interpreted mode. lwt then runs its jobs in its
+  threads, and `Lwt_preemptive` works. The C code of the runtime, recipes
+  and stubs is now compiled with `-pthread` (programs without `--threads`
+  stay single-threaded): existing runtimes and recipes are built again.
+  The mpfr, libssl, libevent, pixman and fontconfig recipes are
+  thread-safe, liblo has its server thread.
 - js_of_ocaml's JavaScript primitives: programs using the libraries
   js_of_ocaml (`Js`, `Dom_html`, its ppx, js_of_ocaml-lwt, Brr...) run in
   browsers and node, interpreted or compiled, on both targets, with the
