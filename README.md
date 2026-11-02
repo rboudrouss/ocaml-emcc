@@ -439,6 +439,7 @@ Limitations:
 ```sh
 ocaml-emcc build main.js --threads
 ocaml-emcc build main.wasm --wasi --threads
+wasmer run main.wasm                # or wasmtime <= 46:
 wasmtime run -W exceptions=y,threads=y,shared-memory=y -S threads=y --dir . main.wasm
 ```
 
@@ -460,8 +461,9 @@ mode does not support threads yet.
   main thread waits by spinning. node starts each worker when its thread is
   created.
 - **WASI**: threads use wasi-threads (`thread-spawn`), the ABI of
-  wasi-libc's `wasm32-wasip1-threads`: wasmtime up to 46 (`-S threads=y`;
-  47 removed it), WAMR, wasmer... The module imports its memory, shared.
+  wasi-libc's `wasm32-wasip1-threads`: wasmer (7.5; `--volume DIR:/DIR`
+  for files) and wasmtime up to 46 (`-S threads=y`; 47 removed it) run
+  them. The module imports its memory, shared.
   `Domain.recommended_domain_count` is `$OCAML_EMCC_CPUS`, or 4.
 - The runtime reserves the minor heaps of the possible domains at startup:
   8 by default (32 MB on wasm32, 16 MB on wasm64), `OCAMLRUNPARAM=d=N`
@@ -560,7 +562,7 @@ A recipe is built once per switch and target, and is not rebuilt when it changes
 | `sdl2` | tsdl | emscripten's port (`-sUSE_SDL=2`); under node, only the timer and events subsystems |
 | `glfw3` | glfw-ocaml | emscripten's (`-sUSE_GLFW=3`), WebGL 2; no gamepads; a window needs a web page |
 | `libev` | lwt (when the host's uses it) | poll backend |
-| `libssl` | ssl | OpenSSL: generic C, no threads |
+| `libssl` | ssl | OpenSSL: generic C |
 | `ffmpeg` | ffmpeg-avutil, ffmpeg-avcodec... | its own codecs, formats and filters; generic C, no threads, networking or external libraries |
 | `cairo` (`pixman`, `libpng`, `freetype`, `libfontconfig`) | cairo2 | image, PDF, PostScript, SVG and script surfaces, FreeType fonts; fontconfig finds the host's fonts under node; no X11; pixman without SIMD; built with meson (and gperf) |
 | `oniguruma` | oniguruma | |
@@ -571,10 +573,10 @@ A recipe is built once per switch and target, and is not rebuilt when it changes
 | `shine` | shine | |
 | `ncurses` | curses | wide-character libraries; reads the host's terminfo under node; needs more than 64 KB of stack |
 | `libjpeg`, `gd` | gd | libjpeg-turbo without SIMD; libgd with PNG, JPEG and FreeType |
-| `liblo` | lo | Open Sound Control; without threads |
+| `liblo` | lo | Open Sound Control (its server thread needs `--threads`) |
 | `openblas` | lacaml, nx, owl... (`-lblas`, `-llapack` too) | BLAS, CBLAS, LAPACK and LAPACKE in C (no Fortran), generic kernels, no threads; its subroutines' C signatures made to agree (wasm traps on a mismatch); 30 to 40 minutes to build on one core |
 | `lame` | lame | libmp3lame, no assembly |
-| `libevent` | libevent | poll and select backends, no threads or OpenSSL |
+| `libevent` | libevent | poll and select backends, no OpenSSL |
 | `liblzo2` | lzo | |
 | `nlopt` | nlopt | its C algorithms (not StoGO or AGS, in C++) |
 | `frei0r` | frei0r | its header only: no plugins |

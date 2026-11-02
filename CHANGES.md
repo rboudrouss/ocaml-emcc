@@ -3,8 +3,8 @@
 - Threads: with `--threads` (or `threads: yes` in `ocaml-emcc.conf`),
   `Thread.create` starts a real thread and, with OCaml 5.3 or later,
   `Domain.spawn` a domain running in parallel, in node, browsers
-  (cross-origin isolated pages) and WASI hosts with wasi-threads (wasmtime
-  up to 46), in interpreted mode. lwt then runs its jobs in its threads,
+  (cross-origin isolated pages) and WASI hosts with wasi-threads (wasmer,
+  wasmtime up to 46), in interpreted mode. lwt then runs its jobs in its threads,
   and `Lwt_preemptive` works. The C code of the runtime, recipes and stubs
   is now compiled with `-pthread` (programs without `--threads` stay
   single-threaded): existing runtimes and recipes are built again.
