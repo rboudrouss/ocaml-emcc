@@ -214,6 +214,14 @@ Exporting a symbol of an archive member makes wasm-ld link it, hence the
 exact computation: camlc_runtime.o replaces some members of libcamlrun.a,
 which would otherwise come along.
 
+The thread-local variables of the program (OCaml 5's `caml_state`,
+c_of_ocaml's state: everything is compiled with `-pthread`) are exported
+as offsets in its TLS block, which emscripten only turns into addresses in
+the GOT of a program with threads. Without, `share/runtime/dynlink.js`
+does it before `main`, with the TLS base of the main thread
+(`ocaml_emcc_tls_base` of dynlink.c) and the names `link` reads from the
+program's `dylink.0` section once linked.
+
 `plugin` runs c_of_ocaml on the `.cma` or `.cmo`, compiles the C with
 `-fPIC`, and links it with `-sSIDE_MODULE=1`. Its only export is
 `camlc_plugin_init`. `Emcc_dynlink.loadfile` (share/runtime/dynlink.c)

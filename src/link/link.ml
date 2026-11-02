@@ -644,6 +644,23 @@ let keep_raw_exports js =
         in
         write_file js s
 
+(* dynlink.js: the names of the thread-local variables the program
+   exports, read from its dylink.0 section once linked *)
+let tls_exports_for_plugins js =
+  let wasm = Filename.remove_extension js ^ ".wasm" in
+  if Filename.check_suffix js ".js" && Sys.file_exists js && Sys.file_exists wasm then (
+    let names = String.concat "," (List.map (Printf.sprintf "%S") (Wasm.tls_exports wasm)) in
+    let s = Compat.read_file js in
+    let s =
+      List.fold_left
+        (fun s pat ->
+          match Str_util.find s pat with
+          | Some i -> String.sub s 0 i ^ names ^ String.sub s (i + String.length pat) (String.length s - i - String.length pat)
+          | None -> s)
+        s [ "\"__OCAML_EMCC_TLS_EXPORTS__\""; "'__OCAML_EMCC_TLS_EXPORTS__'" ]
+    in
+    write_file js s)
+
 (* Compiles share/runtime/NAME.c, whose functions stand in for libc or
    emscripten ones.  Those the program's libraries define as well are
    renamed out of the way (and dropped by wasm-ld), so that theirs are
@@ -1029,7 +1046,15 @@ let run o =
      need (main_exports, computed before the link) *)
   let dynlink_objs = Lazy.force dynlink_objs in
   let exports_file = Filename.concat work "exports.json" in
-  let dynlink_flags = if o.dynlink then [ "-sMAIN_MODULE=2"; "-sEXPORTED_FUNCTIONS=@" ^ exports_file ] else [] in
+  let dynlink_flags =
+    if not o.dynlink then []
+    else
+      [ "-sMAIN_MODULE=2"; "-sEXPORTED_FUNCTIONS=@" ^ exports_file ]
+      @ (* the thread-local variables of the program for its plugins
+           (emscripten relocates them itself with threads) *)
+      if o.threads then []
+      else [ "--js-library"; Filename.concat (Env.share ()) "runtime/dynlink.js"; "-sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE=$ocamlEmccTlsExports" ]
+  in
   let defaults =
     if o.dynlink then List.filter (fun f -> not (Str_util.starts_with ~prefix:"-sEXPORTED_FUNCTIONS=" f)) defaults
     else defaults
@@ -1124,6 +1149,7 @@ let run o =
       (String.concat " " (List.sort_uniq compare traps));
   if code <> 0 then Env.fail "emcc failed (exit %d)" code;
   if foreign <> None then keep_raw_exports o.output;
+  if o.dynlink && not o.threads then tls_exports_for_plugins o.output;
   if standalone then report_imports ~wasi:o.wasi ~threads:o.threads o.output
 
 (* ---------------------------------------------------------------- plugins *)

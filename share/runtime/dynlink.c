@@ -24,6 +24,11 @@ extern void caml_fatal_uncaught_exception(value exn);
 
 #ifdef OCAML_EMCC_DYNLINK
 
+/* The TLS block of the main thread: dynlink.js turns the offsets of the
+   thread-local variables the program exports into addresses for its
+   plugins */
+EMSCRIPTEN_KEEPALIVE void *ocaml_emcc_tls_base(void) { return __builtin_wasm_tls_base(); }
+
 #ifdef OCAML_EMCC_DOUBLE_TRANSLATION
 /* Exported by a program compiled with effects (--effects
    double-translation): `ocaml-emcc plugin --main` compiles its plugins the

@@ -154,3 +154,25 @@ let exports path =
               ignore (uleb ());
               n));
   !acc
+
+(* The thread-local variables a main module exports (its "dylink.0"
+   section, export info: WASM_SYMBOL_TLS), which side modules address
+   through the GOT. *)
+let tls_exports path =
+  let acc = ref [] in
+  sections ~what:path (Compat.read_file path) (fun ((byte, uleb, name, pos) as r) id next ->
+      if id = 0 && name () = "dylink.0" then
+        while !pos < next do
+          let kind = byte () in
+          let size = uleb () in
+          let sub_end = !pos + size in
+          (* WASM_DYLINK_EXPORT_INFO *)
+          if kind = 3 then
+            List.iter
+              (fun (n, flags) -> if flags land 0x100 <> 0 then acc := n :: !acc)
+              (vec r (fun () ->
+                   let n = name () in
+                   (n, uleb ())));
+          pos := sub_end
+        done);
+  List.rev !acc
