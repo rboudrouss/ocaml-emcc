@@ -28,9 +28,22 @@ let target_flags () =
 
 let opt () = Option.value (Env.getenv_opt "OCAML_EMCC_OPT") ~default:"-O2"
 
+(* C code is compiled for threads (-pthread: atomics, real thread-local
+   variables such as OCaml 5's caml_state), whether the program uses them
+   or not: the link decides (--threads), and a program linked without them
+   is single-threaded.  Every object must agree: one built without -pthread
+   reads a thread-local variable of the others as a plain global, and a
+   program with threads (shared memory) refuses it.  Not in the link flags:
+   -pthread there makes the program multi-threaded. *)
+let compile_flags = [ "-pthread" ]
+
+(* What the objects of a recipe were built for: recorded in its stamp, a
+   recipe built for another one is built again (Recipe.decide). *)
+let abi = "pthread"
+
 (* What the toolchain wrappers and the link step record; extra flags are
    added on top at each use (recipes, stubs in tools/ocamlc). *)
-let base_cflags () = Str_util.words (opt ()) @ [ "-fno-strict-aliasing"; "-fwrapv" ] @ target_flags ()
+let base_cflags () = Str_util.words (opt ()) @ [ "-fno-strict-aliasing"; "-fwrapv" ] @ target_flags () @ compile_flags
 
 (* cflags: of ocaml-emcc.conf, then $OCAML_EMCC_EXTRA_CFLAGS *)
 let extra_cflags () =

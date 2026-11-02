@@ -1,15 +1,27 @@
-emscripten without pthreads: a single domain by default.
+emscripten: the default number of domains is the program's (link time).
 
-Domain.spawn cannot start a thread, while the runtime reserves the minor
-heaps of all the possible domains at startup, which emscripten's mmap
-allocates and clears: 16 MB in wasm32, 256 MB in wasm64.  OCAMLRUNPARAM's
-d= still sets it.
+The runtime reserves the minor heaps of all the possible domains at
+startup, which emscripten's mmap allocates and clears: 16 MB in wasm32,
+256 MB in wasm64 with the default of 128.  The runtime, built once for every
+program, gets the default from caml_emcc_max_domains: 1 (this weak
+definition), or the value a program linked with threads defines (compat.c).
+OCAMLRUNPARAM's d= still sets it.
 
 --- a/runtime/caml/domain.h
 +++ b/runtime/caml/domain.h
 @@
 -#ifdef ARCH_SIXTYFOUR
-+#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
-+#define Max_domains_def 1
++#if defined(__EMSCRIPTEN__)
++extern int caml_emcc_max_domains;
++#define Max_domains_def caml_emcc_max_domains
 +#elif defined(ARCH_SIXTYFOUR)
  #define Max_domains_def 128
+--- a/runtime/startup_aux.c
++++ b/runtime/startup_aux.c
+@@
+ static struct caml_params params;
+ const struct caml_params* const caml_params = &params;
++
++#ifdef __EMSCRIPTEN__
++__attribute__((weak)) int caml_emcc_max_domains = 1;
++#endif

@@ -135,6 +135,8 @@ let decide ~force ~sum ~installed name stamp =
       match Stamp.field "opam" fields with
       | Some p when installed p <> Stamp.version fields ->
           Build (Some (Printf.sprintf "%s was built from %s %s, building it again for %s" name p (Stamp.version fields) (installed p)))
+      | _ when Stamp.field "abi" fields <> Some Toolchain.abi ->
+          Build (Some (Printf.sprintf "%s was built without -pthread (before threads), building it again" name))
       | _ ->
           (* (stamps written before checksums were recorded have none) *)
           Built
@@ -209,5 +211,5 @@ let rec install ?(force = false) name =
         match lines with v :: e :: _ -> (v, e) | _ -> Env.fail "the %s recipe did not complete" name
       in
       Stamp.write name
-        ([ source_version; "emcc-" ^ emcc_version; "recipe=" ^ sum ]
+        ([ source_version; "emcc-" ^ emcc_version; "recipe=" ^ sum; "abi=" ^ Toolchain.abi ]
         @ match opam_package vars with Some p -> [ "opam=" ^ p ] | None -> [])

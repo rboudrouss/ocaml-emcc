@@ -5,7 +5,7 @@
 (* Bumped whenever [write] changes: the CLI then regenerates the toolchain
    in existing sysroots (cheap: the runtime is not rebuilt), and the stubs
    built with it are built again (see [Stamp.toolchain]). *)
-let version = "15"
+let version = "16"
 
 (* [template] with each @KEY@ replaced *)
 let subst vars template =
@@ -34,9 +34,10 @@ let symlink target link =
    flags built in.  Some packages replace dune's :standard C flags with
    their own (mlmpfr's (flags (:include c_flags.sexp))), which would drop
    -m64 and friends.
-   -pthread (lwt's configuration adds it) is dropped: the program is
-   single-threaded, and with it emcc compiles `caml_state` as a real
-   thread-local variable, which the runtime's is not (see the ocaml recipe).
+   -pthread is added when compiling, and dropped from links (lwt's
+   configuration adds it): all the C code is compiled for threads, and the
+   link of the program decides whether it has them (Toolchain.compile_flags).
+   An executable the build runs is single-threaded.
    So is -fopenmp (nx): emscripten's OpenMP needs threads (shared memory,
    which the libraries built without it refuse); the code then runs
    serially (_OPENMP undefined).
@@ -80,6 +81,7 @@ for a; do
   inc=
 done
 [ -n "$link" ] && [ -n "$exe" ] && set -- "$@" -sEXECUTABLE='@NODE@' -sSINGLE_FILE=1 -sEXIT_RUNTIME=1 -sNODERAWFS=1
+[ -z "$link" ] && set -- @COMPILE_FLAGS@ "$@"
 exec '@EMCC@' @TARGET_FLAGS@ $std -idirafter '@SYSROOT@/include' $link "$@"
 |}
 
@@ -197,6 +199,7 @@ let write () =
     [ ("STDLIB", stdlib);
       ("SYSROOT", sysroot); ("TARGET", target); ("HOST_BIN", host_bin); ("EMCC", emcc); ("CC", cc);
       ("STUB_STD", words (Lazy.force Toolchain.stub_std)); ("TARGET_FLAGS", words (Toolchain.target_flags ()));
+      ("COMPILE_FLAGS", words Toolchain.compile_flags);
       ("CFLAGS", words (Toolchain.base_cflags ())); ("EMAR", Toolchain.emar ());
       ("EMSDK_BIN", Filename.dirname emcc); ("SHARE", Env.share ()); ("NODE", emscripten_node ());
     ]

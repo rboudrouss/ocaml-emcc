@@ -90,6 +90,12 @@ let ensure_setup () =
   if not (Env.toolchain_ready ()) then (
     Env.log "no wasm runtime yet for this switch and target, building it (once)";
     Recipe.install "ocaml")
+  else if Option.bind (Stamp.read "ocaml") (Stamp.field "abi") <> Some Toolchain.abi then (
+    (* the stubs built from now on are for threads (-pthread), and must
+       agree with the runtime: the recipes are built again, the runtime
+       first, by Recipe.decide *)
+    Env.log "the wasm runtime of %s predates threads (-pthread), building it again" (Env.sysroot ());
+    Recipe.install "ocaml")
   else if Env.manifest "toolchain" <> Some Wrappers.version then (
     Env.log "updating the toolchain wrappers of %s" (Env.sysroot ());
     Wrappers.write ())

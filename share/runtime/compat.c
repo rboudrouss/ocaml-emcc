@@ -156,3 +156,10 @@ __attribute__((weak)) int getaddrinfo(const char *node, const char *service,
   return ocaml_emcc_addrinfo(AF_INET, type, proto, &a4, port, out);
 }
 #endif
+
+/* OCaml >= 5.3: the default maximum number of domains (see the ocaml
+   recipe), 1 unless the program is linked with threads */
+#ifndef OCAML_EMCC_MAX_DOMAINS
+#define OCAML_EMCC_MAX_DOMAINS 1
+#endif
+int caml_emcc_max_domains = OCAML_EMCC_MAX_DOMAINS;

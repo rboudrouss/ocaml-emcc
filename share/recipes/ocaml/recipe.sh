@@ -15,14 +15,14 @@
 #          host C compiler (emconfigure would turn it into a .wasm that make
 #          then fails to execute)
 #   5.x    patches/5.x (wasm32: literals beyond 31 bits wrapped while DATA
-#          is read); no POSIX signals (no sigaltstack in emscripten), no
-#          -pthread
+#          is read); no POSIX signals (no sigaltstack in emscripten)
 #   5.0    patches/5.0 (commit memory with mprotect, no mmap(MAP_FIXED); no
 #          pthread_getaffinity_np, configure only compiles its test); stub
 #          archives without the "byt" suffix
 #   >=5.1  patches/5.1+ (the same, with mprotect as on Cygwin)
-#   5.0-5.2, >=5.3  patches/5.0-5.2, patches/5.3+ (a single domain: the
-#          minor heaps of the others are not allocated)
+#   5.0-5.2, >=5.3  patches/5.0-5.2, patches/5.3+ (the minor heaps of
+#          the domains are allocated at startup: a single domain before 5.3,
+#          the number the program's link chooses since, 1 without threads)
 #   >=5.1  with zstd when the host compiler has it: it compresses the
 #          marshalled data of Marshal.Compression and the .cmi/.cmt files,
 #          which the runtime must then read (ocamlc.byte, merlin...)
@@ -55,13 +55,6 @@ build() {
   # anyway: take the non-POSIX (Windows-like) code path.
   local cache_vars=()
   [ "$OCAML_MAJOR" -ge 5 ] && cache_vars+=(ac_cv_func_sigaction=no)
-  # OCaml 5's configure adds the -pthread found by AX_PTHREAD to the C
-  # flags.  Objects built with it access caml_state through real wasm TLS,
-  # objects built without it (the stubs) through a plain global: mixed, the
-  # stubs read a wrong address ("no domain lock held").  Stay single-threaded
-  # everywhere: AX_PTHREAD keeps the flags it is given when they link
-  # pthread_join, which emscripten's single-threaded stubs do.
-  [ "$OCAML_MAJOR" -ge 5 ] && cache_vars+=(PTHREAD_CFLAGS=-D_REENTRANT)
   # zstd, found through the sysroot's libzstd.pc (emconfigure replaces
   # PKG_CONFIG_LIBDIR); without it, configure would only warn
   local zstd=()
@@ -118,10 +111,11 @@ build() {
   # suffix in 5.1.
   local sfx=; ocaml_version_ge 5 1 && sfx=byt
   local dir clib
-  # systhreads (configured out) builds as well: without -pthread, emscripten's
-  # pthread functions are single-threaded stubs, so Mutex, Condition and
-  # Thread.self work and Thread.create fails.  Libraries that merely depend on
-  # threads (ctypes-foreign...) then link.
+  # systhreads (configured out: make world would build its bytecode, the
+  # host's is used) builds as well.  Compiled with -pthread like everything
+  # else: Thread.create starts a thread in a program linked with --threads,
+  # and fails in the others, where emscripten's pthread functions are
+  # single-threaded stubs (Mutex, Condition and Thread.self work).
   for dir in unix str runtime_events systhreads; do
     [ -d "otherlibs/$dir" ] || continue
     case $dir in

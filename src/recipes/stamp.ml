@@ -2,7 +2,7 @@
    recording what was built, whose first field is the version of the
    sources (possibly empty).
 
-     <recipe>              <version> emcc-<v> recipe=<checksum> [opam=<package>]
+     <recipe>              <version> emcc-<v> recipe=<checksum> abi=<a> [opam=<package>]
      dune-<package>        <version> emcc-<v> toolchain=<v>
      auto-<package>-<lib>  <version> emcc-<v> toolchain=<v>
      shadow-<package>      <version> <ok|failed|none> emcc-<v> toolchain=<v> [deps=<p>.<v>,...]

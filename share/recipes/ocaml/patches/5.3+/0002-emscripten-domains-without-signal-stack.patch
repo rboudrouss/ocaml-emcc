@@ -1,0 +1,15 @@
+emscripten: a domain starts without a signal stack.
+
+Without POSIX signals (no sigaltstack in emscripten, see the recipe),
+caml_init_signal_stack returns NULL, which the thread of a new domain takes
+for a failure ("Failed to create domain: signal stack").
+
+--- a/runtime/domain.c
++++ b/runtime/domain.c
+@@
+   void * signal_stack = caml_init_signal_stack();
++#ifndef __EMSCRIPTEN__
+   if (signal_stack == NULL) {
+     caml_fatal_error("Failed to create domain: signal stack");
+   }
++#endif
