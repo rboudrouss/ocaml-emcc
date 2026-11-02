@@ -9,6 +9,10 @@
   page. Their stubs, which only abort, are no longer linked.
 - `--js-file FILE` (and `js-files:` in `ocaml-emcc.conf`): primitives of
   the program implemented in JavaScript, called with JavaScript values.
+- Plugins, in compiled mode: `ocaml-emcc plugin LIB.cma -o LIB.wasm`
+  compiles a library to a wasm side module, which a program linked with
+  `--dynlink` loads with the new library `ocaml-emcc.dynlink`
+  (`Emcc_dynlink.loadfile`, or `load_url` to fetch it in a web page).
 - Added recipes: async_unix, bls12-381-unix, bytesrw, cairo,
   class_group_vdf, core_unix, cpu, eio_posix, faad, ffmpeg, freetype,
   frei0r, gd, glfw3, hacl_func, lacaml, lame, libev, libevent,

@@ -145,6 +145,34 @@ of its call site, calling `ocaml_emcc_js_prim("NAME", n, args)`, and a
 JavaScript table `ocamlEmccJsPrims` of the files' functions, after them in
 the `--pre-js` files.
 
+## Plugins
+
+`link --dynlink` runs `c_of_ocaml --dynlink`, which registers every
+compilation unit of the program by name, and links with `-sMAIN_MODULE=2`.
+A main module only exports the symbols it is told to
+(`-sEXPORTED_FUNCTIONS=@exports.json`). `--export-dynamic` does not do it:
+emscripten does not see the data symbols, which a side module imports
+through its `GOT.mem`. The list is computed before the link. `link` reads
+with `llvm-nm` what each member of the archives defines and needs, takes
+the members a link of the objects takes, as wasm-ld does (any order), and
+exports what they and the runtime support objects define, plus a few
+functions of libc and libm the generated code may call. The generated C of
+the program is not exported, since plugins look its units up by name.
+Exporting a symbol of an archive member makes wasm-ld link it, hence the
+exact computation: camlc_runtime.o replaces some members of libcamlrun.a,
+which would otherwise come along.
+
+`plugin` runs c_of_ocaml on the `.cma` or `.cmo`, compiles the C with
+`-fPIC`, and links it with `-sSIDE_MODULE=1`. Its only export is
+`camlc_plugin_init`. `Emcc_dynlink.loadfile` (share/runtime/dynlink.c)
+`dlopen`s it (`RTLD_LOCAL`) and calls `camlc_plugin_init` from the
+primitive, as it must run inside an OCaml call. `load_url` uses
+`emscripten_dlopen`, which fetches and compiles the module asynchronously.
+Its callback resumes the OCaml continuation with the handle, which then
+calls the entry point through another primitive. The library's own stubs
+only fail, and `link` replaces them by dynlink.c, as it does for
+js_of_ocaml's.
+
 ## Signature adapters
 
 A wasm indirect call traps on any signature mismatch, while native code
