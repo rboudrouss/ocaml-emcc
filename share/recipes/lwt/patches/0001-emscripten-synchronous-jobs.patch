@@ -1,9 +1,11 @@
-emscripten without pthreads: run the jobs synchronously.
+emscripten: jobs run synchronously in a program linked without threads.
 
 Blocking calls (Lwt_unix file operations, Lwt_io.with_file...) are "jobs"
-run by a pool of POSIX threads; without pthreads, lwt_unix_start_job raises
-Unix_error (EOPNOTSUPP, "launch_thread").  They run synchronously instead,
-as lwt does when its pool is full.
+run by a pool of POSIX threads.  A program linked without threads (no
+--threads) cannot start any: lwt_unix_start_job would raise Unix_error
+(EOPNOTSUPP, "launch_thread").  They run synchronously instead, as lwt
+does when its pool is full.  The stubs are compiled for threads either way
+(-pthread): the program decides, when it runs.
 
 --- a/src/unix/lwt_unix_stubs.c
 +++ b/src/unix/lwt_unix_stubs.c
@@ -11,7 +13,8 @@ as lwt does when its pool is full.
    lwt_unix_async_method async_method = Int_val(val_async_method);
    int done = 0;
 +
-+#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
++#ifdef __EMSCRIPTEN__
 +  /* ocaml-emcc: no threads, the job runs synchronously */
-+  async_method = LWT_UNIX_ASYNC_METHOD_NONE;
++  extern int emscripten_has_threading_support(void);
++  if (!emscripten_has_threading_support()) async_method = LWT_UNIX_ASYNC_METHOD_NONE;
 +#endif
