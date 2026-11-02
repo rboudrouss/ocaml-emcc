@@ -33,6 +33,10 @@ link options (build and link):
                   double-translation or disabled (default: double
                   translation when the program performs effects; disabled
                   with --dynlink)
+  --threads       Thread.create and Domain.spawn (OCaml >= 5.3) start
+                  threads: emscripten's pthreads (web workers sharing the
+                  memory; in browsers, a cross-origin isolated page), or with
+                  --wasi wasi-threads (wasmtime <= 46 with -S threads...)
   --no-missing-primitives
                   fail to link when a primitive is defined by no library
                   (default: a stub raising Failure when called, and a warning)
@@ -182,7 +186,7 @@ let default_link_opts : Link.opts =
   {
     bc = ""; output = ""; lib_dirs = []; libs = []; emcc_flags = []; mode = Link.Embed;
     opt = "-O2"; stack_size = "8MB"; auto_deps = true; check = true; wasi = false; compiled = false;
-    missing_prims = true; js_files = []; dynlink = false; effects = None;
+    missing_prims = true; js_files = []; dynlink = false; effects = None; threads = false;
   }
 
 (* Options shared by `link` and `build`; [extra] handles command-specific
@@ -201,6 +205,7 @@ let parse_link_opts ?(extra = fun _ -> None) args =
     | "--wasi" :: rest -> go { o with wasi = true } pos rest
     | "--compiled" :: rest -> go { o with compiled = true } pos rest
     | "--dynlink" :: rest -> go { o with dynlink = true } pos rest
+    | "--threads" :: rest -> go { o with threads = true } pos rest
     | "--effects" :: e :: rest -> go { o with effects = Some e } pos rest
     | "--no-missing-primitives" :: rest -> go { o with missing_prims = false } pos rest
     | "--emcc-flag" :: f :: rest -> go { o with emcc_flags = o.emcc_flags @ [ f ] } pos rest
@@ -222,7 +227,7 @@ let parse_link_opts ?(extra = fun _ -> None) args =
 let with_config_flags (o : Link.opts) =
   let env_flags = Option.fold ~none:[] ~some:Str_util.words (Env.getenv_opt "OCAML_EMCC_LDFLAGS") in
   let p = Project.get () in
-  { o with emcc_flags = p.link_flags @ env_flags @ o.emcc_flags; js_files = p.js_files @ o.js_files }
+  { o with emcc_flags = p.link_flags @ env_flags @ o.emcc_flags; js_files = p.js_files @ o.js_files; threads = o.threads || p.threads }
 
 let cmd_link args =
   let out = ref "" in

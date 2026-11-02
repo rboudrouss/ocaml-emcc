@@ -18,6 +18,7 @@
 #include <limits.h>
 #include <netdb.h>
 #include <poll.h>
+#include <pthread.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -29,6 +30,7 @@
 #include <unistd.h>
 #include <wasi/api.h>
 #include <emscripten/syscalls.h>
+#include <emscripten/threading.h>
 
 /* ----------------------------------------------------------------- paths */
 
@@ -209,10 +211,14 @@ static int open_rel(int dirfd, const char *rel, int flags)
    Each end is a descriptor of the host, a preopened directory opened
    again, so that the host gives its number to no other file; reading,
    writing, polling and closing it use the buffer.  Reading an empty pipe
-   whose write end is open fails with EAGAIN even when blocking: nothing
-   else can fill it. */
+   whose write end is open fails with EAGAIN even when blocking, unless the
+   program has threads (--threads): it then waits for another thread to
+   write, as poll does.  The pipes are shared by the threads: pipe_lock. */
 struct pipe { char *buf; size_t len, cap; int ends; /* 1: read end open, 2: write end */ };
 static struct { struct pipe *p; int write_end; int flags; } pipes[MAX_FD];
+static pthread_mutex_t pipe_lock = PTHREAD_MUTEX_INITIALIZER;
+/* broadcast when a pipe is written or an end closed */
+static pthread_cond_t pipe_changed = PTHREAD_COND_INITIALIZER;
 
 static int is_pipe(int fd) { return fd >= 0 && fd < MAX_FD && pipes[fd].p; }
 
@@ -241,19 +247,23 @@ int __syscall_pipe2(int fd[2], int flags)
     return -ENOMEM;
   }
   p->ends = 3;
+  pthread_mutex_lock(&pipe_lock);
   for (int i = 0; i < 2; i++) {
     pipes[ends[i]].p = p;
     pipes[ends[i]].write_end = i;
     pipes[ends[i]].flags = (i ? O_WRONLY : O_RDONLY) | (flags & O_NONBLOCK);
     fd[i] = ends[i];
   }
+  pthread_mutex_unlock(&pipe_lock);
   return 0;
 }
 
-static ssize_t pipe_read(int fd, const struct iovec *iov, int count)
+static ssize_t pipe_read_locked(int fd, const struct iovec *iov, int count)
 {
   struct pipe *p = pipes[fd].p;
   if (pipes[fd].write_end) { errno = EBADF; return -1; }
+  while (p->len == 0 && (p->ends & 2) && !(pipes[fd].flags & O_NONBLOCK) && emscripten_has_threading_support())
+    pthread_cond_wait(&pipe_changed, &pipe_lock);
   if (p->len == 0) {
     if (p->ends & 2) { errno = EAGAIN; return -1; }
     return 0;
@@ -269,7 +279,15 @@ static ssize_t pipe_read(int fd, const struct iovec *iov, int count)
   return n;
 }
 
-static ssize_t pipe_write(int fd, const struct iovec *iov, int count)
+static ssize_t pipe_read(int fd, const struct iovec *iov, int count)
+{
+  pthread_mutex_lock(&pipe_lock);
+  ssize_t n = pipe_read_locked(fd, iov, count);
+  pthread_mutex_unlock(&pipe_lock);
+  return n;
+}
+
+static ssize_t pipe_write_locked(int fd, const struct iovec *iov, int count)
 {
   struct pipe *p = pipes[fd].p;
   if (!pipes[fd].write_end) { errno = EBADF; return -1; }
@@ -288,6 +306,15 @@ static ssize_t pipe_write(int fd, const struct iovec *iov, int count)
     memcpy(p->buf + p->len, iov[i].iov_base, iov[i].iov_len);
     p->len += iov[i].iov_len;
   }
+  return n;
+}
+
+static ssize_t pipe_write(int fd, const struct iovec *iov, int count)
+{
+  pthread_mutex_lock(&pipe_lock);
+  ssize_t n = pipe_write_locked(fd, iov, count);
+  if (n > 0) pthread_cond_broadcast(&pipe_changed);
+  pthread_mutex_unlock(&pipe_lock);
   return n;
 }
 
@@ -325,6 +352,7 @@ ssize_t write(int fd, const void *buf, size_t count)
 
 int close(int fd)
 {
+  pthread_mutex_lock(&pipe_lock);
   if (is_pipe(fd)) {
     struct pipe *p = pipes[fd].p;
     p->ends &= pipes[fd].write_end ? ~2 : ~1;
@@ -333,7 +361,9 @@ int close(int fd)
       free(p);
     }
     pipes[fd].p = NULL;
+    pthread_cond_broadcast(&pipe_changed);
   }
+  pthread_mutex_unlock(&pipe_lock);
   __wasi_errno_t e = __wasi_fd_close(fd);
   if (e == __WASI_ERRNO_INTR) e = 0;
   if (e) { errno = e; return -1; }
@@ -742,8 +772,7 @@ int nanosleep(const struct timespec *req, struct timespec *rem)
   return 0;
 }
 
-/* select() goes through poll in emscripten's libc */
-int __syscall_poll(struct pollfd *fds, nfds_t nfds, int timeout)
+static int poll_once(struct pollfd *fds, nfds_t nfds, int timeout)
 {
   __wasi_subscription_t *subs = calloc(2 * nfds + 1, sizeof *subs);
   __wasi_event_t *evs = calloc(2 * nfds + 1, sizeof *evs);
@@ -757,11 +786,14 @@ int __syscall_poll(struct pollfd *fds, nfds_t nfds, int timeout)
   for (nfds_t i = 0; i < nfds; i++) {
     fds[i].revents = 0;
     if (fds[i].fd < 0) continue;
+    pthread_mutex_lock(&pipe_lock);
     if (is_pipe(fds[i].fd)) {
       fds[i].revents = pipe_revents(fds[i].fd, fds[i].events);
+      pthread_mutex_unlock(&pipe_lock);
       if (fds[i].revents) ready++;
       continue;
     }
+    pthread_mutex_unlock(&pipe_lock);
     if (fds[i].events & POLLIN) {
       subs[n].userdata = i;
       subs[n].type = __WASI_EVENTTYPE_FD_READ;
@@ -799,6 +831,58 @@ int __syscall_poll(struct pollfd *fds, nfds_t nfds, int timeout)
   free(subs);
   free(evs);
   return ready;
+}
+
+static long long now_ms(void)
+{
+  struct timespec t;
+  clock_gettime(CLOCK_MONOTONIC, &t);
+  return (long long)t.tv_sec * 1000 + t.tv_nsec / 1000000;
+}
+
+/* select() goes through poll in emscripten's libc.  With threads, another
+   thread may write to a pipe being waited for: poll waits for that (pipes
+   only), or checks the pipes again every 10 ms (with other descriptors,
+   which the host waits for). */
+int __syscall_poll(struct pollfd *fds, nfds_t nfds, int timeout)
+{
+  int pipes_only = 1, some_pipe = 0;
+  for (nfds_t i = 0; i < nfds; i++) {
+    if (fds[i].fd < 0) continue;
+    if (is_pipe(fds[i].fd)) some_pipe = 1; else pipes_only = 0;
+  }
+  if (!some_pipe || timeout == 0 || !emscripten_has_threading_support()) return poll_once(fds, nfds, timeout);
+  long long deadline = timeout < 0 ? -1 : now_ms() + timeout;
+  for (;;) {
+    long long left = deadline < 0 ? -1 : deadline - now_ms();
+    if (deadline >= 0 && left < 0) left = 0;
+    if (!pipes_only) {
+      int r = poll_once(fds, nfds, left < 0 || left > 10 ? 10 : (int)left);
+      if (r != 0 || left == 0) return r;
+      continue;
+    }
+    pthread_mutex_lock(&pipe_lock);
+    int ready = 0;
+    for (nfds_t i = 0; i < nfds; i++) {
+      if (fds[i].fd < 0) continue;
+      fds[i].revents = is_pipe(fds[i].fd) ? pipe_revents(fds[i].fd, fds[i].events) : POLLNVAL;
+      if (fds[i].revents) ready++;
+    }
+    if (ready || left == 0) {
+      pthread_mutex_unlock(&pipe_lock);
+      return ready;
+    }
+    if (left < 0) pthread_cond_wait(&pipe_changed, &pipe_lock);
+    else {
+      struct timespec until;
+      clock_gettime(CLOCK_REALTIME, &until);
+      until.tv_sec += left / 1000;
+      until.tv_nsec += (left % 1000) * 1000000;
+      if (until.tv_nsec >= 1000000000) { until.tv_sec++; until.tv_nsec -= 1000000000; }
+      pthread_cond_timedwait(&pipe_changed, &pipe_lock, &until);
+    }
+    pthread_mutex_unlock(&pipe_lock);
+  }
 }
 
 /* -------------------------------------- what WASI preview1 does not have */

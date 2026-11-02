@@ -8,6 +8,7 @@
      link-flags: -lcjson -sMODULARIZE=1
      js-files: js/prims.js           primitives implemented in JavaScript
      cflags: -DFOO                   extra C flags (stubs and recipes)
+     threads: yes                    link with --threads
 
    Without a configuration file, `emcc-recipes/` next to the nearest
    dune-project is still picked up as a recipe directory. *)
@@ -20,9 +21,10 @@ type t = {
   link_flags : string list;
   js_files : string list;  (** absolute paths *)
   cflags : string list;
+  threads : bool;
 }
 
-let empty = { dir = None; target = None; recipes = []; requires = []; link_flags = []; js_files = []; cflags = [] }
+let empty = { dir = None; target = None; recipes = []; requires = []; link_flags = []; js_files = []; cflags = []; threads = false }
 
 let rec find_up dir names =
   match List.find_opt (fun n -> Sys.file_exists (Filename.concat dir n)) names with
@@ -67,6 +69,7 @@ let load () =
         link_flags = words "link-flags";
         js_files = List.map (absolute dir) (words "js-files");
         cflags = words "cflags";
+        threads = List.mem (match get "threads" with [] -> "" | l -> List.nth l (List.length l - 1)) [ "yes"; "true" ];
       }
   | None -> (
       match find_up cwd [ "dune-project" ] with

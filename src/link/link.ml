@@ -37,6 +37,7 @@ type opts = {
   js_files : string list;  (** JavaScript files implementing primitives *)
   dynlink : bool;  (** compiled: a main module loading plugins (Emcc_dynlink) *)
   effects : string option;  (** compiled: c_of_ocaml's --effects *)
+  threads : bool;  (** Thread.create and Domain.spawn start threads (shared memory) *)
 }
 
 (* C prototype of a primitive as the interpreter calls it. *)
@@ -234,6 +235,46 @@ let check_compiled () =
   match Option.map (fun v -> Scanf.sscanf v "%d.%d" (fun a b -> (a, b))) (Env.manifest "ocaml_version") with
   | Some v when v < (4, 14) -> Env.fail "--compiled: needs OCaml 4.14 or later (the runtime support of c_of_ocaml)"
   | _ -> ()
+
+(* --threads: emcc's -pthread, the memory shared between the threads.
+   The C code of the sysroot is always compiled for it (Toolchain): a
+   sysroot set up before was not, and a shared memory refuses its objects.
+   A standalone module has threads with WASI only (wasi-threads), emscripten
+   starts its threads from the JavaScript glue. *)
+let check_threads ~standalone (o : opts) =
+  (match Stamp.read "ocaml" with
+  | Some fields when Stamp.field "abi" fields = Some Toolchain.abi -> ()
+  | _ -> Env.fail "--threads: the wasm runtime of %s was not built for threads, run `ocaml-emcc setup` again" (Env.sysroot ()));
+  if standalone && not o.wasi then
+    Env.fail "--threads: a standalone %s has no threads (emscripten starts them from its JavaScript glue): link OUT.js, or use --wasi" o.output
+
+(* The default maximum number of domains of a program with threads (with
+   OCaml >= 5.3; OCAMLRUNPARAM's d= sets it): the runtime reserves their
+   minor heaps at startup (4 MB each in wasm32, 2 MB in wasm64), which
+   emscripten's mmap allocates *)
+let max_domains = 8
+
+(* The stack of a thread (pthread_create's default): the C stack of the
+   interpreter, and that of compiled code's locals in memory *)
+let thread_stack_size = 1024 * 1024
+
+let threads_flags ~wasi =
+  [ "-pthread"; "-Wno-pthreads-mem-growth" ]
+  @
+  if wasi then
+    (* wasi-threads: the host creates the shared memory the module imports,
+       and wants it exported as well (wasmtime).  (The stack size is
+       wasi_threads.c's.) *)
+    [ "-Wl,--export-memory" ]
+  else
+    (* Workers started before main: a thread created by a program that then
+       waits for it (join, a mutex) would never start in a browser, where a
+       new worker only loads once the main thread returns to its event loop.
+       Beyond the pool, threads still start, asynchronously (node starts
+       them at once).  8: OCaml's tick thread, and 7 others at the same
+       time (-sPTHREAD_POOL_SIZE=N sets it). *)
+    [ "-sDEFAULT_PTHREAD_STACK_SIZE=" ^ string_of_int thread_stack_size; "-sPTHREAD_POOL_SIZE=8";
+      "--js-library"; Filename.concat (Env.share ()) "runtime/threads.js" ]
 
 (* The primitives called by the generated C, with the arity of their call
    sites (-1: an array and its length), from its declarations
@@ -608,10 +649,10 @@ let keep_raw_exports js =
    renamed out of the way (and dropped by wasm-ld), so that theirs are
    linked: a weak definition is not enough, wasm-ld does not take an
    archive member for a symbol that is already defined. *)
-let runtime_object ~emcc ~flags ~lib_syms ~work name =
+let runtime_object ~emcc ~flags ~lib_syms ~work ?(defs = []) name =
   let src = Filename.concat (Env.share ()) ("runtime/" ^ name ^ ".c") in
   let obj = Filename.concat work (name ^ ".o") in
-  let cc defs = Env.run_exn emcc (flags @ defs @ [ "-c"; src; "-o"; obj ]) in
+  let cc overrides = Env.run_exn emcc (flags @ defs @ overrides @ [ "-c"; src; "-o"; obj ]) in
   cc [];
   Hashtbl.remove file_symbols obj;
   let theirs =
@@ -625,11 +666,13 @@ let runtime_object ~emcc ~flags ~lib_syms ~work name =
 
 (* The host of a standalone module provides its imports: the WASI ones,
    and with emscripten's glue, emscripten's JavaScript functions (env). *)
-let report_imports ~wasi output =
+let report_imports ~wasi ~threads output =
   match Wasm.imports output with
   | exception Failure e -> Env.log "note: could not read the imports of %s (%s)" output e
   | imports -> (
-      let others = List.filter (fun (m, _) -> m <> "wasi_snapshot_preview1") imports in
+      (* (threads: the shared memory, wasi-threads) *)
+      let threads_import = function "env", "memory" | "wasi", "thread-spawn" -> threads | _ -> false in
+      let others = List.filter (fun (m, f) -> m <> "wasi_snapshot_preview1" && not (threads_import (m, f))) imports in
       let names l =
         let shown = Compat.filteri (fun i _ -> i < 12) l in
         String.concat " " (List.map (fun (m, f) -> m ^ "." ^ f) shown) ^ if List.length l > 12 then " ..." else ""
@@ -654,11 +697,18 @@ let report_imports ~wasi output =
    bytecode of a big program: 72 MB for core with -linkall).  wasm-ld then
    adds the heap to the static data and the stack.  Not when the user's
    flags size the memory. *)
-let initial_heap user_flags =
+let initial_heap ~threads ~bc_size user_flags =
   let sized = List.exists (fun f -> List.exists (fun k -> Str_util.find f k <> None) [ "INITIAL_MEMORY"; "INITIAL_HEAP"; "IMPORTED_MEMORY" ]) user_flags in
   let version = List.map int_of_string_opt (String.split_on_char '.' (Lazy.force Toolchain.emcc_version)) in
   let recent = match version with Some a :: Some b :: Some c :: _ -> compare (a, b, c) (3, 1, 55) >= 0 | _ -> false in
-  if recent && not sized then [ "-sINITIAL_HEAP=16777216" ] else []
+  (* (threads: the memory is imported, which INITIAL_HEAP refuses: 64 MB
+     for the minor heaps of the domains, allocated at startup, and the
+     heap, plus room for static data as big as the bytecode, twice) *)
+  let mb = 1024 * 1024 in
+  if sized then []
+  else if threads then [ Printf.sprintf "-sINITIAL_MEMORY=%d" ((64 * mb) + ((2 * bc_size + mb - 1) / mb * mb)) ]
+  else if recent then [ "-sINITIAL_HEAP=16777216" ]
+  else []
 
 (* The primitives a JavaScript file provides: its `//Provides: NAME`
    comments (as js_of_ocaml's runtime files) and its toplevel
@@ -717,6 +767,7 @@ let run o =
   if o.compiled then check_compiled ();
   if o.dynlink && not o.compiled then Env.fail "--dynlink: plugins need the compiled mode (--compiled)";
   if o.dynlink && standalone then Env.fail "--dynlink: plugins are loaded by the JavaScript glue: link OUT.js, not a standalone .wasm";
+  if o.threads then check_threads ~standalone o;
   if !Env.target = "wasm32" then warn_literals bc;
   if o.auto_deps then (Layouts.prune (); ignore (Layouts.ensure bc));
   Layouts.warn ~bc_path:o.bc bc;
@@ -831,7 +882,9 @@ let run o =
   if compiled = None then
     Env.run_exn emcc (cflags @ [ o.opt; main_def ] @ inc @ [ "-c"; Filename.concat (Env.share ()) "runtime/main.c"; "-o"; main_o ]);
   let runtime_object = runtime_object ~emcc ~flags:(cflags @ [ o.opt ]) ~lib_syms ~work in
-  let compat_o = runtime_object "compat" in
+  let compat_o =
+    runtime_object "compat" ~defs:[ Printf.sprintf "-DOCAML_EMCC_MAX_DOMAINS=%d" (if o.threads then max_domains else 1) ]
+  in
   let foreign_objs, foreign_flags =
     match foreign with
     | None -> ([], [])
@@ -839,9 +892,18 @@ let run o =
         let dlsym_o = runtime_object "dlsym" in
         ([ dlsym_o ], "-sALLOW_TABLE_GROWTH=1" :: List.map (fun n -> "-Wl,--export=" ^ n) names)
   in
+  let wasi_objs () =
+    if not o.wasi then []
+    else
+      runtime_object "wasi"
+      :: (if o.threads then [ runtime_object "wasi_threads" ~defs:[ "-DOCAML_EMCC_THREAD_STACK_SIZE=" ^ string_of_int thread_stack_size ] ]
+          else [])
+  in
+  (* the main thread frees the workers of exited threads while blocked *)
+  let threads_objs = if o.threads && not o.wasi then [ runtime_object "threads" ] else [] in
   let standalone_objs =
     if not standalone then []
-    else if compiled <> None then (if o.wasi then [ runtime_object "wasi" ] else [])
+    else if compiled <> None then wasi_objs ()
     else (
       let ocaml_major = Option.fold ~none:5 ~some:(fun v -> Scanf.sscanf v "%d" Fun.id) (Env.manifest "ocaml_version") in
       let src = Embed.write ~ocaml_major ~dir:work bc and bytecode_o = Filename.concat work "bytecode.o" in
@@ -852,7 +914,7 @@ let run o =
           "note: the wasm runtime of this switch predates standalone modules: backtraces have no\n\
           \  locations%s.  Rebuild it with `ocaml-emcc setup --force`."
           (if !Env.target = "wasm32" then ", and integer literals beyond 31 bits fail at startup" else "");
-      bytecode_o :: (if o.wasi then [ runtime_object "wasi" ] else []))
+      bytecode_o :: wasi_objs ())
   in
   let cc_prims () =
     Env.run_exn emcc
@@ -888,7 +950,7 @@ let run o =
       "-sALLOW_MEMORY_GROWTH=1";
       (if !Env.target = "wasm64" then "-sMAXIMUM_MEMORY=16GB" else "-sMAXIMUM_MEMORY=4GB");
     ]
-    @ initial_heap o.emcc_flags
+    @ initial_heap ~threads:o.threads ~bc_size:(Unix.stat o.bc).Unix.st_size o.emcc_flags
     @ [
       "-sSTACK_SIZE=" ^ o.stack_size;
       (* not allowed (implied) for a standalone .wasm *)
@@ -921,6 +983,7 @@ let run o =
     if o.wasi then defaults @ [ "-sPURE_WASI=1"; "-sBINARYEN_EXTRA_PASSES=--translate-to-exnref,--emit-exnref" ]
     else defaults
   in
+  let defaults = if o.threads then defaults @ threads_flags ~wasi:o.wasi else defaults in
   let program_objs =
     match compiled with
     | Some c -> c.c_objs @ [ c.support_obj ]
@@ -968,7 +1031,7 @@ let run o =
     else defaults
   in
   let args ?(extra = []) ~output () =
-    defaults @ fs_flags @ program_objs @ [ compat_o ] @ standalone_objs @ foreign_objs @ js_objs @ dynlink_objs @ extra
+    defaults @ fs_flags @ program_objs @ [ compat_o ] @ standalone_objs @ threads_objs @ foreign_objs @ js_objs @ dynlink_objs @ extra
     @ archives @ o.libs
     @ [ "-L" ^ Env.sysroot_file "lib" ]
     @ flags_of_libs @ [ "-lm" ] @ foreign_flags @ js_flags @ dynlink_flags @ o.emcc_flags @ [ "-o"; output ]
@@ -1045,7 +1108,7 @@ let run o =
       (String.concat " " (List.sort_uniq compare traps));
   if code <> 0 then Env.fail "emcc failed (exit %d)" code;
   if foreign <> None then keep_raw_exports o.output;
-  if standalone then report_imports ~wasi:o.wasi o.output
+  if standalone then report_imports ~wasi:o.wasi ~threads:o.threads o.output
 
 (* ---------------------------------------------------------------- plugins *)
 
