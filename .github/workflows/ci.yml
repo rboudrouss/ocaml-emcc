@@ -101,6 +101,18 @@ jobs:
           case ${{ matrix.target }} in wasi) args=--wasi ;; *) args="--target ${{ matrix.target }}" ;; esac
           args="$args --compiled"
           opam exec -- bash -c "SWITCH=\$(opam var prefix) tests/run.sh $args"
+      # threads: interpreted only for now; under WASI, wasi-threads needs
+      # wasmtime <= 46
+      - name: Install wasmtime 46 (wasi-threads)
+        if: matrix.target == 'wasi'
+        run: |
+          mkdir -p ../wasmtime && cd ../wasmtime
+          curl -sSLf https://github.com/bytecodealliance/wasmtime/releases/download/v46.0.0/wasmtime-v46.0.0-x86_64-linux.tar.xz | tar xJ
+          echo "WASMTIME_THREADS=$(pwd)/wasmtime-v46.0.0-x86_64-linux/wasmtime" >> "$GITHUB_ENV"
+      - name: tests/run.sh threads (${{ matrix.target }}, interpreted)
+        run: |
+          case ${{ matrix.target }} in wasi) args=--wasi ;; *) args="--target ${{ matrix.target }}" ;; esac
+          opam exec -- bash -c "SWITCH=\$(opam var prefix) tests/run.sh $args threads domains threadsweb"
       - if: failure()
         uses: actions/upload-artifact@v7
         with:

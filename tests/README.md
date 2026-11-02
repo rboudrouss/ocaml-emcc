@@ -35,7 +35,7 @@ targets.
 | `mcrypto`   | mirage-crypto, -rng, -ec (X25519, Ed25519, P-256/384/521), -pk (RSA, DSA, DH) |
 | `cryptokit` | ciphers, hashes, MACs, RSA, zlib |
 | `secp`      | secp256k1-internal (vendored libsecp256k1, gmp) |
-| `lwt`       | lwt.unix: timers, files, pipes, timeouts (jobs run synchronously) |
+| `lwt`       | lwt.unix: timers, files, pipes, timeouts (jobs run synchronously, without `--threads`) |
 | `minisat`   | minisat: vendored C++, exceptions |
 | `mccs`      | mccs: opam's solver, C++ and its bundled GLPK, CUDF universes converted to C++ and back |
 | `lua`       | ocaml-lua: vendored Lua built by `make`, callbacks both ways |
@@ -52,8 +52,16 @@ targets.
 | `jsoo`      | js_of_ocaml's library and ppx under node: properties, methods, strings, numbers, arrays, callbacks, OCaml values and exceptions through JavaScript, JavaScript errors, typed arrays, timers and promises after the main program |
 | `jsprims`   | primitives implemented in a JavaScript file (`js-files:` in `ocaml-emcc.conf`) |
 | `jsdom`     | a web page in headless Chromium (`check.mjs`, playwright): DOM, an event handler, `Js.export` |
+| `threads`   | `--threads`: Thread, Mutex, Condition, Event, `Thread.delay`, exceptions and `Thread.exit` in threads (node, WASI) |
+| `domains`   | `Domain.spawn` in parallel (OCaml 5.3+): Atomic, a mutex shared by domains, collections while they allocate, `Domain.DLS`, a thread in a domain |
+| `threadsweb` | `threads` in headless Chromium, on a cross-origin isolated page |
+| `lwtthreads` | lwt with `--threads`: jobs in its pool of threads (several at once), `Lwt_preemptive.detach` while timers run |
 
-`jsdom` and `dynweb` need playwright and its Chromium (`npm i playwright`,
+Under `--wasi`, `threads` and `domains` need a wasmtime with wasi-threads
+(46 or older, removed in 47): `$WASMTIME_THREADS`; they are skipped
+otherwise.
+
+`jsdom`, `dynweb` and `threadsweb` need playwright and its Chromium (`npm i playwright`,
 `npx playwright install chromium-headless-shell`), found through
 `PLAYWRIGHT_DIR` (the directory of its `node_modules`) and
 `PLAYWRIGHT_BROWSERS_PATH`; it is skipped otherwise.
