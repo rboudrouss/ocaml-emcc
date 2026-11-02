@@ -1,6 +1,0 @@
---- a/meson.build
-+++ b/meson.build
-@@
--if host_machine.system() != 'windows'
-+if host_machine.system() not in ['windows', 'emscripten']
-   thread_dep = dependency('threads')

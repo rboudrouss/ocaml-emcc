@@ -1042,6 +1042,18 @@ let run o =
   in
   Env.log "linking %s (%d primitives, %d stub libraries%s)" o.output (List.length prims) (List.length libs)
     (if compiled <> None then ", compiled" else "");
+  (* a program that may start threads, single-threaded (the bytecode of
+     any OCaml 5 program has Domain.spawn's primitive, its standard library
+     links Domain: compiled code only has the primitives it calls) *)
+  let starts =
+    match compiled with
+    | Some c -> List.filter (fun p -> List.mem p c.c_prims) [ "caml_thread_new"; "caml_domain_spawn" ]
+    | None -> List.filter (fun p -> List.mem p prims) [ "caml_thread_new" ]
+  in
+  if (not o.threads) && starts <> [] then
+    Env.log "note: %s fail%s in a program linked without --threads (threads: yes in ocaml-emcc.conf)"
+      (String.concat " and " (List.map (function "caml_thread_new" -> "Thread.create" | _ -> "Domain.spawn") starts))
+      (if List.length starts = 1 then "s" else "");
   (* The primitives called, and the stubs whose C signature differs from
      the call site: called through an adapter. *)
   let prims, arities = match compiled with Some c -> (c.c_prims, c.c_arities) | None -> (prims, arities) in

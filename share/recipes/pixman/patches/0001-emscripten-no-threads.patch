@@ -1,8 +1,0 @@
---- a/meson.build
-+++ b/meson.build
-@@
- pthreads_found = false
- 
--if dep_threads.found() and cc.has_header('pthread.h')
-+if dep_threads.found() and cc.has_header('pthread.h') and host_machine.system() != 'emscripten'
-   if cc.get_argument_syntax() == 'msvc'
