@@ -26,6 +26,9 @@ link options (build and link):
                   clocks, sleep... on WASI instead of emscripten's JS (wasm32)
   --compiled      compile the bytecode to C with c_of_ocaml instead of
                   interpreting it (faster; OCaml >= 4.14)
+  --dynlink       with --compiled: a program loading plugins (Emcc_dynlink
+                  of ocaml-emcc.dynlink); its bytecode must be linked with
+                  -linkall
   --no-missing-primitives
                   fail to link when a primitive is defined by no library
                   (default: a stub raising Failure when called, and a warning)
@@ -43,6 +46,10 @@ step by step (scripts, Makefiles, projects without dune):
   deps PROG.bc [-L DIR]...     build the missing stub libraries of PROG.bc
   doctor PROG.bc [-L DIR]...   stub libraries, primitives, 31-bit literals
   link PROG.bc -o OUT.js [LINK OPTIONS] [-- EMCC-ARGS...]
+  plugin LIB.cma|M.cmo -o OUT.wasm [--main PROG.js] [-O FLAG]
+                               a plugin for a program linked with --dynlink;
+                               --main checks that the program exports what
+                               it needs
   env [--cflags|--sysroot]     paths and configuration; --cflags prints the
                                flags to compile C stubs with emcc
 
@@ -165,7 +172,7 @@ let default_link_opts : Link.opts =
   {
     bc = ""; output = ""; lib_dirs = []; libs = []; emcc_flags = []; mode = Link.Embed;
     opt = "-O2"; stack_size = "8MB"; auto_deps = true; check = true; wasi = false; compiled = false;
-    missing_prims = true; js_files = [];
+    missing_prims = true; js_files = []; dynlink = false;
   }
 
 (* Options shared by `link` and `build`; [extra] handles command-specific
@@ -183,6 +190,7 @@ let parse_link_opts ?(extra = fun _ -> None) args =
     | "--no-deps" :: rest -> go { o with auto_deps = false } pos rest
     | "--wasi" :: rest -> go { o with wasi = true } pos rest
     | "--compiled" :: rest -> go { o with compiled = true } pos rest
+    | "--dynlink" :: rest -> go { o with dynlink = true } pos rest
     | "--no-missing-primitives" :: rest -> go { o with missing_prims = false } pos rest
     | "--emcc-flag" :: f :: rest -> go { o with emcc_flags = o.emcc_flags @ [ f ] } pos rest
     | "--js-file" :: f :: rest -> go { o with js_files = o.js_files @ [ f ] } pos rest
@@ -212,6 +220,21 @@ let cmd_link args =
   | o, [ bc ] when !out <> "" ->
       ensure_requires ();
       Link.run (with_config_flags { o with bc; output = !out })
+  | _ -> die_usage ()
+
+let cmd_plugin args =
+  let rec go out main opt pos = function
+    | "-o" :: f :: rest -> go (Some f) main opt pos rest
+    | "--main" :: f :: rest -> go out (Some f) opt pos rest
+    | "-O" :: f :: rest -> go out main f pos rest
+    | x :: rest when not (Str_util.starts_with ~prefix:"-" x) -> go out main opt (x :: pos) rest
+    | [] -> (out, main, opt, List.rev pos)
+    | x :: _ -> Env.fail "unexpected argument %s" x
+  in
+  match go None None "-O2" [] args with
+  | Some output, main, opt, [ input ] ->
+      ensure_setup ();
+      Link.plugin ~input ~output ~main ~opt
   | _ -> die_usage ()
 
 (* ----------------------------------------------------------------- build *)
@@ -439,6 +462,7 @@ let main () =
   | "deps" :: args -> cmd_deps args
   | "doctor" :: args -> cmd_doctor args
   | "link" :: args -> cmd_link args
+  | "plugin" :: args -> cmd_plugin args
   | "env" :: args -> cmd_env args
   | "internal" :: args -> cmd_internal args
   | ("help" | "-h" | "--help") :: _ -> print_string usage

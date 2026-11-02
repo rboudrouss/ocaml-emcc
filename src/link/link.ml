@@ -35,6 +35,7 @@ type opts = {
   compiled : bool;  (** compiled to C by c_of_ocaml rather than interpreted *)
   missing_prims : bool;  (** primitives no library defines raise Failure (else: link error) *)
   js_files : string list;  (** JavaScript files implementing primitives *)
+  dynlink : bool;  (** compiled: a main module loading plugins (Emcc_dynlink) *)
 }
 
 (* C prototype of a primitive as the interpreter calls it. *)
@@ -267,7 +268,7 @@ type compiled = {
 (* PROG.bc -> PROG.c (c_of_ocaml), compiled with the runtime support of the
    generated code (camlc.h, camlc_runtime.c, which defines main), to be
    linked with libcamlrun.a: its interpreter is not used. *)
-let compile_to_c ~emcc ~flags ~tail_calls ~work ~base ~bc bc_path =
+let compile_to_c ?(dynlink = false) ~emcc ~flags ~tail_calls ~work ~base ~bc bc_path =
   let cooc = c_of_ocaml () in
   let support = Filename.concat work "c_of_ocaml" in
   if not (Sys.file_exists support) then Unix.mkdir support 0o755;
@@ -279,7 +280,10 @@ let compile_to_c ~emcc ~flags ~tail_calls ~work ~base ~bc bc_path =
   (* backtraces when the bytecode has debug information (ocamlc -g) *)
   let debug = if Bytecode.section bc "DBUG" <> None then [ "--debug-info" ] else [] in
   let word_size = if !Env.target = "wasm64" then [ "--word-size"; "64" ] else [] in
-  Env.run_exn cooc (debug @ word_size @ [ bc_path; "--split"; c_dir ]);
+  (* --dynlink: every compilation unit kept whole and registered by name,
+     for plugins *)
+  let dynlink = if dynlink then [ "--dynlink" ] else [] in
+  Env.run_exn cooc (debug @ word_size @ dynlink @ [ bc_path; "--split"; c_dir ]);
   let parts =
     Sys.readdir c_dir |> Array.to_list
     |> List.filter (fun f -> Filename.check_suffix f ".c")
@@ -329,12 +333,13 @@ let rec mkdir_p d =
    read once per link. *)
 let file_symbols : (string, string list) Hashtbl.t = Hashtbl.create 16
 
+let nm () =
+  let emcc_dir = Filename.dirname (Env.emcc ()) in
+  let cands = [ Filename.concat emcc_dir "../bin/llvm-nm"; Filename.concat emcc_dir "emnm" ] in
+  match List.find_opt Sys.file_exists cands with Some n -> n | None -> "llvm-nm"
+
 let defined_symbols files =
-  let nm =
-    let emcc_dir = Filename.dirname (Env.emcc ()) in
-    let cands = [ Filename.concat emcc_dir "../bin/llvm-nm"; Filename.concat emcc_dir "emnm" ] in
-    match List.find_opt Sys.file_exists cands with Some n -> n | None -> "llvm-nm"
-  in
+  let nm = nm () in
   let symbols f =
     match Hashtbl.find_opt file_symbols f with
     | Some l -> l
@@ -376,17 +381,93 @@ let foreign_exports ~archives bc =
   |> List.filter (fun s -> is_c_ident s && Hashtbl.mem syms s)
   |> List.sort_uniq compare
 
-(* js_of_ocaml's stub libraries: their stubs only abort outside JavaScript,
-   share/runtime/jsoo.c defines their primitives instead. *)
-let jsoo_libs = [ "jsoo_runtime_stubs"; "js_of_ocaml_stubs" ]
+(* Stub libraries replaced by a file of share/runtime: js_of_ocaml's, whose
+   stubs only abort outside JavaScript (jsoo.c), and ocaml-emcc.dynlink's
+   (dynlink.c). *)
+let runtime_libs = [ ("jsoo_runtime_stubs", "jsoo"); ("js_of_ocaml_stubs", "jsoo"); ("emcc_dynlink_stubs", "dynlink") ]
 
-let uses_jsoo bc = List.exists (fun d -> List.mem (Bytecode.lib_of_dll d) jsoo_libs) (Bytecode.dlls bc)
+let uses_runtime name bc =
+  List.exists (fun d -> List.assoc_opt (Bytecode.lib_of_dll d) runtime_libs = Some name) (Bytecode.dlls bc)
+
+(* The global symbols each object of FILE (an archive, or an object)
+   defines and those it needs, in order. *)
+let objects_symbols f =
+  match Env.output_of (nm ()) [ "-A"; "-g"; "-P"; "--quiet"; f ] with
+  | None -> []
+  | Some out ->
+      let tbl = Hashtbl.create 64 and order = ref [] in
+      String.split_on_char '\n' out
+      |> List.iter (fun l ->
+             (* "FILE[MEMBER]: SYM TYPE ..." or "FILE: SYM TYPE ..." *)
+             let n = String.length f in
+             if String.length l > n && String.sub l 0 n = f then
+               let rest = String.sub l n (String.length l - n) in
+               let member, rest =
+                 if rest.[0] = '[' then
+                   match Str_util.find rest "]: " with
+                   | Some j -> (String.sub rest 1 (j - 1), String.sub rest (j + 3) (String.length rest - j - 3))
+                   | None -> ("", "")
+                 else if Str_util.starts_with ~prefix:": " rest then ("", String.sub rest 2 (String.length rest - 2))
+                 else ("", "")
+               in
+               match Str_util.words rest with
+               | sym :: ty :: _ ->
+                   let d, u = match Hashtbl.find_opt tbl member with Some x -> x | None -> order := member :: !order; ([], []) in
+                   let d, u =
+                     match ty with "U" -> (d, sym :: u) | "w" | "v" -> (d, u) | _ -> (sym :: d, u)
+                   in
+                   Hashtbl.replace tbl member (d, u)
+               | _ -> ());
+      List.rev_map (fun m -> let d, u = Hashtbl.find tbl m in (m, d, u)) !order
+
+(* The symbols defined by the members of ARCHIVES that a link of OBJECTS
+   with them takes, as wasm-ld does: a member is linked when it defines a
+   symbol still undefined, in any order of the archives. *)
+let linked_symbols ~objects ~archives =
+  let defined = Hashtbl.create 4096 and needed = Hashtbl.create 1024 in
+  let add (d, u) =
+    List.iter (fun s -> Hashtbl.replace defined s ()) d;
+    List.iter (fun s -> if not (Hashtbl.mem defined s) then Hashtbl.replace needed s ()) u
+  in
+  List.iter (fun f -> List.iter (fun (_, d, u) -> add (d, u)) (objects_symbols f)) objects;
+  let members = Array.of_list (Compat.concat_map objects_symbols archives) in
+  let linked = Array.make (Array.length members) false in
+  let rec fix () =
+    let changed = ref false in
+    Array.iteri
+      (fun i (_, d, u) ->
+        if (not linked.(i)) && List.exists (fun s -> Hashtbl.mem needed s && not (Hashtbl.mem defined s)) d then (
+          linked.(i) <- true;
+          changed := true;
+          add (d, u)))
+      members;
+    if !changed then fix ()
+  in
+  fix ();
+  let acc = ref [] in
+  Array.iteri (fun i (_, d, _) -> if linked.(i) then acc := d @ !acc) members;
+  !acc
+
+(* C functions the code of a plugin may call directly, exported by a main
+   module even when it does not use them itself *)
+let plugin_libc =
+  [ "malloc"; "calloc"; "realloc"; "free"; "memcpy"; "memmove"; "memset"; "memcmp"; "strlen"; "strcmp";
+    "fmod"; "pow"; "exp"; "log"; "log10"; "floor"; "ceil"; "round"; "trunc"; "sqrt"; "sin"; "cos"; "tan";
+    "atan"; "atan2"; "fabs"; "ldexp"; "frexp"; "expm1"; "log1p" ]
+
+(* The symbols a main module (--dynlink) exports for its plugins: those its
+   runtime support (EXPORTED objects) and the members of the archives it
+   links define, and plugin_libc. The generated C of the program is not
+   exported: plugins find its compilation units by name. *)
+let main_exports ~objects ~exported ~archives =
+  let syms = linked_symbols ~objects ~archives @ Hashtbl.fold (fun s () acc -> s :: acc) (defined_symbols exported) [] in
+  List.sort_uniq compare (plugin_libc @ List.filter (fun s -> not (Str_util.starts_with ~prefix:"__" s)) syms)
 
 (* Resolve every stub DLL to an archive, building missing ones if asked. *)
 let resolve_libs ~extra_dirs ~auto_deps ~bc_path bc =
   Bytecode.dlls bc
   |> List.map Bytecode.lib_of_dll
-  |> List.filter (fun n -> not (List.mem n jsoo_libs))
+  |> List.filter (fun n -> not (List.mem_assoc n runtime_libs))
   |> List.map (fun name ->
          let rec go first =
            match Deps.resolve ~extra_dirs ~bc_path bc name with
@@ -438,7 +519,7 @@ let cclib_flags ~auto_deps ~dirs bc_path =
                match n with
                | "stdc++" | "c++" -> [ "-sDEFAULT_TO_CXX=1" ]
                | "m" | "c" | "dl" | "rt" | "pthread" -> []
-               | n when List.mem n jsoo_libs -> []
+               | n when List.mem_assoc n runtime_libs -> []
                | _ -> (
                    (* with the flags the library itself needs (libffi: -sALLOW_TABLE_GROWTH) *)
                    let found () = Option.map (fun a -> a :: Deps.link_flags n) (Deps.find_lib dirs n) in
@@ -632,6 +713,8 @@ let run o =
   if standalone && o.mode <> Embed then
     Env.fail "--preload and --node-fs need the JavaScript glue: not available for a standalone %s" o.output;
   if o.compiled then check_compiled ();
+  if o.dynlink && not o.compiled then Env.fail "--dynlink: plugins need the compiled mode (--compiled)";
+  if o.dynlink && standalone then Env.fail "--dynlink: plugins are loaded by the JavaScript glue: link OUT.js, not a standalone .wasm";
   if !Env.target = "wasm32" then warn_literals bc;
   if o.auto_deps then (Layouts.prune (); ignore (Layouts.ensure bc));
   Layouts.warn ~bc_path:o.bc bc;
@@ -683,7 +766,7 @@ let run o =
      the primitives of the --js-file files *)
   List.iter (fun f -> if not (Sys.file_exists f) then Env.fail "--js-file %s: no such file" f) o.js_files;
   let js_provided = Compat.concat_map js_provides o.js_files in
-  let jsoo = uses_jsoo bc || o.js_files <> [] in
+  let jsoo = uses_runtime "jsoo" bc || o.js_files <> [] in
   if jsoo && standalone then
     Env.fail "%s: js_of_ocaml's primitives and --js-file need the JavaScript glue: link OUT.js, not a standalone .wasm"
       (if o.js_files <> [] then "--js-file" else o.bc);
@@ -692,8 +775,17 @@ let run o =
       (if not jsoo then []
        else [ runtime_object ~emcc ~flags:(Env.manifest_flags "cflags" @ [ o.opt; "-I" ^ Env.sysroot_file "lib/ocaml" ]) ~lib_syms ~work "jsoo" ])
   in
+  let dynlink_objs =
+    lazy
+      (if not (uses_runtime "dynlink" bc || o.dynlink) then []
+       else
+         [ runtime_object ~emcc ~lib_syms ~work "dynlink"
+             ~flags:
+               (Env.manifest_flags "cflags" @ [ o.opt; "-I" ^ Env.sysroot_file "lib/ocaml" ]
+               @ if o.dynlink then [ "-DOCAML_EMCC_DYNLINK" ] else []) ])
+  in
   if o.check then (
-    let syms = defined_symbols (archives @ user_archives () @ flag_archives @ Lazy.force jsoo_objs) in
+    let syms = defined_symbols (archives @ user_archives () @ flag_archives @ Lazy.force jsoo_objs @ Lazy.force dynlink_objs) in
     let missing = List.filter (fun p -> not (Hashtbl.mem syms p || List.mem p js_provided)) prims in
     if missing <> [] then
       Env.log "warning: %d primitive(s) not defined by any linked library:\n  %s\n\
@@ -730,7 +822,7 @@ let run o =
       let asyncify f = Str_util.starts_with ~prefix:"-sASYNCIFY" f && f <> "-sASYNCIFY=0" in
       let tail_calls = List.exists jspi all || not (List.exists asyncify all) in
       if not tail_calls then Env.log "asyncify: compiled without wasm tail calls";
-      Some (compile_to_c ~emcc ~flags:(cflags @ [ o.opt ] @ inc) ~tail_calls ~work ~base ~bc o.bc))
+      Some (compile_to_c ~dynlink:o.dynlink ~emcc ~flags:(cflags @ [ o.opt ] @ inc) ~tail_calls ~work ~base ~bc o.bc))
     else None
   in
   if compiled = None then
@@ -863,10 +955,20 @@ let run o =
         @ Compat.concat_map (fun f -> [ "--pre-js"; f ]) o.js_files
         @ [ "--pre-js"; table ] )
   in
+  (* Emcc_dynlink's primitives, and a main module exporting what plugins
+     need (main_exports, computed before the link) *)
+  let dynlink_objs = Lazy.force dynlink_objs in
+  let exports_file = Filename.concat work "exports.json" in
+  let dynlink_flags = if o.dynlink then [ "-sMAIN_MODULE=2"; "-sEXPORTED_FUNCTIONS=@" ^ exports_file ] else [] in
+  let defaults =
+    if o.dynlink then List.filter (fun f -> not (Str_util.starts_with ~prefix:"-sEXPORTED_FUNCTIONS=" f)) defaults
+    else defaults
+  in
   let args ?(extra = []) ~output () =
-    defaults @ fs_flags @ program_objs @ [ compat_o ] @ standalone_objs @ foreign_objs @ js_objs @ extra @ archives @ o.libs
+    defaults @ fs_flags @ program_objs @ [ compat_o ] @ standalone_objs @ foreign_objs @ js_objs @ dynlink_objs @ extra
+    @ archives @ o.libs
     @ [ "-L" ^ Env.sysroot_file "lib" ]
-    @ flags_of_libs @ [ "-lm" ] @ foreign_flags @ js_flags @ o.emcc_flags @ [ "-o"; output ]
+    @ flags_of_libs @ [ "-lm" ] @ foreign_flags @ js_flags @ dynlink_flags @ o.emcc_flags @ [ "-o"; output ]
   in
   Env.log "linking %s (%d primitives, %d stub libraries%s)" o.output (List.length prims) (List.length libs)
     (if compiled <> None then ", compiled" else "");
@@ -875,7 +977,7 @@ let run o =
   let prims, arities = match compiled with Some c -> (c.c_prims, c.c_arities) | None -> (prims, arities) in
   let adapted =
     mismatches ~arities ~prims
-      ((compat_o :: standalone_objs) @ foreign_objs @ js_objs @ archives @ user_archives () @ flag_archives)
+      ((compat_o :: standalone_objs) @ foreign_objs @ js_objs @ dynlink_objs @ archives @ user_archives () @ flag_archives)
   in
   let adapters =
     if adapted = [] then []
@@ -894,6 +996,16 @@ let run o =
   | None ->
       write_file prims_src (prims_c ~arities ~adapted prims);
       cc_prims ());
+  if o.dynlink then (
+    let support = match compiled with Some c -> [ c.support_obj ] | None -> [] in
+    let exported = support @ [ compat_o ] @ js_objs @ dynlink_objs @ adapters in
+    let exports =
+      main_exports ~objects:(program_objs @ exported) ~exported
+        ~archives:(archives @ user_archives () @ flag_archives @ emscripten_system_libs ())
+    in
+    Env.log "--dynlink: a main module exporting %d symbols for its plugins" (List.length exports);
+    write_file exports_file
+      ("[" ^ String.concat "," (List.map (fun s -> Printf.sprintf "%S" ("_" ^ s)) ("main" :: exports)) ^ "]\n"));
   let code, err = Env.run_capture_stderr emcc (args ~extra:adapters ~output:o.output ()) in
   (* undefined symbols that are all primitives of the program: stubs that
      raise Failure, and the link again *)
@@ -931,3 +1043,75 @@ let run o =
   if code <> 0 then Env.fail "emcc failed (exit %d)" code;
   if foreign <> None then keep_raw_exports o.output;
   if standalone then report_imports ~wasi:o.wasi o.output
+
+(* ---------------------------------------------------------------- plugins *)
+
+(* FILE.cma or FILE.cmo -> an emscripten side module, loaded by a program
+   linked with --dynlink (Emcc_dynlink): c_of_ocaml compiles it to C that
+   finds the compilation units of the program by name, compiled as
+   position-independent code.  With [main] (the program's OUT.js or
+   OUT.wasm), the symbols the plugin imports are checked against those the
+   program exports. *)
+let plugin ~input ~output ~main ~opt =
+  if not (Env.toolchain_ready ()) then
+    Env.fail "no wasm runtime in %s, run `ocaml-emcc setup` first" (Env.sysroot ());
+  check_compiled ();
+  if not (Filename.check_suffix input ".cma" || Filename.check_suffix input ".cmo") then
+    Env.fail "plugin: %s is not a .cma or .cmo file" input;
+  if not (Sys.file_exists input) then Env.fail "plugin: %s: no such file" input;
+  let emcc = Env.emcc () in
+  let out_dir = Filename.dirname output in
+  let base = Filename.remove_extension (Filename.basename output) in
+  let work = Filename.concat out_dir ("." ^ base ^ ".ocaml-emcc") in
+  mkdir_p work;
+  let cooc = c_of_ocaml () in
+  let support = Filename.concat work "c_of_ocaml" in
+  mkdir_p support;
+  Env.run_exn cooc [ "--runtime-files"; support ];
+  let c_dir = Filename.concat work (base ^ ".c.d") in
+  Env.log "compiling %s to C (c_of_ocaml)" (Filename.basename input);
+  let word_size = if !Env.target = "wasm64" then [ "--word-size"; "64" ] else [] in
+  Env.run_exn cooc (word_size @ [ input; "--split"; c_dir ]);
+  let parts =
+    Sys.readdir c_dir |> Array.to_list
+    |> List.filter (fun f -> Filename.check_suffix f ".c")
+    |> List.sort compare
+    |> List.map (Filename.concat c_dir)
+  in
+  let flags =
+    Env.manifest_flags "cflags"
+    @ [ opt; "-fPIC"; "-mtail-call"; "-I" ^ support; "-I" ^ Env.sysroot_file "lib/ocaml" ]
+    @ [ "-Wno-incompatible-function-pointer-types" ]
+  in
+  let objs =
+    List.map
+      (fun c ->
+        let o = Filename.chop_suffix c ".c" ^ ".o" in
+        Env.run_exn emcc (flags @ [ "-c"; c; "-o"; o ]);
+        o)
+      parts
+  in
+  Env.log "linking the plugin %s" output;
+  Env.run_exn emcc (Env.manifest_flags "ldflags" @ [ opt; "-sSIDE_MODULE=1" ] @ objs @ [ "-o"; output ]);
+  match main with
+  | None -> ()
+  | Some m -> (
+      let wasm = if Filename.check_suffix m ".js" then Filename.chop_suffix m ".js" ^ ".wasm" else m in
+      let exported = Hashtbl.create 4096 in
+      List.iter (fun s -> Hashtbl.replace exported s ()) (Wasm.exports wasm);
+      let missing =
+        Wasm.imports output
+        |> List.filter_map (fun (m, f) ->
+               if (m = "env" || m = "GOT.mem" || m = "GOT.func") && not (Str_util.starts_with ~prefix:"__" f || f = "memory")
+                  && not (Hashtbl.mem exported f)
+               then Some f
+               else None)
+        |> List.sort_uniq compare
+      in
+      match missing with
+      | [] -> Env.log "%s: every symbol it imports is exported by %s" output wasm
+      | l ->
+          Env.fail
+            "%s imports %d symbol(s) that %s does not export: %s\n\
+            \  The C stubs of a plugin must be linked in the program, which must be linked with\n\
+            \  --compiled --dynlink (and -linkall)." output (List.length l) wasm (String.concat " " l))

@@ -1,4 +1,4 @@
-(* Reading wasm modules: the imports of a linked module, the function
+(* Reading wasm modules: the imports and exports of a linked module, the function
    symbols of a relocatable object (the input of wasm-ld). *)
 
 (* A function type: parameter and result types ("i32", "i64", "f32"...) *)
@@ -141,3 +141,16 @@ let functions ~what s =
           done
       | _ -> ());
   !syms
+
+(* The names exported by a wasm module (export section). *)
+let exports path =
+  let acc = ref [] in
+  sections ~what:path (Compat.read_file path) (fun ((byte, uleb, name, _) as r) id _ ->
+      if id = 7 then
+        acc :=
+          vec r (fun () ->
+              let n = name () in
+              ignore (byte ());
+              ignore (uleb ());
+              n));
+  !acc

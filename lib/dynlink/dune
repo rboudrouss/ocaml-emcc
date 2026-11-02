@@ -1,0 +1,9 @@
+; Emcc_dynlink: loading plugins in programs linked by ocaml-emcc.  The
+; stubs only fail: `ocaml-emcc link` links share/runtime/dynlink.c instead.
+
+(library
+ (name emcc_dynlink)
+ (public_name ocaml-emcc.dynlink)
+ (foreign_stubs
+  (language c)
+  (names emcc_dynlink_stubs)))
