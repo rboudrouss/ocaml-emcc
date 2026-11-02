@@ -10,6 +10,9 @@
   stay single-threaded): existing runtimes and recipes are built again.
   The mpfr, libssl, libevent, pixman and fontconfig recipes are
   thread-safe, liblo has its server thread.
+- `--wasi`: lwt works (`Lwt_unix`, `Lwt_io`): `poll` with no timeout
+  failed (emscripten's new probe, `ENOSYS`), as did `fdatasync`
+  (imported from JavaScript) and, with node's WASI, waiting for a file.
 - js_of_ocaml's JavaScript primitives: programs using the libraries
   js_of_ocaml (`Js`, `Dom_html`, its ppx, js_of_ocaml-lwt, Brr...) run in
   browsers and node, interpreted or compiled, on both targets, with the

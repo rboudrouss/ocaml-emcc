@@ -700,6 +700,11 @@ int __syscall_getcwd(char *buf, size_t size)
 
 /* ------------------------------------------------------- sizes and times */
 
+int __syscall_fdatasync(int fd)
+{
+  return is_pipe(fd) ? -EINVAL : -__wasi_fd_datasync(fd);
+}
+
 int __syscall_ftruncate64(int fd, off_t length)
 {
   return -__wasi_fd_filestat_set_size(fd, length);
@@ -794,6 +799,14 @@ static int poll_once(struct pollfd *fds, nfds_t nfds, int timeout)
       continue;
     }
     pthread_mutex_unlock(&pipe_lock);
+    /* a file is always ready (node:wasi cannot wait for one: EPERM, epoll) */
+    __wasi_fdstat_t st;
+    __wasi_errno_t e = __wasi_fd_fdstat_get(fds[i].fd, &st);
+    if (e || st.fs_filetype == __WASI_FILETYPE_REGULAR_FILE || st.fs_filetype == __WASI_FILETYPE_DIRECTORY) {
+      fds[i].revents = e ? POLLNVAL : fds[i].events & (POLLIN | POLLOUT);
+      if (fds[i].revents) ready++;
+      continue;
+    }
     if (fds[i].events & POLLIN) {
       subs[n].userdata = i;
       subs[n].type = __WASI_EVENTTYPE_FD_READ;
@@ -883,6 +896,12 @@ int __syscall_poll(struct pollfd *fds, nfds_t nfds, int timeout)
     }
     pthread_mutex_unlock(&pipe_lock);
   }
+}
+
+/* poll(..., 0): a probe of its own in recent emscripten (for JSPI) */
+int __syscall_poll_nonblocking(struct pollfd *fds, nfds_t nfds)
+{
+  return __syscall_poll(fds, nfds, 0);
 }
 
 /* -------------------------------------- what WASI preview1 does not have */

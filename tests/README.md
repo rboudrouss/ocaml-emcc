@@ -81,13 +81,12 @@ them. The zarith test also ran unmodified in Chrome, on both targets.
 ## WASI
 
 `tests/run.sh --wasi` builds the tests marked `wasi` in `run.sh` (from
-`stubs` to `camlzip`, `cstanza` and `binio`) with `--wasi`, and runs them with
-wasmtime (`$WASMTIME`, or the one in `PATH`), else with node's WASI. They
-passed with wasmtime 50 on every OCaml version for 0.3.0 (`ocaml5` from
-5.0, `syslibs` before 5.0). `sqlite`, `stubs`, `camlzip` and `binio`
-pass with node 24's WASI too. `ctypes` cannot pass, as libffi's emscripten
-port makes its calls in JavaScript, and the tests from `clibs` on were not
-tried.
+`stubs` to `camlzip`, `cstanza`, `lwt`, `binio` and the threads tests) with
+`--wasi`, and runs them with wasmtime (`$WASMTIME`, or the one in `PATH`),
+else with node's WASI. They passed with wasmtime 50 on every OCaml version
+for 0.3.0 (`ocaml5` from 5.0, `syslibs` before 5.0), and with node 24's WASI
+on OCaml 4.14. `ctypes` cannot pass, as libffi's emscripten port makes its
+calls in JavaScript, and the other tests from `clibs` on were not tried.
 
 ## Versions of the dependencies
 

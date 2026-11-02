@@ -57,7 +57,7 @@ yaml      | ym       |            | yaml                        | wasm32 wasm64 
 cstanza   | bin/main |            | ctypes                      | wasm32 wasm64 wasi |
 clibs     | sm       |            | checkseum bigstringaf       | wasm32 wasm64      |
 mcrypto   | mc       |            | mirage-crypto-ec mirage-crypto-pk mirage-crypto-rng | wasm32 wasm64      |
-lwt       | lw       |            | lwt                         | wasm32 wasm64      |
+lwt       | lw       |            | lwt                         | wasm32 wasm64 wasi |
 cryptokit | ck       |            | cryptokit                   | wasm32 wasm64      |
 minisat   | ms       |            | minisat                     | wasm32 wasm64      |
 lua       | lu       |            | ocaml-lua                   | wasm32 wasm64      |
