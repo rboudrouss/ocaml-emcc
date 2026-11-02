@@ -1071,7 +1071,8 @@ let plugin ~input ~output ~main ~opt =
   let c_dir = Filename.concat work (base ^ ".c.d") in
   Env.log "compiling %s to C (c_of_ocaml)" (Filename.basename input);
   let word_size = if !Env.target = "wasm64" then [ "--word-size"; "64" ] else [] in
-  Env.run_exn cooc (word_size @ [ input; "--split"; c_dir ]);
+  (* the locations of backtraces, when compiled with -g *)
+  Env.run_exn cooc (word_size @ [ "--debug-info"; input; "--split"; c_dir ]);
   let parts =
     Sys.readdir c_dir |> Array.to_list
     |> List.filter (fun f -> Filename.check_suffix f ".c")
