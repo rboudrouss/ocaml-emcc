@@ -9,9 +9,7 @@
 #   sysinfo, xattrs; core_unix: initgroups, getgrouplist, wordexp;
 #   core_thread: the pthread affinities;
 # - the time stamp counter (rdtsc) is the high resolution clock
-#   (performance.now, in ns);
-# - error-checking mutexes: emscripten's libc has the mutexes of a single
-#   thread, without _POSIX_THREADS.
+#   (performance.now, in ns).
 
 SOURCE=opam:core_unix
 
