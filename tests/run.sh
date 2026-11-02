@@ -71,6 +71,8 @@ cudd      | cu       |            | cudd                        | wasm32 wasm64 
 hacl      | hc       |            | hacl-star                   | wasm32 wasm64      |
 posix     | px       |            | posix-time2 posix-socket posix-stat | wasm32 wasm64      |
 mccs      | mc       |            | mccs                        | wasm32 wasm64      |
+dynlink   | main     |            | compiled                    | wasm32 wasm64      |
+dynweb    | main     |            | compiled playwright         | wasm32 wasm64      |
 jsoo      | js       |            | js_of_ocaml-ppx             | wasm32 wasm64      |
 jsprims   | jp       |            | js_of_ocaml                 | wasm32 wasm64      |
 jsdom     | page     |            | js_of_ocaml-ppx playwright  | wasm32 wasm64      |
@@ -81,12 +83,14 @@ jsdom     | page     |            | js_of_ocaml-ppx playwright  | wasm32 wasm64 
 # too, for now: its ctypes structs, laid out with the sizes of the host
 # before ctypes was rebuilt for wasm32 (as yaml's are), were not tried since.
 # depgraph needs its package installed: opam install ./tests/depgraph/pkg
+# dynlink and dynweb (plugins) are for the compiled mode only.
 # jsdom runs in headless Chromium (its check.mjs): it needs playwright,
 # PLAYWRIGHT_DIR (the directory of its node_modules) and
 # PLAYWRIGHT_BROWSERS_PATH.
 
 has_pkg() {
   case $1 in
+    compiled) [ -n "$COMPILED" ] ;;
     playwright) [ -n "${PLAYWRIGHT_DIR:-}" ] && [ -d "$PLAYWRIGHT_DIR/node_modules/playwright" ] ;;
     ocaml\>=*) [ "$(printf '%s\n' "${1#ocaml>=}" "$(ocamlc -vnum)" | sort -V | head -1)" = "${1#ocaml>=}" ] ;;
     *) ocamlfind query "$1" >/dev/null 2>&1 || [ -d "$OPAM_SWITCH_PREFIX/lib/$1" ] ;;

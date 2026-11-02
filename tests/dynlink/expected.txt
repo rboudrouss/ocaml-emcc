@@ -1,0 +1,14 @@
+main
+out/b.wasm: Failure c_of_ocaml: no implementation available for A
+loaded out/a.wasm
+loaded out/b.wasm
+out/a.wasm: Failure c_of_ocaml: the plugin defines the unit already loaded A
+out/raises.wasm: Plugin_error "boom"
+out/nothing.wasm: Failure Emcc_dynlink.loadfile out/nothing.wasm: no such file (load_url fetches a plugin)
+a: 0,1,4,9,16,25 | split+by+str
+b: hello 6 from B1
+main done
+late.wasm loaded
+a: 0,1,4,9,16,25 | split+by+str
+b: hello 6 from B1
+late: hello late from B1
