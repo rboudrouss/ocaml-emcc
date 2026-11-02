@@ -55,13 +55,16 @@ let decisions () =
   let decide ?(force = false) stamp = Recipe.decide ~force ~sum:"abc" ~installed "r" (Option.map Stamp.parse stamp) in
   let check = Check.equal show in
   check "no stamp" (Recipe.Build None) (decide None);
-  check "built" (Recipe.Built None) (decide (Some "1.0 emcc-4 recipe=abc"));
-  check "forced" (Recipe.Build None) (decide ~force:true (Some "1.0 emcc-4 recipe=abc"));
-  check "old stamp, no checksum" (Recipe.Built None) (decide (Some "1.0 emcc-4"));
+  check "built" (Recipe.Built None) (decide (Some "1.0 emcc-4 recipe=abc abi=pthread"));
+  check "forced" (Recipe.Build None) (decide ~force:true (Some "1.0 emcc-4 recipe=abc abi=pthread"));
+  check "old stamp, no checksum" (Recipe.Built None) (decide (Some "1.0 emcc-4 abi=pthread"));
+  check "built before threads"
+    (Recipe.Build (Some "r was built without -pthread (before threads), building it again"))
+    (decide (Some "1.0 emcc-4 recipe=abc"));
   check "changed recipe: noted only"
     (Recipe.Built (Some "note: the r recipe changed since it was built; rebuild with: ocaml-emcc install --force r"))
-    (decide (Some "1.0 emcc-4 recipe=def"));
-  check "same opam version" (Recipe.Built None) (decide (Some "1.14 emcc-4 recipe=abc opam=zarith"));
+    (decide (Some "1.0 emcc-4 recipe=def abi=pthread"));
+  check "same opam version" (Recipe.Built None) (decide (Some "1.14 emcc-4 recipe=abc abi=pthread opam=zarith"));
   check "opam upgrade"
     (Recipe.Build (Some "r was built from zarith 1.13, building it again for 1.14"))
     (decide (Some "1.13 emcc-4 recipe=abc opam=zarith"));
