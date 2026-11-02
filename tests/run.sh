@@ -84,10 +84,10 @@ dynweb    | main     |            | compiled playwright         | wasm32 wasm64 
 jsoo      | js       |            | js_of_ocaml-ppx             | wasm32 wasm64      |
 jsprims   | jp       |            | js_of_ocaml                 | wasm32 wasm64      |
 jsdom     | page     |            | js_of_ocaml-ppx playwright  | wasm32 wasm64      |
-threads   | th       |            | interpreted wasi-threads    | wasm32 wasm64 wasi |
-domains   | dm       |            | interpreted ocaml>=5.3 wasi-threads | wasm32 wasm64 wasi |
-threadsweb | th      |            | interpreted playwright      | wasm32 wasm64      |
-lwtthreads | lt      |            | interpreted lwt             | wasm32 wasm64      |
+threads   | th       |            | wasi-threads                | wasm32 wasm64 wasi |
+domains   | dm       |            | ocaml>=5.3 wasi-threads     | wasm32 wasm64 wasi |
+threadsweb | th      |            | playwright                  | wasm32 wasm64      |
+lwtthreads | lt      |            | lwt                         | wasm32 wasm64      |
 '
 # wasi (tests/run.sh --wasi): OUT.wasm --wasi, the tests checked that way.
 # ctypes needs libffi's JavaScript functions, no WASI host has them.
@@ -98,8 +98,7 @@ lwtthreads | lt      |            | interpreted lwt             | wasm32 wasm64 
 # dynlink, dyneffects and dynweb (plugins) are for the compiled mode only.
 # threads and domains (--threads) under --wasi need a wasmtime with
 # wasi-threads ($WASMTIME_THREADS, <= 46); threadsweb runs threads in
-# Chromium, as jsdom.  Interpreted only for now (c_of_ocaml's runtime has
-# no threads yet).
+# Chromium, as jsdom.  Compiled: c_of_ocaml 69880cea or later.
 # jsdom runs in headless Chromium (its check.mjs): it needs playwright,
 # PLAYWRIGHT_DIR (the directory of its node_modules) and
 # PLAYWRIGHT_BROWSERS_PATH.
