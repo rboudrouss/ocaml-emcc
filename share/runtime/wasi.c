@@ -391,10 +391,30 @@ static short pipe_revents(int fd, short events)
   return r;
 }
 
+/* An absolute symbolic link (/etc/localtime -> /usr/share/zoneinfo/...):
+   the host follows none leading out of the preopened directory, the path
+   it names is resolved here, through the preopened directories.  Its
+   target in TARGET (PATH_MAX bytes), when REL is one. */
+static int absolute_link(int dirfd, const char *rel, char *target)
+{
+  __wasi_size_t n;
+  if (__wasi_path_readlink(dirfd, rel, strlen(rel), (uint8_t *)target, PATH_MAX - 1, &n)) return 0;
+  target[n] = 0;
+  return target[0] == '/';
+}
+
+#define MAX_LINKS 8
+
 int __syscall_openat(int dirfd, const char *path, int flags, ...)
 {
-  RESOLVE(dirfd, path, rel);
-  return open_rel(rel_fd, rel, flags);
+  char target[PATH_MAX];
+  for (int links = 0;; links++) {
+    RESOLVE(dirfd, path, rel);
+    int fd = open_rel(rel_fd, rel, flags);
+    if (fd >= 0 || (flags & O_NOFOLLOW) || links == MAX_LINKS || !absolute_link(rel_fd, rel, target)) return fd;
+    dirfd = AT_FDCWD;
+    path = target;
+  }
 }
 
 /* A real duplicate: WASIX's (wasix.c), else none */
@@ -504,13 +524,20 @@ int __syscall_fstat64(int fd, struct stat *st)
 int __syscall_newfstatat(int dirfd, const char *path, struct stat *st, int flags)
 {
   if ((flags & AT_EMPTY_PATH) && path && !*path) return __syscall_fstat64(dirfd, st);
-  RESOLVE(dirfd, path, rel);
-  __wasi_filestat_t f;
-  __wasi_lookupflags_t look = (flags & AT_SYMLINK_NOFOLLOW) ? 0 : __WASI_LOOKUPFLAGS_SYMLINK_FOLLOW;
-  __wasi_errno_t e = __wasi_path_filestat_get(rel_fd, look, rel, strlen(rel), &f);
-  if (e) return -e;
-  fill_stat(st, &f, -1);
-  return 0;
+  char target[PATH_MAX];
+  for (int links = 0;; links++) {
+    RESOLVE(dirfd, path, rel);
+    __wasi_filestat_t f;
+    __wasi_lookupflags_t look = (flags & AT_SYMLINK_NOFOLLOW) ? 0 : __WASI_LOOKUPFLAGS_SYMLINK_FOLLOW;
+    __wasi_errno_t e = __wasi_path_filestat_get(rel_fd, look, rel, strlen(rel), &f);
+    if (!e) {
+      fill_stat(st, &f, -1);
+      return 0;
+    }
+    if (!look || links == MAX_LINKS || !absolute_link(rel_fd, rel, target)) return -e;
+    dirfd = AT_FDCWD;
+    path = target;
+  }
 }
 
 int __syscall_stat64(const char *path, struct stat *st)

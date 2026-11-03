@@ -1,17 +1,20 @@
 // Runs a WASI module (`ocaml-emcc link --wasi`) with node's WASI, as
 // tests/run.sh --wasi does when wasmtime is not installed:
 //   node tests/wasi-run.mjs prog.wasm args...
-// The current directory, /tmp and /etc are preopened, the environment
-// inherited.
+// The current directory, /tmp, /etc and /usr/share/zoneinfo are preopened,
+// the environment inherited.
 import { WASI } from 'node:wasi';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 
 const [file, ...args] = process.argv.slice(2);
 const wasi = new WASI({
   version: 'preview1',
   args: [file, ...args],
   env: process.env,
-  preopens: { '.': process.cwd(), '/tmp': '/tmp', '/etc': '/etc' },
+  preopens: {
+    '.': process.cwd(), '/tmp': '/tmp', '/etc': '/etc',
+    ...(existsSync('/usr/share/zoneinfo') ? { '/usr/share/zoneinfo': '/usr/share/zoneinfo' } : {}),
+  },
   returnOnExit: true,
 });
 const { instance } = await WebAssembly.instantiate(readFileSync(file), wasi.getImportObject());

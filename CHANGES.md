@@ -23,6 +23,8 @@
   `Timezone.local` reads: under node the host's (and that of `$TZ`), in
   browsers one made from the browser's time zone (its offsets from 1970 to
   2037). It was missing, outside `--node-fs`.
+- `--wasi`: an absolute symbolic link is followed through the preopened
+  directories (`/etc/localtime`), which WASI hosts refuse to do.
 - `--wasi`: lwt works (`Lwt_unix`, `Lwt_io`): `poll` with no timeout
   failed (emscripten's new probe, `ENOSYS`), as did `fdatasync`
   (imported from JavaScript) and, with node's WASI, waiting for a file.

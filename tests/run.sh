@@ -22,8 +22,8 @@ TARGET_COL=$TARGET; [ $WASI = yes ] && TARGET=wasm32 TARGET_COL=wasi
 # the WASI host: $WASMTIME, wasmtime in PATH, else node:wasi.  Programs
 # with threads (threads: yes in their ocaml-emcc.conf) need wasi-threads:
 # $WASMTIME_THREADS, a wasmtime <= 46 (47 removed it).  The program's
-# temporary files go to /tmp, which is preopened (not $TMPDIR), as is /etc
-# (the local time zone).  Programs
+# temporary files go to /tmp, which is preopened (not $TMPDIR), as are /etc
+# and /usr/share/zoneinfo (the local time zone).  Programs
 # with sockets (wasix: yes) run in $WASMER (wasmer in PATH), with network
 # (and the tail calls of --compiled).
 WASMTIME=${WASMTIME:-$(command -v wasmtime || true)}
@@ -32,13 +32,14 @@ WASMER=${WASMER:-$(command -v wasmer || true)}
 # a program running longer than $TEST_TIMEOUT seconds (default 900) is
 # stopped: the test fails (exit=124) instead of blocking the others
 TO="timeout -k 10 ${TEST_TIMEOUT:-900}"
+ZONES=; [ -d /usr/share/zoneinfo ] && ZONES="--dir /usr/share/zoneinfo"
 wasi_run() {
   local -x TMPDIR=/tmp
   if grep -qs '^wasix: *yes' ocaml-emcc.conf; then
     $TO "$WASMER" run --net --enable-tail-call "$1" -- "${@:2}"
   elif grep -qs '^threads: *yes' ocaml-emcc.conf; then
-    $TO "$WASMTIME_THREADS" run -W exceptions=y,threads=y,shared-memory=y -S threads=y --dir . --dir /tmp --dir /etc -S inherit-env=y "$@" 2> >(grep -v '^WARNING: the `-Sthreads` flag' >&2)
-  elif [ -n "$WASMTIME" ]; then $TO "$WASMTIME" run -W exceptions=y --dir . --dir /tmp --dir /etc -S inherit-env=y "$@"
+    $TO "$WASMTIME_THREADS" run -W exceptions=y,threads=y,shared-memory=y -S threads=y --dir . --dir /tmp --dir /etc $ZONES -S inherit-env=y "$@" 2> >(grep -v '^WARNING: the `-Sthreads` flag' >&2)
+  elif [ -n "$WASMTIME" ]; then $TO "$WASMTIME" run -W exceptions=y --dir . --dir /tmp --dir /etc $ZONES -S inherit-env=y "$@"
   else $TO "$NODE" --no-warnings "$TESTS_DIR/wasi-run.mjs" "$@"; fi
 }
 

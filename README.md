@@ -185,8 +185,11 @@ With node, use `node:wasi` with `version: 'preview1'` and `preopens` (see
   wasi-libc does: `/tmp/x` is `x` in the directory preopened as `/tmp`, and
   a directory preopened as `.` holds every other path. Opening, reading,
   writing, `stat`, directories, renaming, removing, truncating, links and
-  times work. `Sys.chdir` and `Sys.getcwd` use a current directory kept by
-  the program, `/` at first.
+  times work. An absolute symbolic link is followed through the preopened
+  directories, which hosts refuse to do (`/etc/localtime`, a link into
+  `/usr/share/zoneinfo`: core's `Timezone.local` needs both preopened).
+  `Sys.chdir` and `Sys.getcwd` use a current directory kept by the
+  program, `/` at first.
 - Waiting: `Unix.sleep` and `Unix.select` wait for the host instead of
   spinning. `Sys.time` is the CPU time of the process, or the time since it
   started when the host has no CPU clock.
