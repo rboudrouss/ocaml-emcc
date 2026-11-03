@@ -86,8 +86,9 @@ let resolve ~extra_dirs ?bc_path bc name =
 (* The opam package of a stub library of the sysroot built from it (by
    dune or blindly: meta/<name>.provider, and a stamp starting with the
    version; by a recipe: its stamp ends with opam=<package>) for another
-   version than the installed one (opam upgrade), or by dune or blindly
-   with an older toolchain; with the reason. *)
+   version than the installed one (opam upgrade), by dune or blindly
+   with an older toolchain, or by a recipe without -pthread -fPIC; with
+   the reason. *)
 let stale name f =
   let read rel = let p = Env.sysroot_file rel in if Sys.file_exists p then Some (String.trim (Bytecode.read_file p)) else None in
   let older ~toolchain pkg stamp =
@@ -105,6 +106,10 @@ let stale name f =
         older ~toolchain:true pkg (if p = "dune-" ^ pkg then p else p ^ "-" ^ name)
     | Some pkg, Some recipe -> (
         match Stamp.read recipe with
+        | Some fields when Stamp.field "abi" fields <> Some Toolchain.abi ->
+            (* a 5.x runtime with -pthread reads Caml_state as a TLS
+               variable, stubs without it as a global *)
+            Some (pkg, "without -pthread -fPIC (opam package " ^ pkg ^ ")")
         | Some fields when Stamp.field "opam" fields = Some pkg -> older ~toolchain:false pkg recipe
         | _ -> None)
     | _ -> None
