@@ -10,14 +10,16 @@ padding fields on 64-bit targets (wasm64).
 
 --- /dev/null
 +++ b/linux_ext/src/emscripten_linux_ext.h
-@@ -0,0 +1,62 @@
+@@ -0,0 +1,76 @@
 +/* ocaml-emcc: what linux_ext uses that emscripten lacks, failing with
 +   ENOSYS.  The functions emscripten declares but does not define are
 +   renamed, after their prototypes. */
 +#include <errno.h>
 +#include <fcntl.h>
 +#include <sched.h>
++#include <stdarg.h>
 +#include <stdint.h>
++#include <string.h>
 +#include <sys/mman.h>
 +#include <sys/sysinfo.h>
 +#include <sys/types.h>
@@ -30,7 +32,19 @@ padding fields on 64-bit targets (wasm64).
 +#define PR_GET_PDEATHSIG 2
 +#define PR_SET_NAME 15
 +#define PR_GET_NAME 16
-+static int prctl(int option, ...) { (void)option; ENOSYS_RETURN; }
++/* (but for the name of a thread, kept: Async's scheduler thread names
++   itself) */
++static _Thread_local char ocaml_emcc_thread_name[17];
++static int prctl(int option, ...)
++{
++  va_list ap;
++  va_start(ap, option);
++  char *name = va_arg(ap, char *);
++  va_end(ap);
++  if (option == PR_SET_NAME) { strncpy(ocaml_emcc_thread_name, name, 16); return 0; }
++  if (option == PR_GET_NAME) { memcpy(name, ocaml_emcc_thread_name, 16); return 0; }
++  ENOSYS_RETURN;
++}
 +
 +static ssize_t sendfile(int out_fd, int in_fd, off_t *offset, size_t count)
 +{ (void)out_fd; (void)in_fd; (void)offset; (void)count; ENOSYS_RETURN; }

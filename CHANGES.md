@@ -5,7 +5,8 @@
   `Domain.spawn` a domain running in parallel, in node, browsers
   (cross-origin isolated pages) and WASI hosts with wasi-threads (wasmer,
   wasmtime up to 46), interpreted or compiled (with c_of_ocaml's support).
-  lwt then runs its jobs in its threads, and `Lwt_preemptive` works. The C code of the runtime, recipes
+  lwt then runs its jobs in its threads, and `Lwt_preemptive` works, as
+  does Async's `In_thread.run` (core_unix's `prctl` names threads). The C code of the runtime, recipes
   and stubs is now compiled with `-pthread` (programs without `--threads`
   stay single-threaded) and `-fPIC` (for plugins, at no measured cost):
   existing runtimes and recipes are built again.

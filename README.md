@@ -510,9 +510,8 @@ a thread computing lets the others run).
   sets it.
 
 lwt runs its blocking jobs (`Lwt_unix` file operations...) in its pool of
-threads, and `Lwt_preemptive` works. Async only runs the jobs of its thread
-pool (`In_thread.run`) synchronously when it cannot start a thread (not
-tried with `--threads` yet).
+threads, and `Lwt_preemptive` works. So does Async's thread pool
+(`In_thread.run`), which runs its jobs synchronously without `--threads`.
 
 Without `--threads`, a program is single-threaded as before:
 `Thread.create` and `Domain.spawn` fail, while `Mutex` and `Condition` work.
