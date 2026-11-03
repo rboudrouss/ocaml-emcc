@@ -1,4 +1,4 @@
-## Unreleased
+## 0.5.1
 
 - macOS: the symbol table of archives made by its `ar` (`__.SYMDEF
   SORTED`, a BSD long name) is no longer taken for an object (the tests
