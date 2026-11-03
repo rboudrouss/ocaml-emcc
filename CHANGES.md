@@ -6,6 +6,10 @@
 - OCaml 4.08 to 4.11: the commands whose output ocaml-emcc reads (`opam
   var prefix`, `nm`, `dune describe`...) are found in `PATH` (they were
   not, so the tests failed).
+- The stubs a recipe built before `-pthread -fPIC` (zarith, lwt,
+  mirage-crypto...) are built again when a program links them, as 0.5.0
+  said: with OCaml 5 they crashed at startup (memory access out of bounds)
+  or failed to link with `--threads`.
 
 ## 0.5.0
 
