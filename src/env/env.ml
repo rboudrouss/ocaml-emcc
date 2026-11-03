@@ -62,8 +62,17 @@ let run_exn ?env ?cwd ?out prog args =
   let c = run ?env ?cwd ?out prog args in
   if c <> 0 then fail "command failed (exit %d): %s" c (Compat.quote_command prog args)
 
+let which prog =
+  let path = Option.value (getenv_opt "PATH") ~default:"" in
+  String.split_on_char ':' path
+  |> Compat.find_map (fun d ->
+         let p = Filename.concat d prog in
+         if Sys.file_exists p && not (Sys.is_directory p) then Some p else None)
+
+(* (before OCaml 4.12, open_process_args_in does not search PATH) *)
 let output_of prog args =
-  let ic = Unix.open_process_args_in prog (Array.of_list (prog :: args)) in
+  let exe = if String.contains prog '/' then prog else Option.value (which prog) ~default:prog in
+  let ic = Unix.open_process_args_in exe (Array.of_list (prog :: args)) in
   let s = Compat.input_all ic in
   match Unix.close_process_in ic with
   | Unix.WEXITED 0 -> Some (String.trim s)
@@ -83,13 +92,6 @@ let capture ?env ?cwd ?(errors = false) prog args =
   let out = Compat.read_file tmp in
   Sys.remove tmp;
   if code = 0 then Some out else None
-
-let which prog =
-  let path = Option.value (getenv_opt "PATH") ~default:"" in
-  String.split_on_char ':' path
-  |> Compat.find_map (fun d ->
-         let p = Filename.concat d prog in
-         if Sys.file_exists p && not (Sys.is_directory p) then Some p else None)
 
 (* ------------------------------------------------------------ locations *)
 

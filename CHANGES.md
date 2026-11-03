@@ -9,6 +9,9 @@
 - macOS: the symbol table of archives made by its `ar` (`__.SYMDEF
   SORTED`, a BSD long name) is no longer taken for an object (the tests
   failed).
+- OCaml 4.08 to 4.11: the commands whose output ocaml-emcc reads (`opam
+  var prefix`, `nm`, `dune describe`...) are found in `PATH` (they were
+  not, so the tests failed).
 
 ## 0.5.0
 
