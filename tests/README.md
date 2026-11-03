@@ -70,8 +70,8 @@ stopped, and its test fails.
 Under `--wasi`, `threads` and `domains` need a wasmtime with wasi-threads
 (46 or older, removed in 47): `$WASMTIME_THREADS`; they are skipped
 otherwise. `core`, `async`, `asyncthreads` and `asyncssl` need core,
-core_unix, async and async_ssl, whose libraries are rebuilt for the target the first time (about an
-hour): the CI runs them in a workflow of their own
+core_unix, async and async_ssl, whose libraries are rebuilt for the target
+(12 to 20 minutes in the CI): the CI runs them in a workflow of their own
 (`.github/workflows/janestreet.yml`, weekly and by hand). `sockets`,
 `lwtsockets` and `threadsockets` run in wasmer (`$WASMER`, or in `PATH`),
 skipped without it.

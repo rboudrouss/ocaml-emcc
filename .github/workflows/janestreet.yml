@@ -2,8 +2,8 @@ name: Jane Street
 
 # core, async, async with threads and async_ssl (tests/core, async,
 # asyncthreads, asyncssl):
-# their libraries are rebuilt for the target the first time (about an
-# hour), too long for each push.  Weekly, and by hand.
+# their libraries are rebuilt for the target (12 to 20 minutes a job, on
+# top of installing them).  Weekly, and by hand.
 on:
   schedule:
     - cron: '0 10 * * 0'
