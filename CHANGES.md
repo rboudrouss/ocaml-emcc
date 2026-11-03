@@ -6,6 +6,9 @@
   in `ocaml-emcc.conf`), less tested, and is used with OCaml before 4.14;
   `--compiled` is still accepted. `tests/run.sh --interpreted` runs the
   tests interpreted.
+- macOS: the symbol table of archives made by its `ar` (`__.SYMDEF
+  SORTED`, a BSD long name) is no longer taken for an object (the tests
+  failed).
 
 ## 0.5.0
 

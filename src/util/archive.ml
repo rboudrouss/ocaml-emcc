@@ -24,7 +24,9 @@ let members file =
             let l = int_of_string (String.sub name 3 (String.length name - 3)) in
             let real = String.sub contents 0 l in
             let real = match String.index_opt real '\000' with Some i -> String.sub real 0 i | None -> real in
-            go next names ((real, String.sub contents l (String.length contents - l)) :: acc)
+            (* macOS's ar names its symbol table "#1/20" + "__.SYMDEF SORTED" *)
+            if Str_util.starts_with ~prefix:"__.SYMDEF" real then go next names acc
+            else go next names ((real, String.sub contents l (String.length contents - l)) :: acc)
           else if String.length name > 1 && name.[0] = '/' then
             (* GNU: an offset in the name table, the name ends with "/\n" *)
             let off = int_of_string (String.sub name 1 (String.length name - 1)) in
