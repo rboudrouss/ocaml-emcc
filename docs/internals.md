@@ -131,7 +131,8 @@ without reads the thread-local variables of the others as plain globals
 objects still link into a program without shared memory, where the TLS
 block is a plain data segment and the atomics act on an unshared memory:
 the link decides, and `--threads` adds `-pthread` to it. The stamps of the
-recipes record it (`abi=pthread`): those built before are built again.
+recipes record it (`abi=pthread-pic`, with `-fPIC`): those built before
+are built again.
 
 With emscripten's glue, threads are web workers, and `main` runs in one
 too (`-sPROXY_TO_PTHREAD`), unless the program uses js_of_ocaml's
@@ -255,7 +256,12 @@ does it before `main`, with the TLS base of the main thread
 program's `dylink.0` section once linked.
 
 `plugin` runs c_of_ocaml on the `.cma` or `.cmo`, compiles the C with
-`-fPIC`, and links it with `-sSIDE_MODULE=1`. Its only export is
+`-fPIC`, and links it with `-sSIDE_MODULE=1`, with the archives of the C
+libraries the `.cma` names (`-cclib -lX`, `-dllib -lX`, as `ocamlobjinfo`
+reports them: its stubs, built when missing as for a program), which are
+position-independent like all the C of the sysroot. A function of the
+plugin whose address it takes goes through a `GOT.func` import, which the
+loader resolves with the plugin's own exports. Its only other export is
 `camlc_plugin_init`. `Emcc_dynlink.loadfile` (share/runtime/dynlink.c)
 `dlopen`s it (`RTLD_LOCAL`) and calls `camlc_plugin_init` from the
 primitive, as it must run inside an OCaml call. `load_url` uses
@@ -372,6 +378,10 @@ builds single-threaded.
   (emscripten's JS exceptions cannot be thrown alongside)
 - `-pthread` when compiling (the wrapper adds it, the recipes get it in
   `CFLAGS`), not when linking: see [Threads](#threads)
+- `-fPIC` likewise, so that a plugin can link any library of the sysroot
+  (see [Plugins](#plugins)). The link of a program resolves the GOT of
+  the position-independent code: it costs nothing measurable (the
+  interpreter, gmp: within 1%), the size is the same
 
 ## OCaml versions
 

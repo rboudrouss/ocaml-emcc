@@ -6,7 +6,7 @@ OE_LIB ?= $(abspath ../../_build/install/default/lib)
 export OCAMLPATH := $(OE_LIB):$(OCAMLPATH)
 export CAML_LD_LIBRARY_PATH := $(OE_LIB)/stublibs:$(CAML_LD_LIBRARY_PATH)
 OCAMLC = ocamlfind ocamlc -package str,ocaml-emcc.dynlink
-PLUGINS = out/a.wasm out/b.wasm out/raises.wasm out/stale.wasm out/late.wasm
+PLUGINS = out/a.wasm out/b.wasm out/raises.wasm out/stale.wasm out/late.wasm out/cstub.wasm
 
 # the plugins are read from the real file system (--node-fs)
 out/main.js: main.bc $(PLUGINS:.wasm=.src)
@@ -31,6 +31,11 @@ out/stale.src: raises.ml main.bc
 	(cd out/stale && $(OCAMLC) -c app.ml raises.ml); echo out/stale/raises.cmo > $@
 out/late.src: late.ml out/b.src
 	mkdir -p out; $(OCAMLC) -c late.ml; echo late.cmo > $@
+# C stubs of its own: libcstub_stubs.a (wasm), next to the .cma naming it
+out/cstub.src: cstub.ml cstub_stubs.c main.bc
+	mkdir -p out; $(OCAMLC) -c cstub.ml
+	emcc $$($(OCAML_EMCC) env --cflags) -c cstub_stubs.c -o out/cstub_stubs.o && emar rcs libcstub_stubs.a out/cstub_stubs.o
+	$(OCAMLC) -a cstub.cmo -o cstub.cma -cclib -lcstub_stubs -dllib -lcstub_stubs; echo cstub.cma > $@
 
 clean:
-	rm -rf out *.cm* *.bc .*.ocaml-emcc
+	rm -rf out *.cm* *.bc .*.ocaml-emcc libcstub_stubs.a

@@ -136,7 +136,7 @@ let decide ~force ~sum ~installed name stamp =
       | Some p when installed p <> Stamp.version fields ->
           Build (Some (Printf.sprintf "%s was built from %s %s, building it again for %s" name p (Stamp.version fields) (installed p)))
       | _ when Stamp.field "abi" fields <> Some Toolchain.abi ->
-          Build (Some (Printf.sprintf "%s was built without -pthread (before threads), building it again" name))
+          Build (Some (Printf.sprintf "%s was built without -pthread -fPIC, building it again" name))
       | _ ->
           (* (stamps written before checksums were recorded have none) *)
           Built

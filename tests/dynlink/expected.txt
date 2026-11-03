@@ -6,10 +6,13 @@ out/a.wasm: Failure c_of_ocaml: the plugin defines the unit already loaded A
 out/raises.wasm: Plugin_error "boom"
 out/stale.wasm: Failure c_of_ocaml: the plugin was compiled against another version of the interface App
 out/nothing.wasm: Failure Emcc_dynlink.loadfile out/nothing.wasm: no such file (load_url fetches a plugin)
+loaded out/cstub.wasm
 a: 0,1,4,9,16,25 | split+by+str
 b: hello 6 from B1
+cstub: 61 72 c-two
 main done
 late.wasm loaded
 a: 0,1,4,9,16,25 | split+by+str
 b: hello 6 from B1
+cstub: 63 74 c-one
 late: hello late from B1

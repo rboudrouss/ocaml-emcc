@@ -7,7 +7,8 @@
   wasmtime up to 46), interpreted or compiled (with c_of_ocaml's support).
   lwt then runs its jobs in its threads, and `Lwt_preemptive` works. The C code of the runtime, recipes
   and stubs is now compiled with `-pthread` (programs without `--threads`
-  stay single-threaded): existing runtimes and recipes are built again.
+  stay single-threaded) and `-fPIC` (for plugins, at no measured cost):
+  existing runtimes and recipes are built again.
   The mpfr, libssl, libevent, pixman and fontconfig recipes are
   thread-safe, liblo has its server thread.
 - Sockets with WASI: `--wasix` (or `wasix: yes` in `ocaml-emcc.conf` for
@@ -39,7 +40,8 @@
   compiles a library to a wasm side module, which a program linked with
   `--dynlink` loads with the new library `ocaml-emcc.dynlink`
   (`Emcc_dynlink.loadfile`, or `load_url` to fetch it in a web page),
-  checking their interfaces as `Dynlink` does. Effect handlers with
+  checking their interfaces as `Dynlink` does. A plugin links the C
+  stubs of its library. Effect handlers with
   `--effects double-translation`, which plugins built with `--main`
   follow.
 - Added recipes: async_unix, bls12-381-unix, bytesrw, cairo,

@@ -446,8 +446,9 @@ below.)
 
 Limitations:
 
-- The C stubs a plugin needs must be in the program, which links them
-  when it uses their library (with `-linkall`, all of its modules).
+- A plugin links the C libraries its `.cma` names (its stubs, built for
+  the target when missing); the others it calls must be in the program
+  (`plugin --main` checks it).
 - Plugins cannot be unloaded.
 - Effect handlers (OCaml 5) are disabled by default in a program with
   plugins and in its plugins. `--effects double-translation` enables them

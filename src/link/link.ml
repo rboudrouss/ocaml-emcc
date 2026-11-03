@@ -245,7 +245,7 @@ let check_compiled () =
 let check_threads ~standalone (o : opts) =
   (match Stamp.read "ocaml" with
   | Some fields when Stamp.field "abi" fields = Some Toolchain.abi -> ()
-  | _ -> Env.fail "--threads: the wasm runtime of %s was not built for threads, run `ocaml-emcc setup` again" (Env.sysroot ()));
+  | _ -> Env.fail "--threads: the wasm runtime of %s was not built for threads (-pthread), run `ocaml-emcc setup` again" (Env.sysroot ()));
   if standalone && not o.wasi then
     Env.fail "--threads: a standalone %s has no threads (emscripten starts them from its JavaScript glue): link OUT.js, or use --wasi" o.output
 
@@ -1179,6 +1179,50 @@ let run o =
 
 (* ---------------------------------------------------------------- plugins *)
 
+(* The C libraries a .cma names (-cclib -lX, -dllib -lX: its stubs, the
+   libraries they use), as ocamlobjinfo reports them. *)
+let cma_c_libs input =
+  if not (Filename.check_suffix input ".cma") then []
+  else
+    match Env.output_of (Filename.concat (Env.host_bin ()) "ocamlobjinfo") [ input ] with
+    | None -> []
+    | Some out ->
+        let fields = [ "Extra C object files:"; "Extra C options:"; "Extra dynamically-loaded libraries:" ] in
+        String.split_on_char '\n' out
+        |> Compat.concat_map (fun l ->
+               match List.find_opt (fun f -> Str_util.starts_with ~prefix:f l) fields with
+               | None -> []
+               | Some f -> Str_util.words (String.sub l (String.length f) (String.length l - String.length f)))
+        |> List.filter_map (fun w ->
+               if Str_util.starts_with ~prefix:"-l" w then Some (String.sub w 2 (String.length w - 2))
+               else if Str_util.starts_with ~prefix:"dll" w then Some (String.sub w 3 (String.length w - 3))
+               else None)
+        |> List.filter (fun n ->
+               not (List.mem n [ "m"; "c"; "dl"; "rt"; "pthread" ] || List.mem n Deps.compiler_libs || List.mem_assoc n runtime_libs))
+        |> List.sort_uniq compare
+
+(* Their wasm archives, compiled as position-independent code (as all the
+   C of the sysroot, Toolchain.compile_flags), linked into the plugin:
+   built when missing, as for a program. *)
+let plugin_archives input =
+  let dirs = [ Filename.dirname input; Env.sysroot_file "lib" ] in
+  cma_c_libs input
+  |> List.filter_map (fun n ->
+         let found () = Deps.find_lib dirs n in
+         match found () with
+         | Some a -> Some a
+         | None -> (
+             (match Deps.owner_of_dll n with
+             | Some pkg ->
+                 Env.log "lib%s.a missing, building it from opam package %s" n pkg;
+                 Deps.obtain pkg n
+             | None -> ( match Deps.lib_recipe n with Some r -> Deps.install_recipe r | None -> ()));
+             match found () with
+             | Some a -> Some a
+             | None ->
+                 Env.log "note: %s asks for -l%s, no wasm lib%s.a found: ignored" (Filename.basename input) n n;
+                 None))
+
 (* FILE.cma or FILE.cmo -> an emscripten side module, loaded by a program
    linked with --dynlink (Emcc_dynlink): c_of_ocaml compiles it to C that
    finds the compilation units of the program by name, compiled as
@@ -1238,13 +1282,17 @@ let plugin ?effects ~input ~output ~main ~opt () =
         o)
       parts
   in
-  Env.log "linking the plugin %s" output;
-  Env.run_exn emcc (Env.manifest_flags "ldflags" @ [ opt; "-sSIDE_MODULE=1" ] @ objs @ [ "-o"; output ]);
+  let archives = plugin_archives input in
+  Env.log "linking the plugin %s%s" output
+    (if archives = [] then "" else " (with " ^ String.concat " " (List.map Filename.basename archives) ^ ")");
+  Env.run_exn emcc (Env.manifest_flags "ldflags" @ [ opt; "-sSIDE_MODULE=1" ] @ objs @ archives @ [ "-o"; output ]);
   match (main_wasm, main_exports) with
   | None, _ | _, None -> ()
   | Some wasm, Some exports -> (
+      (* (or by the plugin itself: the GOT entries of its own functions
+         whose address it takes, its C) *)
       let exported = Hashtbl.create 4096 in
-      List.iter (fun s -> Hashtbl.replace exported s ()) exports;
+      List.iter (fun s -> Hashtbl.replace exported s ()) (exports @ Wasm.exports output);
       let missing =
         Wasm.imports output
         |> List.filter_map (fun (m, f) ->
@@ -1259,5 +1307,5 @@ let plugin ?effects ~input ~output ~main ~opt () =
       | l ->
           Env.fail
             "%s imports %d symbol(s) that %s does not export: %s\n\
-            \  The C stubs of a plugin must be linked in the program, which must be linked with\n\
-            \  --compiled --dynlink (and -linkall)." output (List.length l) wasm (String.concat " " l))
+            \  The C a plugin calls is in the plugin (the libraries its .cma names) or in the\n\
+            \  program, linked with --compiled --dynlink (and -linkall)." output (List.length l) wasm (String.concat " " l))

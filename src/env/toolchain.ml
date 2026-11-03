@@ -34,12 +34,15 @@ let opt () = Option.value (Env.getenv_opt "OCAML_EMCC_OPT") ~default:"-O2"
    is single-threaded.  Every object must agree: one built without -pthread
    reads a thread-local variable of the others as a plain global, and a
    program with threads (shared memory) refuses it.  Not in the link flags:
-   -pthread there makes the program multi-threaded. *)
-let compile_flags = [ "-pthread" ]
+   -pthread there makes the program multi-threaded.
+   And as position-independent code (-fPIC), which a plugin needs for the C
+   it links (its stubs, the libraries they use): a static link resolves
+   its GOT at link time, at no measured cost. *)
+let compile_flags = [ "-pthread"; "-fPIC" ]
 
 (* What the objects of a recipe were built for: recorded in its stamp, a
    recipe built for another one is built again (Recipe.decide). *)
-let abi = "pthread"
+let abi = "pthread-pic"
 
 (* What the toolchain wrappers and the link step record; extra flags are
    added on top at each use (recipes, stubs in tools/ocamlc). *)
