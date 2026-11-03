@@ -543,9 +543,10 @@ Besides 31-bit integers on wasm32:
   than its definition (`int` for `long`) becomes a trap on wasm64. `link`
   warns about each one.
 - **Files**: outside `--node-fs`, the program has emscripten's file system
-  in memory, with `/etc/localtime`, the local time zone's file: under node
-  the host's (and that of `$TZ`), in browsers one made from the browser's
-  time zone, exact from 1970 to 2037.
+  in memory, with `/etc/localtime`, the local time zone's file (also under
+  its name in `/usr/share/zoneinfo`): under node the host's (and that of
+  `$TZ`), in browsers one made from the browser's time zone, exact from
+  1970 to 2037.
 - **Floating-point rounding modes** do not exist in wasm: only
   round-to-nearest is available, so code that switches to directed rounding
   (`fesetround`) loses that guarantee.

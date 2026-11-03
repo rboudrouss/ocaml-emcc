@@ -1,1 +1,1 @@
-(executable (name cr) (modes byte exe) (libraries core) (preprocess (pps ppx_jane)))
+(executable (name cr) (modes byte exe) (libraries core core_unix.time_float_unix) (preprocess (pps ppx_jane)))

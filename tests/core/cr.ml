@@ -23,6 +23,6 @@ let () =
   printf "date %s\n" (Date.to_string (Date.add_days (Date.of_string "2024-02-28") 2))
 
 let () =
-  let zone = force Timezone.local in
+  let zone = force Time_float_unix.Zone.local in
   let t = Time_float.of_span_since_epoch (Time_float.Span.of_sec 1.72e9) in
   printf "local %s\n" (Time_float.to_string_abs t ~zone)

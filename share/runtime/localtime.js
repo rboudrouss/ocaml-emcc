@@ -1,9 +1,9 @@
 // ocaml-emcc: /etc/localtime in the program's file system, which libraries
-// read for the local time zone (core's Timezone.local).  Under node, the
-// host's (and the zone file of $TZ, as /usr/share/zoneinfo/$TZ); in
-// browsers, or without one, a tzfile of the JavaScript engine's time zone
-// from 1970 to 2037, whose offsets are Date's.  Not with -sNODERAWFS (the
-// real files already).
+// read for the local time zone (core's Timezone.local), also under its name
+// in /usr/share/zoneinfo.  Under node, the host's (and the zone file of
+// $TZ); in browsers, or without one, a tzfile of the JavaScript engine's
+// time zone from 1970 to 2037, whose offsets are Date's.  Not with
+// -sNODERAWFS (the real files already).
 var ocamlEmccLocaltime = {
   // the offset from UTC (seconds) at time t (seconds)
   offset(t) {
@@ -66,26 +66,42 @@ var ocamlEmccLocaltime = {
     return b;
   },
 
+  // a zone file in the zone directory, under its name
+  zone(dir, name, data) {
+    if (!name || !/^[A-Za-z0-9_+-]+(\/[A-Za-z0-9_+-]+)*$/.test(name)) return;
+    try {
+      var path = dir + '/' + name;
+      FS.mkdirTree(path.slice(0, path.lastIndexOf('/')));
+      FS.writeFile(path, data);
+    } catch (e) {}
+  },
+
+  // /etc/localtime, and the zone directory with the local zone (and that of
+  // $TZ) under its name, which libraries look for (core names the local
+  // zone by finding the same file there)
   install() {
     if (typeof FS == 'undefined') return;
     try { FS.stat('/etc/localtime'); return; } catch (e) {}
-    var data = null;
+    var L = ocamlEmccLocaltime, data = null, name = null, dir = '/usr/share/zoneinfo';
     if (typeof process == 'object' && process.versions && process.versions.node && typeof require == 'function') {
       var fs = require('fs');
-      try { data = fs.readFileSync('/etc/localtime'); } catch (e) {}
-      var tz = process.env.TZ, dir = process.env.TZDIR || '/usr/share/zoneinfo';
-      if (tz && /^[A-Za-z0-9_+-]+(\/[A-Za-z0-9_+-]+)*$/.test(tz)) {
-        try {
-          var zone = fs.readFileSync(dir + '/' + tz), path = dir + '/' + tz;
-          FS.mkdirTree(path.slice(0, path.lastIndexOf('/')));
-          FS.writeFile(path, zone);
-        } catch (e) {}
-      }
+      dir = process.env.TZDIR || dir;
+      try {
+        data = fs.readFileSync('/etc/localtime');
+        var link = fs.readlinkSync('/etc/localtime'), at = link.indexOf('zoneinfo/');
+        if (at >= 0) name = link.slice(at + 9);
+      } catch (e) {}
+      try { L.zone(dir, process.env.TZ, fs.readFileSync(dir + '/' + process.env.TZ)); } catch (e) {}
     }
     try {
-      if (!data) data = ocamlEmccLocaltime.tzfile();
+      if (!data) {
+        data = L.tzfile();
+        name = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      }
       FS.mkdirTree('/etc');
       FS.writeFile('/etc/localtime', data);
+      FS.mkdirTree(dir);
+      L.zone(dir, name, data);
     } catch (e) {}
   },
 };

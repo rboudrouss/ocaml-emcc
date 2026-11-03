@@ -19,10 +19,11 @@
   connections on the sockets its host preopens (wasmtime 46:
   `-S preview2=n -S tcplisten=ADDR`), the descriptors after the standard
   streams.
-- The local time zone has its file, `/etc/localtime`, which core's
-  `Timezone.local` reads: under node the host's (and that of `$TZ`), in
-  browsers one made from the browser's time zone (its offsets from 1970 to
-  2037). It was missing, outside `--node-fs`.
+- The local time zone has its file, `/etc/localtime`, also under its name
+  in `/usr/share/zoneinfo`, which core's `Timezone.local` reads: under node
+  the host's (and that of `$TZ`), in browsers one made from the browser's
+  time zone (its offsets from 1970 to 2037). It was missing, outside
+  `--node-fs`.
 - `--wasi`: an absolute symbolic link is followed through the preopened
   directories (`/etc/localtime`), which WASI hosts refuse to do.
 - `--wasi`: lwt works (`Lwt_unix`, `Lwt_io`): `poll` with no timeout
