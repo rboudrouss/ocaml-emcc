@@ -1,4 +1,4 @@
-## Unreleased
+## 0.5.0
 
 - Threads: with `--threads` (or `threads: yes` in `ocaml-emcc.conf`),
   `Thread.create` starts a real thread and, with OCaml 5.3 or later,
