@@ -1,4 +1,4 @@
-// Linked (--pre-js) by `ocaml-emcc link --compiled --threads`, instead of
+// Linked (--pre-js) by `ocaml-emcc link --threads` (compiled), instead of
 // node_stack.js: the program runs in a pthread (-sPROXY_TO_PTHREAD), a
 // worker as each of its threads.  Under node they all get a stack of
 // $OCAML_EMCC_STACK_MB megabytes (default 1024), on which compiled OCaml

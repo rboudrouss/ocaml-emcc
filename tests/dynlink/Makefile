@@ -1,4 +1,4 @@
-# Plugins (tests/dynlink), compiled mode only: tests/run.sh --compiled.
+# Plugins (tests/dynlink), compiled mode only (not tests/run.sh --interpreted).
 # ocaml-emcc.dynlink comes from the build of this repository.
 OCAML_EMCC ?= ocaml-emcc
 # (OE_LIB: that of another build, for another switch)

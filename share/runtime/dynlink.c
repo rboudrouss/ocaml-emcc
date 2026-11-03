@@ -128,7 +128,7 @@ CAMLprim value caml_emcc_dynlink_open_async(value url, value k)
 
 static void no_dynlink(void)
 {
-  caml_failwith("Emcc_dynlink: the program is not linked for plugins (ocaml-emcc link/build --compiled --dynlink)");
+  caml_failwith("Emcc_dynlink: the program is not linked for plugins (ocaml-emcc link/build --dynlink)");
 }
 
 CAMLprim value caml_emcc_dynlink_loadfile(value path) { (void)path; no_dynlink(); return Val_unit; }

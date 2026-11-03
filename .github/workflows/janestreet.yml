@@ -59,11 +59,11 @@ jobs:
         run: |
           case ${{ matrix.target }} in wasi) args=--wasi ;; *) args="--target ${{ matrix.target }}" ;; esac
           opam exec -- bash -c "SWITCH=\$(opam var prefix) tests/run.sh $args core async asyncthreads asyncssl"
-      - name: tests/run.sh --compiled core async asyncthreads asyncssl (${{ matrix.target }})
+      - name: tests/run.sh --interpreted core async asyncthreads asyncssl (${{ matrix.target }})
         if: ${{ !cancelled() }}
         run: |
           case ${{ matrix.target }} in wasi) args=--wasi ;; *) args="--target ${{ matrix.target }}" ;; esac
-          opam exec -- bash -c "SWITCH=\$(opam var prefix) tests/run.sh $args --compiled core async asyncthreads asyncssl"
+          opam exec -- bash -c "SWITCH=\$(opam var prefix) tests/run.sh $args --interpreted core async asyncthreads asyncssl"
       # (cancelled: a timeout)
       - if: failure() || cancelled()
         uses: actions/upload-artifact@v7

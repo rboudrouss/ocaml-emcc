@@ -37,15 +37,18 @@
    library of the opam package that installed `dllX.so` (libraries built
    with `ocamlmklib -custom`, such as stb_image, are only named there), or
    the recipe providing `libX.a`.
-5. **Link**: a primitive table is generated with only the primitives the
-   bytecode uses, so wasm-ld drops the rest. The bytecode, without its
-   `DLLS`/`DLPT` sections, is embedded in the module and `argv[0]` points
-   to it (the `ocamlc -custom` trick), so `Sys.argv` looks native.
+5. **Link**: the bytecode is compiled to C (see [compiled
+   mode](#compiled-mode)), linked with the runtime, the stub libraries and
+   ocaml-emcc's own C (`share/runtime/`). With `--interpreted`, a primitive
+   table is generated instead, with only the primitives the bytecode uses,
+   so wasm-ld drops the rest, and the bytecode, without its `DLLS`/`DLPT`
+   sections, is embedded in the module with `argv[0]` pointing to it (the
+   `ocamlc -custom` trick), so `Sys.argv` looks native.
 
 ## Compiled mode
 
-With `--compiled`, `link` (step 5 above) runs `c_of_ocaml PROG.bc -o
-PROG.c` instead of embedding the bytecode, and `c_of_ocaml --runtime-files
+By default (not `--interpreted`), `link` (step 5 above) runs `c_of_ocaml
+PROG.bc -o PROG.c` instead of embedding the bytecode, and `c_of_ocaml --runtime-files
 DIR` for the runtime support of the generated code (`camlc.h`,
 `camlc_runtime.c`). On wasm64, c_of_ocaml gets `--word-size 64`, for
 63-bit integers. Both C files are compiled with the flags of the runtime

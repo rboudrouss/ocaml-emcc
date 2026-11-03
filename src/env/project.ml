@@ -10,6 +10,7 @@
      cflags: -DFOO                   extra C flags (stubs and recipes)
      threads: yes                    link with --threads
      wasix: yes                      --wasi links with --wasix (sockets)
+     interpreted: yes                link with --interpreted
 
    Without a configuration file, `emcc-recipes/` next to the nearest
    dune-project is still picked up as a recipe directory. *)
@@ -24,9 +25,10 @@ type t = {
   cflags : string list;
   threads : bool;
   wasix : bool;
+  interpreted : bool;
 }
 
-let empty = { dir = None; target = None; recipes = []; requires = []; link_flags = []; js_files = []; cflags = []; threads = false; wasix = false }
+let empty = { dir = None; target = None; recipes = []; requires = []; link_flags = []; js_files = []; cflags = []; threads = false; wasix = false; interpreted = false }
 
 let rec find_up dir names =
   match List.find_opt (fun n -> Sys.file_exists (Filename.concat dir n)) names with
@@ -74,6 +76,7 @@ let load () =
         cflags = words "cflags";
         threads = yes "threads";
         wasix = yes "wasix";
+        interpreted = yes "interpreted";
       }
   | None -> (
       match find_up cwd [ "dune-project" ] with

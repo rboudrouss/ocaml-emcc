@@ -5,7 +5,7 @@
 
 static void unavailable(void)
 {
-  caml_failwith("Emcc_dynlink: only in programs linked by ocaml-emcc --compiled --dynlink");
+  caml_failwith("Emcc_dynlink: only in programs linked by ocaml-emcc --dynlink (compiled)");
 }
 
 value caml_emcc_dynlink_loadfile(value path) { (void)path; unavailable(); return Val_unit; }

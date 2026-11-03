@@ -148,13 +148,16 @@
   directory, where the sysroot's wrapper took it for the host context: the
   wasm stubs got the host's C flags (`gsl` read its headers from
   `/usr/include`). The wrapper now goes by `INSIDE_DUNE`.
-- Compiled mode (experimental): with `--compiled`, `build` and `link`
-  compile the bytecode to C with c_of_ocaml instead of interpreting it.
-  Programs run 2 to 5 times faster in node, and their `.wasm` is 2 to 8
-  times smaller. It works with OCaml 4.14 and 5, on wasm32 and wasm64,
-  effect handlers included. The stubs get the same signature adapters as
-  with the interpreter. `tests/run.sh --compiled` runs the tests in this
-  mode.
+- Compiled mode, the default: `build` and `link` compile the bytecode to
+  C with c_of_ocaml (in `PATH`, or `$OCAML_EMCC_C_OF_OCAML`) instead of
+  interpreting it. Programs run 2 to 5 times faster in node, and their
+  `.wasm` is 2 to 8 times smaller. It works with OCaml 4.14 and 5, on
+  wasm32 and wasm64, effect handlers included. The stubs get the same
+  signature adapters as with the interpreter. The interpreter stays
+  available with `--interpreted` (or `interpreted: yes` in
+  `ocaml-emcc.conf`), less tested, and is used with OCaml before 4.14;
+  `--compiled` is still accepted. `tests/run.sh --interpreted` runs the
+  tests interpreted.
 - The bytecode interpreter runs about twice as fast in node and browsers
   (fib: 52.7 s before, 23.9 s after, 15.8 s for the native `ocamlrun`).
   V8 optimizes a wasm function for its next calls only, so the

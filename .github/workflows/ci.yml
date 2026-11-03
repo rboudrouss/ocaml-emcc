@@ -32,8 +32,8 @@ jobs:
       - name: the installed CLI finds its share directory
         run: opam exec -- ocaml-emcc env | grep -q "share.*/share/ocaml-emcc$"
 
-  # tests/run.sh --compiled: each test built natively and with ocaml-emcc,
-  # the bytecode compiled to C by c_of_ocaml, outputs compared
+  # tests/run.sh: each test built natively and with ocaml-emcc, the
+  # bytecode compiled to C by c_of_ocaml (the default), outputs compared
   test:
     strategy:
       fail-fast: false
@@ -106,15 +106,15 @@ jobs:
           cd ../wasmer
           curl -sSLf https://github.com/wasmerio/wasmer/releases/download/v7.5.0/wasmer-linux-amd64.tar.gz | tar xz
           echo "WASMER=$(pwd)/bin/wasmer" >> "$GITHUB_ENV"
-      - name: tests/run.sh --compiled (${{ matrix.target }})
+      - name: tests/run.sh (${{ matrix.target }})
         run: |
           case ${{ matrix.target }} in wasi) args=--wasi ;; *) args="--target ${{ matrix.target }}" ;; esac
-          args="$args --compiled"
           opam exec -- bash -c "SWITCH=\$(opam var prefix) tests/run.sh $args"
       # the runtime's threads and sockets, interpreted too
-      - name: tests/run.sh threads sockets (${{ matrix.target }}, interpreted)
+      - name: tests/run.sh --interpreted threads sockets (${{ matrix.target }})
         run: |
           case ${{ matrix.target }} in wasi) args=--wasi ;; *) args="--target ${{ matrix.target }}" ;; esac
+          args="$args --interpreted"
           opam exec -- bash -c "SWITCH=\$(opam var prefix) tests/run.sh $args threads domains threadsweb lwtthreads sockets"
       # (cancelled: a timeout)
       - if: failure() || cancelled()

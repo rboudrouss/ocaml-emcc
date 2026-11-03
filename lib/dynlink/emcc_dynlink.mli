@@ -2,7 +2,7 @@
 
     A plugin is an OCaml library ([.cma]) or module ([.cmo]) compiled to a
     wasm side module by [ocaml-emcc plugin], loaded by a program linked with
-    [ocaml-emcc build/link --compiled --dynlink] from bytecode linked with
+    [ocaml-emcc build/link --dynlink] from bytecode linked with
     [-linkall]. Loading a plugin runs the initialization of its modules,
     which can use those of the program and of the plugins loaded before
     it. *)

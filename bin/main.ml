@@ -15,31 +15,38 @@ main command (dune projects):
       JavaScript glue (it imports emscripten functions, see --wasi).
 
 link options (build and link):
-  -L DIR          search lib<x>.a in DIR
-  -l LIB          extra library or archive to link (repeatable)
-  --preload       bytecode in a separate .data file instead of embedded
-  --node-fs       node only: real file system access, .bc next to OUT.js
-  -O FLAG         emcc optimisation flag (default -O2)
-  --stack-size S  C stack size (default 8MB)
-  --no-deps       do not build missing stub libraries automatically
-  --wasi          OUT.wasm for a WASI host (wasmtime, node:wasi...): files,
-                  clocks, sleep... on WASI instead of emscripten's JS (wasm32);
-                  sockets: only those the host preopens (accept)
-  --wasix         --wasi with WASIX's sockets (socket, connect, bind,
-                  getaddrinfo...): a module for wasmer (wasmer run --net)
-  --compiled      compile the bytecode to C with c_of_ocaml instead of
-                  interpreting it (faster; OCaml >= 4.14)
-  --dynlink       with --compiled: a program loading plugins (Emcc_dynlink
-                  of ocaml-emcc.dynlink); its bytecode must be linked with
-                  -linkall
-  --effects MODE  with --compiled: effect handlers, c_of_ocaml's
+ how the OCaml code runs
+  --interpreted   run the bytecode on an interpreter (ocamlrun built for
+                  wasm) instead of compiling it to C with c_of_ocaml (the
+                  default, OCaml >= 4.14; before 4.14, always interpreted).
+                  Slower (2 to 5 times) and bigger, less tested; for when
+                  c_of_ocaml is missing or fails on a program
+  --compiled      the default (accepted for older scripts)
+  --effects MODE  compiled: effect handlers (OCaml 5), c_of_ocaml's
                   double-translation or disabled (default: double
                   translation when the program performs effects; disabled
                   with --dynlink)
   --threads       Thread.create and Domain.spawn (OCaml >= 5.3) start
                   threads: emscripten's pthreads (web workers sharing the
                   memory; in browsers, a cross-origin isolated page), or with
-                  --wasi wasi-threads (wasmtime <= 46 with -S threads...)
+                  --wasi wasi-threads (wasmer, wasmtime <= 46)
+  --dynlink       a program loading plugins (Emcc_dynlink of
+                  ocaml-emcc.dynlink, see `plugin`), compiled only; its
+                  bytecode must be linked with -linkall
+ where it runs (and the extension of OUT: .js, .html, .wasm)
+  --wasi          OUT.wasm for a WASI host (wasmtime, node:wasi...): files,
+                  clocks, sleep... on WASI instead of emscripten's JS (wasm32);
+                  sockets: only those the host preopens (accept)
+  --wasix         --wasi with WASIX's sockets (socket, connect, bind,
+                  getaddrinfo...): a module for wasmer (wasmer run --net)
+  --node-fs       node only: the real file system and environment instead of
+                  emscripten's in memory (interpreted: the .bc next to OUT.js)
+  --preload       interpreted: the bytecode in a separate .data file instead
+                  of embedded
+ C and JavaScript code
+  -L DIR          search lib<x>.a in DIR
+  -l LIB          extra library or archive to link (repeatable)
+  --no-deps       do not build missing stub libraries automatically
   --no-missing-primitives
                   fail to link when a primitive is defined by no library
                   (default: a stub raising Failure when called, and a warning)
@@ -47,6 +54,9 @@ link options (build and link):
                   `function NAME` and `//Provides: NAME`), called with
                   JavaScript values as js_of_ocaml's (repeatable; also
                   `js-files:` in ocaml-emcc.conf)
+ emcc
+  -O FLAG         emcc optimisation flag (default -O2; -Oz for size)
+  --stack-size S  C stack size (default 8MB)
   --emcc-flag F   extra emcc link flag (repeatable); also everything after
                   `--`, $OCAML_EMCC_LDFLAGS and `link-flags:` in ocaml-emcc.conf
 
@@ -58,7 +68,8 @@ step by step (scripts, Makefiles, projects without dune):
   doctor PROG.bc [-L DIR]...   stub libraries, primitives, 31-bit literals
   link PROG.bc -o OUT.js [LINK OPTIONS] [-- EMCC-ARGS...]
   plugin LIB.cma|M.cmo -o OUT.wasm [--main PROG.js] [--effects MODE] [-O FLAG]
-                               a plugin for a program linked with --dynlink;
+                               a plugin (compiled) for a program linked with
+                               --dynlink;
                                --main checks that the program exports what
                                it needs, and gives its effects mode
   env [--cflags|--sysroot]     paths and configuration; --cflags prints the
@@ -75,7 +86,8 @@ global options:
   -v                      show the commands run
 
 A project can have an ocaml-emcc.conf (target, recipes, requires, link-flags,
-js-files, cflags) and an emcc-recipes/ directory, found from the current directory.
+js-files, cflags, threads, wasix, interpreted) and an emcc-recipes/
+directory, found from the current directory.
 |}
 
 let die_usage () = prerr_string usage; exit 2
@@ -189,9 +201,12 @@ let default_link_opts : Link.opts =
   {
     bc = ""; output = ""; lib_dirs = []; libs = []; emcc_flags = []; mode = Link.Embed;
     opt = "-O2"; stack_size = "8MB"; auto_deps = true; check = true; wasi = false; wasix = false;
-    compiled = false;
+    compiled = true;
     missing_prims = true; js_files = []; dynlink = false; effects = None; threads = false;
   }
+
+(* --compiled or --interpreted, when given *)
+let compiled_flag = ref None
 
 (* Options shared by `link` and `build`; [extra] handles command-specific
    ones, positional arguments are returned in order. *)
@@ -208,7 +223,8 @@ let parse_link_opts ?(extra = fun _ -> None) args =
     | "--no-deps" :: rest -> go { o with auto_deps = false } pos rest
     | "--wasi" :: rest -> go { o with wasi = true } pos rest
     | "--wasix" :: rest -> go { o with wasi = true; wasix = true } pos rest
-    | "--compiled" :: rest -> go { o with compiled = true } pos rest
+    | "--compiled" :: rest -> compiled_flag := Some true; go o pos rest
+    | "--interpreted" :: rest -> compiled_flag := Some false; go o pos rest
     | "--dynlink" :: rest -> go { o with dynlink = true } pos rest
     | "--threads" :: rest -> go { o with threads = true } pos rest
     | "--effects" :: e :: rest -> go { o with effects = Some e } pos rest
@@ -232,8 +248,19 @@ let parse_link_opts ?(extra = fun _ -> None) args =
 let with_config_flags (o : Link.opts) =
   let env_flags = Option.fold ~none:[] ~some:Str_util.words (Env.getenv_opt "OCAML_EMCC_LDFLAGS") in
   let p = Project.get () in
+  (* compiled unless asked otherwise, or with an OCaml older than 4.14 *)
+  let compiled =
+    match !compiled_flag with
+    | Some c -> c
+    | None when p.interpreted -> false
+    | None when not (Link.compiled_supported ()) ->
+        Env.log "OCaml %s: interpreted (the compiled mode needs OCaml 4.14 or later)"
+          (Option.value (Env.manifest "ocaml_version") ~default:"?");
+        false
+    | None -> true
+  in
   { o with emcc_flags = p.link_flags @ env_flags @ o.emcc_flags; js_files = p.js_files @ o.js_files; threads = o.threads || p.threads;
-    wasix = o.wasix || (o.wasi && p.wasix) }
+    wasix = o.wasix || (o.wasi && p.wasix); compiled }
 
 let cmd_link args =
   let out = ref "" in

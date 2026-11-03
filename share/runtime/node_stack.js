@@ -1,4 +1,4 @@
-// Linked (--pre-js) by `ocaml-emcc link --compiled`.
+// Linked (--pre-js) by `ocaml-emcc link` in compiled mode.
 //
 // Compiled OCaml functions run on the stack of the wasm engine, about 1 MB
 // on node's main thread: some tens of thousands of nested non-tail calls,
