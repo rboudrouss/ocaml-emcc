@@ -1,0 +1,46 @@
+emscripten: discover.c without dlopen.
+
+The configuration program checks which SSL_METHOD functions libssl has
+with dlopen(NULL) and dlsym, which a program linked by emcc without
+dynamic linking does not have (dlopen fails).  The functions OpenSSL's
+headers declare are those it has: SSLv23_method is a macro (not found, as
+by dlsym), TLSv1_3_method does not exist.
+
+--- a/bindings/discover.c
++++ b/bindings/discover.c
+@@
+ void* open_ssl_library() {
+   void *handle;
+   SSL_library_init();
++#ifdef __EMSCRIPTEN__
++  return (void *)1;
++#endif
+   handle = dlopen(NULL,RTLD_NOW|RTLD_GLOBAL);
+@@
+ int function_defined(void* handle, char*const symbol) {
+   const SSL_METHOD * (*fun)(void);
+   char *error = NULL;
++#ifdef __EMSCRIPTEN__
++  (void)handle; (void)fun; (void)error;
++  if (!strcmp(symbol, "TLS_method")) return 1;
++#if !defined(OPENSSL_NO_SSL3_METHOD)
++  if (!strcmp(symbol, "SSLv3_method")) return 1;
++#endif
++#if !defined(OPENSSL_NO_DEPRECATED_1_1_0)
++#if !defined(OPENSSL_NO_TLS1_METHOD)
++  if (!strcmp(symbol, "TLSv1_method")) return 1;
++#endif
++#if !defined(OPENSSL_NO_TLS1_1_METHOD)
++  if (!strcmp(symbol, "TLSv1_1_method")) return 1;
++#endif
++#if !defined(OPENSSL_NO_TLS1_2_METHOD)
++  if (!strcmp(symbol, "TLSv1_2_method")) return 1;
++#endif
++#endif
++  return 0;
++#endif
+   dlerror();
+@@
+ #include <stdio.h>
++#include <string.h>
+ #include <openssl/ssl.h>

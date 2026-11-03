@@ -99,6 +99,7 @@ localtime | tz       |            |                             | wasm32 wasm64 
 core      | cr       |            | core                        | wasm32 wasm64 wasi |
 async     | as       |            | async core_unix             | wasm32 wasm64 wasi |
 asyncthreads | at    |            | async core_unix wasi-threads | wasm32 wasm64 wasi |
+asyncssl  | sl       |            | async_ssl                   | wasm32 wasm64      |
 threads   | th       |            | wasi-threads                | wasm32 wasm64 wasi |
 domains   | dm       |            | ocaml>=5.3 wasi-threads     | wasm32 wasm64 wasi |
 threadsweb | th      |            | playwright                  | wasm32 wasm64      |

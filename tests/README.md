@@ -57,6 +57,7 @@ stopped, and its test fails.
 | `core`      | core: `Int63` (an `int64` on wasm32), times, maps, bin_prot, sexps, dates, the local time zone |
 | `async`     | async: the scheduler, a timer, deferreds, a pipe, writers |
 | `asyncthreads` | async with `--threads`: `In_thread.run` jobs in threads, at once |
+| `asyncssl`  | async_ssl: a TLS 1.3 handshake between a server and its client over pipes, a self-signed certificate, data both ways (not under `--wasi`, interpreted: ctypes-foreign's libffi calls JavaScript) |
 | `sysjs`     | `Sys_js`: `stderr` and `stdin` redirected to functions, `create_file`, a mounted path giving files on demand (its `expected.txt` is js_of_ocaml's output) |
 | `threads`   | `--threads`: Thread, Mutex, Condition, Event, `Thread.delay`, exceptions and `Thread.exit` in threads (node, WASI) |
 | `domains`   | `Domain.spawn` in parallel (OCaml 5.3+): Atomic, a mutex shared by domains, collections while they allocate, `Domain.DLS`, a thread in a domain |
@@ -68,8 +69,8 @@ stopped, and its test fails.
 
 Under `--wasi`, `threads` and `domains` need a wasmtime with wasi-threads
 (46 or older, removed in 47): `$WASMTIME_THREADS`; they are skipped
-otherwise. `core`, `async` and `asyncthreads` need core, core_unix and
-async, whose libraries are rebuilt for the target the first time (about an
+otherwise. `core`, `async`, `asyncthreads` and `asyncssl` need core,
+core_unix, async and async_ssl, whose libraries are rebuilt for the target the first time (about an
 hour): the CI runs them in a workflow of their own
 (`.github/workflows/janestreet.yml`, weekly and by hand). `sockets`,
 `lwtsockets` and `threadsockets` run in wasmer (`$WASMER`, or in `PATH`),

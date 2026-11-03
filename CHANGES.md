@@ -48,7 +48,7 @@
   stubs of its library. Effect handlers with
   `--effects double-translation`, which plugins built with `--main`
   follow.
-- Added recipes: async_unix, bls12-381-unix, bytesrw, cairo,
+- Added recipes: async_ssl, async_unix, bls12-381-unix, bytesrw, cairo,
   class_group_vdf, core_unix, cpu, eio_posix, faad, ffmpeg, freetype,
   frei0r, gd, glfw3, hacl_func, lacaml, lame, libev, libevent,
   libfontconfig, libjpeg, liblo, liblzo2, libogg, libopus, libpng, libssl,

@@ -1,6 +1,7 @@
 name: Jane Street
 
-# core, async and async with threads (tests/core, async, asyncthreads):
+# core, async, async with threads and async_ssl (tests/core, async,
+# asyncthreads, asyncssl):
 # their libraries are rebuilt for the target the first time (about an
 # hour), too long for each push.  Weekly, and by hand.
 on:
@@ -39,7 +40,7 @@ jobs:
           [ -d "$EMSDK" ] || git clone --depth 1 https://github.com/emscripten-core/emsdk.git "$EMSDK"
           "$EMSDK/emsdk" install "$EMSDK_VERSION"
           "$EMSDK/emsdk" activate "$EMSDK_VERSION"
-      - run: opam install ocamlfind core core_unix async ppx_jane
+      - run: opam install ocamlfind core core_unix async async_ssl ppx_jane
       - name: Build c_of_ocaml
         run: |
           git clone --depth 1 https://github.com/rboudrouss/C_of_ocaml.git ../C_of_ocaml
@@ -54,15 +55,15 @@ jobs:
           mkdir -p ../wasmtime && cd ../wasmtime
           curl -sSLf https://github.com/bytecodealliance/wasmtime/releases/download/v46.0.0/wasmtime-v46.0.0-x86_64-linux.tar.xz | tar xJ
           echo "WASMTIME_THREADS=$(pwd)/wasmtime-v46.0.0-x86_64-linux/wasmtime" >> "$GITHUB_ENV"
-      - name: tests/run.sh core async asyncthreads (${{ matrix.target }})
+      - name: tests/run.sh core async asyncthreads asyncssl (${{ matrix.target }})
         run: |
           case ${{ matrix.target }} in wasi) args=--wasi ;; *) args="--target ${{ matrix.target }}" ;; esac
-          opam exec -- bash -c "SWITCH=\$(opam var prefix) tests/run.sh $args core async asyncthreads"
-      - name: tests/run.sh --compiled core async asyncthreads (${{ matrix.target }})
+          opam exec -- bash -c "SWITCH=\$(opam var prefix) tests/run.sh $args core async asyncthreads asyncssl"
+      - name: tests/run.sh --compiled core async asyncthreads asyncssl (${{ matrix.target }})
         if: ${{ !cancelled() }}
         run: |
           case ${{ matrix.target }} in wasi) args=--wasi ;; *) args="--target ${{ matrix.target }}" ;; esac
-          opam exec -- bash -c "SWITCH=\$(opam var prefix) tests/run.sh $args --compiled core async asyncthreads"
+          opam exec -- bash -c "SWITCH=\$(opam var prefix) tests/run.sh $args --compiled core async asyncthreads asyncssl"
       # (cancelled: a timeout)
       - if: failure() || cancelled()
         uses: actions/upload-artifact@v7
