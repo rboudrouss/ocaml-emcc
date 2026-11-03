@@ -116,7 +116,8 @@ jobs:
         run: |
           case ${{ matrix.target }} in wasi) args=--wasi ;; *) args="--target ${{ matrix.target }}" ;; esac
           opam exec -- bash -c "SWITCH=\$(opam var prefix) tests/run.sh $args threads domains threadsweb lwtthreads sockets"
-      - if: failure()
+      # (cancelled: a timeout)
+      - if: failure() || cancelled()
         uses: actions/upload-artifact@v7
         with:
           name: tests-${{ matrix.ocaml }}-${{ matrix.target }}

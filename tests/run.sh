@@ -29,14 +29,17 @@ TARGET_COL=$TARGET; [ $WASI = yes ] && TARGET=wasm32 TARGET_COL=wasi
 WASMTIME=${WASMTIME:-$(command -v wasmtime || true)}
 WASMTIME_THREADS=${WASMTIME_THREADS:-$WASMTIME}
 WASMER=${WASMER:-$(command -v wasmer || true)}
+# a program running longer than $TEST_TIMEOUT seconds (default 900) is
+# stopped: the test fails (exit=124) instead of blocking the others
+TO="timeout -k 10 ${TEST_TIMEOUT:-900}"
 wasi_run() {
   local -x TMPDIR=/tmp
   if grep -qs '^wasix: *yes' ocaml-emcc.conf; then
-    "$WASMER" run --net --enable-tail-call "$1" -- "${@:2}"
+    $TO "$WASMER" run --net --enable-tail-call "$1" -- "${@:2}"
   elif grep -qs '^threads: *yes' ocaml-emcc.conf; then
-    "$WASMTIME_THREADS" run -W exceptions=y,threads=y,shared-memory=y -S threads=y --dir . --dir /tmp --dir /etc -S inherit-env=y "$@" 2> >(grep -v '^WARNING: the `-Sthreads` flag' >&2)
-  elif [ -n "$WASMTIME" ]; then "$WASMTIME" run -W exceptions=y --dir . --dir /tmp --dir /etc -S inherit-env=y "$@"
-  else "$NODE" --no-warnings "$TESTS_DIR/wasi-run.mjs" "$@"; fi
+    $TO "$WASMTIME_THREADS" run -W exceptions=y,threads=y,shared-memory=y -S threads=y --dir . --dir /tmp --dir /etc -S inherit-env=y "$@" 2> >(grep -v '^WARNING: the `-Sthreads` flag' >&2)
+  elif [ -n "$WASMTIME" ]; then $TO "$WASMTIME" run -W exceptions=y --dir . --dir /tmp --dir /etc -S inherit-env=y "$@"
+  else $TO "$NODE" --no-warnings "$TESTS_DIR/wasi-run.mjs" "$@"; fi
 }
 
 # name | dune target (no ext.) | args | required packages | targets (wasm32, wasm64, wasi) | lines allowed to differ
@@ -157,11 +160,11 @@ while IFS='|' read -r name target args pkgs targets differ; do
     fi
     if [ -f expected.txt ]; then cp expected.txt out/native.txt
     else "./_build/default/$target.exe" $args > out/native.txt || echo "exit=$?" >> out/native.txt; fi
-    if [ $WASI = yes ]; then run() { wasi_run "$@"; }; else run() { "$NODE" "$@"; }; fi
+    if [ $WASI = yes ]; then run() { wasi_run "$@"; }; else run() { $TO "$NODE" "$@"; }; fi
     if [ -f check.mjs ]; then
       # a web page: index.html, the program, and check.mjs driving a browser
       cp index.html out/
-      "$NODE" check.mjs out > out/wasm.txt 2> out/wasm.err || echo "exit=$?" >> out/wasm.txt
+      $TO "$NODE" check.mjs out > out/wasm.txt 2> out/wasm.err || echo "exit=$?" >> out/wasm.txt
     else
       run "$js" $args > out/wasm.txt 2> out/wasm.err || echo "exit=$?" >> out/wasm.txt
     fi
