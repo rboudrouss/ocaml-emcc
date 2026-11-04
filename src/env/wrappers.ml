@@ -5,7 +5,7 @@
 (* Bumped whenever [write] changes: the CLI then regenerates the toolchain
    in existing sysroots (cheap: the runtime is not rebuilt), and the stubs
    built with it are built again (see [Stamp.toolchain]). *)
-let version = "19"
+let version = "20"
 
 (* [template] with each @KEY@ replaced *)
 let subst vars template =
@@ -128,6 +128,18 @@ esac
 |}
   ^ next_in_path
 
+(* cmake, for the same reason: the find_package of a CMake build run by a
+   rule of the wasm context look in the sysroot first (hdr_histogram's
+   zlib), not only in the host's /usr. *)
+let cmake_wrapper =
+  {|#!/bin/sh
+case $INSIDE_DUNE/:$PWD/ in
+  */default.@TARGET@/*)
+    CMAKE_PREFIX_PATH='@SYSROOT@'${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}; export CMAKE_PREFIX_PATH ;;
+esac
+|}
+  ^ next_in_path
+
 (* llvm-config, for the same reason: dune rules running it (a package
    configured on the host) get the wasm LLVM of the clang recipe in the wasm
    context.  clang too, but only for what the recipe's clang answers
@@ -243,6 +255,7 @@ let write () =
   symlink "../ocamlmklib" (file "bin/path/ocamlmklib.opt");
   List.iter (fun t -> script (file ("bin/path/" ^ t)) (subst (("TOOL", t) :: vars) pkg_config_wrapper)) [ "pkg-config"; "pkgconf" ];
   List.iter (fun t -> script (file ("bin/path/" ^ t)) (subst (("TOOL", t) :: vars) llvm_wrapper)) [ "llvm-config"; "clang" ];
+  script (file "bin/path/cmake") (subst (("TOOL", "cmake") :: vars) cmake_wrapper);
   List.iter
     (fun (t, w) -> script (file ("bin/path/" ^ t)) (subst (("TOOL", t) :: ("WRAPPED", w) :: vars) host_tool_wrapper))
     [ ("cc", cc); ("gcc", cc); ("c++", cxx); ("g++", cxx); ("clang++", cxx);
