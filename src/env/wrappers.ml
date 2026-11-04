@@ -5,7 +5,7 @@
 (* Bumped whenever [write] changes: the CLI then regenerates the toolchain
    in existing sysroots (cheap: the runtime is not rebuilt), and the stubs
    built with it are built again (see [Stamp.toolchain]). *)
-let version = "17"
+let version = "18"
 
 (* [template] with each @KEY@ replaced *)
 let subst vars template =
@@ -128,7 +128,8 @@ esac
 (* llvm-config, for the same reason: dune rules running it (a package
    configured on the host) get the wasm LLVM of the clang recipe in the wasm
    context.  clang too, but only for what the recipe's clang answers
-   (-print-resource-dir, --version): it compiles nothing. *)
+   (-print-resource-dir, --version): it compiles nothing; emcc compiles
+   (see [host_tool_wrapper]). *)
 let llvm_wrapper =
   {|#!/bin/sh
 case $INSIDE_DUNE/:$PWD/ in
@@ -137,7 +138,23 @@ case $INSIDE_DUNE/:$PWD/ in
       case @TOOL@:$1 in llvm-config:*|clang:-print-resource-dir|clang:--version) exec '@SYSROOT@/bin/@TOOL@' "$@" ;; esac
     elif [ @TOOL@ = llvm-config ]; then
       echo "llvm-config: no wasm LLVM for @TARGET@ yet, build it with: ocaml-emcc install clang" >&2; exit 1
-    fi ;;
+    fi
+    [ @TOOL@ = clang ] && exec '@CC@' "$@" ;;
+esac
+|}
+  ^ next_in_path
+
+(* The C and C++ compilers, ar and ranlib, named as on the host: rules of
+   the wasm context running a build of their own with them (qbf's picosat
+   makefile: gcc, ar, ranlib; hdr_histogram's CMake: cc; bls12-381's
+   build.sh: cc; uring's configure: clang) get emcc and its tools, with the
+   flags of the sysroot's C compiler wrappers.  The host's elsewhere, and
+   for the tools of the toolchain that need it (OCAML_EMCC_HOST_TOOLS:
+   placeholder-dll's host shared objects). *)
+let host_tool_wrapper =
+  {|#!/bin/sh
+[ -n "${OCAML_EMCC_HOST_TOOLS:-}" ] || case $INSIDE_DUNE/:$PWD/ in
+  */default.@TARGET@/*) exec '@WRAPPED@' "$@" ;;
 esac
 |}
   ^ next_in_path
@@ -205,6 +222,10 @@ let write () =
     ]
   in
   script cc (subst vars emcc_wrapper);
+  (* (C++: em++, and no C standard) *)
+  let cxx = file ("bin/em++-" ^ target) in
+  script cxx
+    (subst (("STUB_STD", "") :: ("EMCC", Filename.concat (Filename.dirname emcc) "em++") :: vars) emcc_wrapper);
   List.iter (fun t -> script (file ("bin/" ^ t)) (subst (("TOOL", t) :: vars) tool_wrapper)) [ "ocamlc"; "ocamlmklib" ];
   (* The other tools dune looks for next to the toolchain's ocamlc (rules
      using %{ocaml}, %{bin:ocamllex}...) are the host's.  Not ocamlopt: see
@@ -219,6 +240,10 @@ let write () =
   symlink "../ocamlmklib" (file "bin/path/ocamlmklib.opt");
   List.iter (fun t -> script (file ("bin/path/" ^ t)) (subst (("TOOL", t) :: vars) pkg_config_wrapper)) [ "pkg-config"; "pkgconf" ];
   List.iter (fun t -> script (file ("bin/path/" ^ t)) (subst (("TOOL", t) :: vars) llvm_wrapper)) [ "llvm-config"; "clang" ];
+  List.iter
+    (fun (t, w) -> script (file ("bin/path/" ^ t)) (subst (("TOOL", t) :: ("WRAPPED", w) :: vars) host_tool_wrapper))
+    [ ("cc", cc); ("gcc", cc); ("c++", cxx); ("g++", cxx); ("clang++", cxx);
+      ("ar", Toolchain.emar ()); ("ranlib", Filename.concat (Filename.dirname emcc) "emranlib") ];
   let prefix = Switch.prefix () in
   let ocamlfind args = match Env.capture (Filename.concat host_bin "ocamlfind") args with Some s -> Some (String.trim s) | None -> None in
   let host_conf = Option.value (ocamlfind [ "printconf"; "conf" ]) ~default:(Filename.concat prefix "lib/findlib.conf") in

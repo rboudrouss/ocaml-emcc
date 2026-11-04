@@ -14,6 +14,8 @@
 
 out=$1; shift
 cc=${OCAML_EMCC_HOST_CC:-cc}
+# (the host's cc, not the sysroot's bin/path/cc of the wasm context)
+OCAML_EMCC_HOST_TOOLS=1; export OCAML_EMCC_HOST_TOOLS
 src=$out.c
 {
   echo 'int dprintf(int, const char *, ...); void abort(void);'

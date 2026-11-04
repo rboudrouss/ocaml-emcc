@@ -10,6 +10,11 @@
   target are rebuilt however many rounds it takes (at most 5 before:
   netsnmp's async libraries, over core, failed with "inconsistent
   assumptions").
+- Packages building C with their own build (make, CMake, configure, run
+  by a dune rule) get emcc in the wasm context under the host's names:
+  `cc`, `gcc`, `g++`, `c++`, `clang`, `clang++`, `ar` and `ranlib`. They
+  were the host's, which refused emcc's flags (qbf, re2, cudd,
+  hdr_histogram, cucumber, bls12-381).
 
 ## 0.5.1
 
