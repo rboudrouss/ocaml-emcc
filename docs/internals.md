@@ -10,13 +10,19 @@
 2. **Bytecode**: the host's own `ocamlc`, ppx, menhir and installed `.cma`
    files are used unchanged.
 3. **dune -x**: in the wasm context, an `ocamlc` wrapper rewrites
-   `ocamlc -config`, so dune compiles stubs with emcc and the wasm headers.
+   `ocamlc -config`, so dune compiles stubs with emcc and the wasm headers
+   (with `architecture: none`, and on wasm32 `word_size: 32` and
+   `int_size: 31`, the program's).
    An `ocamlmklib` replacement builds the `lib*.a` with `emar`, and
    `(modes exe)` executables come out as plain bytecode
    (`-output-complete-exe` is intercepted). Package rules that call
    `ocamlmklib`, `pkg-config` or `llvm-config` themselves get the wasm
    versions, which come first in dune's `PATH`; the wasm `ocamlmklib`
-   hands host objects to the host tool. The C compiler of this context
+   hands host objects to the host tool. So do `cc`, `gcc`, `g++`, `clang`,
+   `ar`, `ranlib` and `cmake`: emcc and its tools in the wasm context, the
+   host's elsewhere, without emscripten's flags (which the `CFLAGS` of
+   dune's environment hold), and for the host's own `ocamlc`
+   (`OCAML_EMCC_HOST_TOOLS`: a custom link that a `.cma` forces). The C compiler of this context
    turns the executables it links into node scripts, so that build rules
    can run them.
 4. **Dependencies**: the bytecode's `DLLS` section names the stub libraries

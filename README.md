@@ -515,10 +515,12 @@ On wasm32, as with a 32-bit OCaml:
 - Arithmetic beyond 31 bits wraps silently (`1 lsl 40` is 256).
 
 Packages that require 63-bit ints (`assert (Sys.int_size >= 62)` in matrix,
-hence k7 and kaun-board; binsec's marshalled data) need wasm64: matrix, k7,
-kaun-board and binsec run there.  So does frama-c (`assert (Sys.word_size =
-64)` in unionFind; with `--node-fs`, for its share directory), interpreted
-or compiled (c_of_ocaml peaks at about 2 GB on it).
+hence k7 and kaun-board; binsec's marshalled data; janestreet_cpuid's
+flags) need wasm64: matrix, k7, kaun-board and binsec run there. Some are
+patched to run on wasm32 too: frama-c (unionFind's identifiers; with
+`--node-fs`, for its share directory; c_of_ocaml peaks at about 2 GB on
+it) and rocq-runtime (rebuilt with its 31-bit integers and floats, which it
+picks with `%{ocaml-config:int_size}`: the wasm32 toolchain says 31).
 
 Jane Street's libraries choose some of their code with the configuration
 of jst-config, computed on the 64-bit host. On wasm32, `build` and `link`
@@ -709,6 +711,13 @@ program needs from its bytecode and its opam packages:
   stubs use mpfr through `pkg-config` (`tests/depgraph`), or a C parser
   built against the host's LLVM (rebuilt against the `clang` recipe), work
   this way.
+- **Packages with a build of their own**: the `make`, `configure`, CMake or
+  shell scripts that a dune rule runs get emcc, emar and emranlib under the
+  host's names (`cc`, `gcc`, `g++`, `clang`, `ar`, `ranlib`...), and CMake
+  finds the sysroot's libraries first (qbf's picosat, re2's C++ library,
+  cudd, hdr_histogram). Stub libraries that dune skips for the target, as
+  enabled for some architectures only (curve448), are compiled from the C
+  files of the native build.
 - **ctypes**: bindings using stub generation (`Cstubs`, dune's `(ctypes)`
   stanza) and ctypes-foreign work on both targets.
 
@@ -773,8 +782,13 @@ variant), `mlcuddidl` (its bundled CUDD, and the stubs camlidl generates),
 called), and packages whose sources need a change for wasm, described in
 their `share/recipes/<name>/` directory: `mirage-crypto` (and `-ec`,
 `-rng`), `lwt`, `cryptokit`, `secp256k1-internal`, `lmdb`, `mccs`,
-`core_unix`, `async_unix`, `async_ssl`, `eio_posix`, `num`, `rowex`, `mirage-block-unix`, `shared-memory-ring`, `ocaml_intrinsics`, `unix-errno`, `tuntap`, `eigen`, `bls12-381`, `bls12-381-signature`, `janestreet_cpuid`, `shell`, `rocq-runtime`, `hdr_histogram`, `codex`, `unionFind`, `miou`, `osdp`, `bls12-381-unix`, `lacaml`, `setcore`, `cpu`, `memcpy`, `scrypt`, `poll`, `bytesrw`, `class_group_vdf`, `ocaml-lua` and `raylib` (see [raylib in a
-browser](#raylib-in-a-browser)).
+`core_unix`, `async_unix`, `async_ssl`, `eio_posix`, `num`, `rowex`,
+`mirage-block-unix`, `shared-memory-ring`, `ocaml_intrinsics`,
+`unix-errno`, `tuntap`, `eigen`, `bls12-381`, `bls12-381-signature`,
+`janestreet_cpuid`, `shell`, `rocq-runtime`, `hdr_histogram`, `codex`,
+`unionFind`, `miou`, `osdp`, `bls12-381-unix`, `lacaml`, `setcore`, `cpu`,
+`memcpy`, `scrypt`, `poll`, `bytesrw`, `class_group_vdf`, `ocaml-lua` and
+`raylib` (see [raylib in a browser](#raylib-in-a-browser)).
 
 ### Project recipes
 

@@ -63,6 +63,10 @@ The recipe should install a pkg-config file in `$SYSROOT/lib/pkgconfig`
   OCaml libraries of the package as well: they are rebuilt for the target
   with them, into the sysroot's findlib directory, as for
   [ctypes](internals.md#ctypes-layouts) (`async_unix`)
+- `HOST_TOOLS=1`: with `PATCH_OCAML=1`, the executables that the package's
+  build runs are built for the host, in a host context of that rebuild
+  (rocq-runtime's `configure.exe`, which has C stubs). Not by default: the
+  ctypes generators must run in the target's context, for its layouts
 - `LINK=`: makes the recipe a C library, built for the `-lX` it provides
   (implied by `SOURCE=system:`)
 - `LIB_PATTERNS=`: globs of more library names the recipe is built for
