@@ -1,0 +1,9 @@
+clang 19 and later: Transpose has no derived().
+
+The fix of Eigen 3.4.1: the operand itself.
+
+--- a/eigen_cpp/lib/Eigen/src/Core/Transpositions.h
++++ b/eigen_cpp/lib/Eigen/src/Core/Transpositions.h
+@@
+-      return Product<OtherDerived, Transpose, AliasFreeProduct>(matrix.derived(), trt.derived());
++      return Product<OtherDerived, Transpose, AliasFreeProduct>(matrix.derived(), trt);
