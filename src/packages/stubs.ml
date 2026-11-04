@@ -148,6 +148,9 @@ let lib_archive f = Str_util.starts_with ~prefix:"lib" f && Filename.check_suffi
 let archives dir = Files.find ~skip:Files.hidden dir (fun f -> lib_archive f && not (Files.hidden f))
 let lib_name a = let b = Filename.chop_suffix (Filename.basename a) ".a" in String.sub b 3 (String.length b - 3)
 
+(* The C file of an archive member: x.o, or x.c.o (CMake) *)
+let c_of_member m = let b = Filename.remove_extension m in if Filename.check_suffix b ".c" then b else b ^ ".c"
+
 (* For what dune cannot cross-compile, and the archives of `dune -x` holding
    host objects (see [dune_stubs]): each stub archive of the native build
    ([bdir]/default in [dir]; kept by OPAMKEEPBUILDDIR, else built here) is
@@ -184,7 +187,7 @@ let native_stubs ~dir ~bdir pkg only =
          let objs =
            List.map
              (fun m ->
-               let base = Filename.remove_extension m ^ ".c" in
+               let base = c_of_member m in
                let c =
                  let c = Filename.concat adir base in
                  if Sys.file_exists c then c
@@ -309,7 +312,7 @@ let dune_package ?(force = false) pkg =
    first; None if one has none *)
 let archive_sources dir a =
   let found m =
-    let c = Filename.remove_extension m ^ ".c" in
+    let c = c_of_member m in
     match Files.first ~skip:(( = ) "_build") dir (( = ) c) with Some f -> Some f | None -> Files.first dir (( = ) c)
   in
   let members = List.filter (fun m -> Filename.check_suffix m ".o") (Archive.names a) in
