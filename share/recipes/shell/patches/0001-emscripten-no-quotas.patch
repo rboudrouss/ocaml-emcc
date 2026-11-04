@@ -1,0 +1,38 @@
+emscripten: no disk quotas.
+
+It has neither quotactl nor <sys/quota.h>: querying or setting a quota
+fails with ENOSYS.
+
+--- a/unix_extended/src/unix_extended_stubs.c
++++ b/unix_extended/src/unix_extended_stubs.c
+@@
+ #include <ufs/ufs/quota.h>
+-#else
++#elif !defined(__EMSCRIPTEN__)
+ #include <sys/quota.h>
+ #endif
+@@
+-#if defined (__FreeBSD__) || defined (__OpenBSD__) /* BSD */
++#if defined (__EMSCRIPTEN__)
++
++CAMLprim value quota_query (value v_user_or_group, value v_id, value v_path)
++{
++  unix_error(ENOSYS, "Unix.Quota: unable to query quota", v_path);
++}
++
++CAMLprim value quota_modify (value v_user_or_group, value v_id,
++                             value v_path, value v_bytes_limit, value v_inodes_limit)
++{
++  unix_error(ENOSYS, "Unix.Quota: unable to set quota", v_path);
++}
++
++#else
++
++#if defined (__FreeBSD__) || defined (__OpenBSD__) /* BSD */
+@@
+   CAMLreturn(Val_unit);
+ }
+ 
++#endif /* __EMSCRIPTEN__ */
++
+ CAMLprim value extended_ml_htonl (value v_num) {

@@ -52,7 +52,8 @@
   janestreet_cpuid (its CPUID primitives fail, as in JavaScript; its flags
   need 63-bit integers: wasm64), libcurl (curl),
   ocaml_intrinsics (CRC-32C in software), readline,
-  shared-memory-ring (memory barriers for wasm), tuntap (no devices:
+  shared-memory-ring (memory barriers for wasm), shell (no disk quotas:
+  ENOSYS), tuntap (no devices:
   ENOSYS), unix-errno (Linux's errno codes), zmq (libzmq).
 
 ## 0.5.1
