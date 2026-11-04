@@ -32,6 +32,10 @@
   `int_size: 31`, the program's, and packages choosing their OCaml code by
   them in their dune files are built for wasm32 when they are rebuilt for
   the target.
+- Recipes: `HOST_TOOLS=1` (with `PATCH_OCAML=1`) builds the executables
+  that a package's build runs for the host, in a host context, when its
+  OCaml libraries are rebuilt for the target (rocq-runtime's
+  configure.exe, with C stubs).
 - The C files behind the members of a native stub archive built by CMake
   (`x.c.o`, out of the source tree) are found.
 - Stubs without dune or a recipe: the C files reaching the OCaml headers

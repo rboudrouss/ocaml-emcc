@@ -83,6 +83,14 @@ let patches_ocaml pkg =
       && List.exists (fun l -> String.trim l = "PATCH_OCAML=1") (String.split_on_char '\n' s)
   | None -> false
 
+(* Whether the recipe of [pkg] has its build tools built for the host
+   (HOST_TOOLS=1) when its OCaml libraries are rebuilt for the target *)
+let host_tools pkg =
+  match Recipe.find pkg with
+  | Some d ->
+      List.exists (fun l -> String.trim l = "HOST_TOOLS=1") (String.split_on_char '\n' (Files.contents (Recipe.script d)))
+  | None -> false
+
 (* "patch=<checksum>" of [patches], in the stamp: a change builds it again *)
 let patch_tag pkg =
   "patch=" ^ match patches pkg with [] -> "" | l -> Recipe.checksum (String.concat "" (List.map Compat.read_file l))
@@ -158,9 +166,15 @@ let build ?(force = false) ?(needed = fun () -> true) ?(direct = true) pkg =
         let dune = Stubs.dune_for work in
         ignore (Stubs.system_deps pkg);
         log "building the OCaml libraries of %s for %s" pkg !Env.target;
+        (* (with a host context for the build tools the recipe asks for:
+           rocq-runtime's configure.exe has C stubs, which a bytecode of the
+           target's context cannot load; not by default, as the ctypes
+           generators must run in the target's context) *)
+        let host = host_tools pkg in
         Compat.write_file
           (Filename.concat work ".ocaml-emcc-workspace")
-          (Printf.sprintf "(lang dune 3.0)\n(context (default (name default.%s) (toolchain %s)))\n" !Env.target !Env.target);
+          (Printf.sprintf "(lang dune 3.0)\n%s(context (default (name default.%s) (toolchain %s)%s))\n"
+             (if host then "(context default)\n" else "") !Env.target !Env.target (if host then " (host default)" else ""));
         let prefix = Switch.prefix () in
         let env = Stubs.dune_env () @ [ Printf.sprintf "CAML_LD_LIBRARY_PATH=%s/lib/stublibs:%s/lib/ocaml/stublibs" prefix prefix ] in
         let log_file = Filename.concat work "ocaml-emcc-build.log" in
@@ -171,7 +185,8 @@ let build ?(force = false) ?(needed = fun () -> true) ?(direct = true) pkg =
         let built =
           Env.run_logged ~cwd:work ~env log_file dune
             ([ "build"; "--build-dir"; "_build.ocaml-emcc"; "--workspace"; ".ocaml-emcc-workspace" ]
-            @ Switch.dune_selection pkg @ [ "@install" ])
+            @ Switch.dune_selection pkg
+            @ [ (if host then "@_build.ocaml-emcc/default." ^ !Env.target ^ "/install" else "@install") ])
           = 0
         in
         (* Failed for C alone (re2's vendored C++ library, janestreet_cpuid's

@@ -39,6 +39,9 @@
 #   PATCH_OCAML  1: for SOURCE=opam:<package>, patches/ changes its OCaml
 #            libraries as well: they are rebuilt for the target with them
 #            (in $SYSROOT/lib/findlib, as for ctypes: Shadow)
+#   HOST_TOOLS  1: with PATCH_OCAML, the executables its build runs are
+#            built for the host, in a host context (rocq-runtime's
+#            configure.exe, with C stubs)
 # and must define a `build` function (or include one: `include_recipe NAME`,
 # with an optional `pre_build` function run before it).  `build` runs inside
 # a fresh copy of the sources with the helpers below available (install_lib, install_headers,
@@ -311,7 +314,7 @@ write_toolchain() { "$OCAML_EMCC_EXE" internal toolchain; }
 # ----------------------------------------------------------------- recipes
 
 # The variables a recipe may set, and the functions it may define.
-RECIPE_VARS="SOURCE SHA256 REF DEPENDS PATCH_OCAML HEADER VERSION_MACROS PKGCONFIG RELEASES TARBALL COMPAT OPAM_SOURCES LINK LIB_PATTERNS USE_CFLAGS"
+RECIPE_VARS="SOURCE SHA256 REF DEPENDS PATCH_OCAML HOST_TOOLS HEADER VERSION_MACROS PKGCONFIG RELEASES TARBALL COMPAT OPAM_SOURCES LINK LIB_PATTERNS USE_CFLAGS"
 
 # load_recipe <name>: read the recipe in the current shell
 load_recipe() {
