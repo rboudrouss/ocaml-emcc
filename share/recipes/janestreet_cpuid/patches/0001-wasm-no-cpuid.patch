@@ -1,0 +1,26 @@
+wasm: no CPUID instruction.
+
+Its primitives fail, as the library's js_of_ocaml ones do (cpuid.js): the
+library links, the programs not asking for CPU features run.
+
+--- a/src/cpuid_stubs.c
++++ b/src/cpuid_stubs.c
+@@
++#ifdef __wasm__
++#include <caml/mlvalues.h>
++#include <caml/fail.h>
++
++#define NO_CPUID caml_failwith("CPUID instruction does not exist in WebAssembly.")
++CAMLprim value cpuid_arbitrary_leaf_and_subleaf(value a, value b) { NO_CPUID; }
++CAMLprim value cpuid_maximum_value_and_brand(value r) { NO_CPUID; }
++CAMLprim value amd_cpuid_version_and_feature_information(value a, value b, value r) { NO_CPUID; }
++CAMLprim value intel_cpuid_version_and_feature_information(value a, value b, value r) { NO_CPUID; }
++CAMLprim value cpuid_extended_feature_flags_subleaf0(value r) { NO_CPUID; }
++#else
+ #include "ocaml_utils.h"
+ #include <caml/mlvalues.h>
+ #include <cpuid.h>
+@@
+   CAMLreturn(Val_int(eax));
+ }
++#endif

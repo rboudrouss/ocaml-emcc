@@ -48,7 +48,9 @@
   `dune-package` names one); a library that needed rebuilding and
   failed is reported as such, not as one the target does not need.
 - Added recipes: bls12-381 and bls12-381-signature (a 32-bit size_t),
-  eigen (Eigen 3.4.1's fix for recent clang), gdbm (dbm), libcurl (curl),
+  eigen (Eigen 3.4.1's fix for recent clang), gdbm (dbm),
+  janestreet_cpuid (its CPUID primitives fail, as in JavaScript; its flags
+  need 63-bit integers: wasm64), libcurl (curl),
   ocaml_intrinsics (CRC-32C in software), readline,
   shared-memory-ring (memory barriers for wasm), tuntap (no devices:
   ENOSYS), unix-errno (Linux's errno codes), zmq (libzmq).
