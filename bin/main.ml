@@ -357,7 +357,7 @@ let cmd_build args =
   let target ext = Filename.concat (ctx_dir ()) (exe ^ ext) in
   let layouts = o.auto_deps in
   if layouts then Layouts.prune ();
-  let rec build_bc tries =
+  let rec build_bc () =
     let errs = Buffer.create 256 in
     let try_build ext =
       let code, err = Env.run_capture_stderr ~env dune [ "build"; "-x"; !Env.target; "--root"; root; target ext ] in
@@ -372,11 +372,13 @@ let cmd_build args =
         | Some t -> t
         | None ->
             (* a library of the switch compiled against the host's build of
-               a package rebuilt for the target (ctypes-foreign and ctypes) *)
-            if tries > 0 && layouts && Layouts.fix_inconsistent (Buffer.contents errs) then build_bc (tries - 1)
+               a package rebuilt for the target (ctypes-foreign and ctypes),
+               one per round: netsnmp's async takes 6 after core (each
+               round builds packages not built before, it ends) *)
+            if layouts && Layouts.fix_inconsistent (Buffer.contents errs) then build_bc ()
             else Env.fail "dune could not build %s" exe)
   in
-  let built = build_bc 5 in
+  let built = build_bc () in
   (* ctypes, jst-config and their users built for the target, then the
      bytecode again, against them *)
   let built =
@@ -386,7 +388,7 @@ let cmd_build args =
       let installed = Layouts.ensure bc in
       if installed || List.exists (fun (_, s) -> s = Layouts.Stale) (Layouts.states bc) then (
         Env.log "rebuilding %s against the %s builds of its libraries" exe !Env.target;
-        build_bc 5)
+        build_bc ())
       else built
   in
   if build_stub_archives ~root <> 0 then Env.fail "dune could not build the stub archives";

@@ -6,6 +6,10 @@
   in `ocaml-emcc.conf`), less tested, and is used with OCaml before 4.14;
   `--compiled` is still accepted. `tests/run.sh --interpreted` runs the
   tests interpreted.
+- `build`: the libraries compiled against a package rebuilt for the
+  target are rebuilt however many rounds it takes (at most 5 before:
+  netsnmp's async libraries, over core, failed with "inconsistent
+  assumptions").
 
 ## 0.5.1
 
