@@ -1,0 +1,21 @@
+32 bits: identifiers without a random salt.
+
+The concurrent version combines a unique counter (low bits) with 12
+random bits (from bit 51) for balanced forests, and asserts 64 bits.  With
+31-bit integers a salt would leave the counter 18 bits, and identifiers
+could collide: they are the counter alone, still unique and ordered by
+creation (linking stays correct, only its randomness is lost).
+
+--- a/src/ConcurrentUnionFind.ml
++++ b/src/ConcurrentUnionFind.ml
+@@
+   include SharedGeneratorOfUniqueIds
+ 
+-  let () =
+-    assert (Sys.word_size = 64)
+-
+   let fresh () =
+     (* Generate a unique identifier. *)
+     let id = fresh() in
++    if Sys.int_size < 63 then id else
+     (* Generate a random number of, say, 12 bits. *)

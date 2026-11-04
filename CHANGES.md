@@ -58,7 +58,8 @@
   integers: wasm64), libcurl (curl), ocaml_intrinsics (CRC-32C in
   software), readline, rocq-runtime (no perf counter; its OCaml needs
   63-bit integers: wasm64), shared-memory-ring (memory barriers for wasm),
-  shell (no disk quotas: ENOSYS), tuntap (no devices: ENOSYS), unix-errno
+  shell (no disk quotas: ENOSYS), tuntap (no devices: ENOSYS), unionFind
+  (identifiers for 31-bit integers: frama-c on wasm32), unix-errno
   (Linux's errno codes), zmq (libzmq).
 
 ## 0.5.1
