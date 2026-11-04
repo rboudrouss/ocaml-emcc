@@ -5,7 +5,7 @@
 (* Bumped whenever [write] changes: the CLI then regenerates the toolchain
    in existing sysroots (cheap: the runtime is not rebuilt), and the stubs
    built with it are built again (see [Stamp.toolchain]). *)
-let version = "21"
+let version = "22"
 
 (* [template] with each @KEY@ replaced *)
 let subst vars template =
@@ -100,12 +100,13 @@ export OCAML_EMCC_HOST_BIN OCAML_EMCC_SYSROOT OCAML_EMCC_CFLAGS OCAML_EMCC_EMCC 
 exec sh '@SHARE@/tools/@TOOL@' "$@"
 |}
 
-(* the next @TOOL@ in PATH, after bin/path *)
+(* the next @TOOL@ in PATH, after bin/path (a file: emscripten's
+   directory in PATH has a cmake/ directory) *)
 let next_in_path =
   {|self='@SYSROOT@/bin/path' IFS=:
 for d in $PATH; do
   [ "$d" = "$self" ] && continue
-  [ -x "$d/@TOOL@" ] && exec "$d/@TOOL@" "$@"
+  [ -f "$d/@TOOL@" ] && [ -x "$d/@TOOL@" ] && exec "$d/@TOOL@" "$@"
 done
 echo "@TOOL@: not found" >&2; exit 127
 |}
