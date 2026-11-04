@@ -13,6 +13,8 @@
 #                             stubs choosing their C code with
 #                             %{architecture} take the portable one (num's
 #                             bng: no amd64 assembly)
+#   word_size, int_size    -> 32 and 31 on wasm32, the program's (rocq's
+#                             uint63_%{ocaml-config:int_size}.ml)
 #
 # Linking skips the primitive check: the stub "dlls" are empty placeholders
 # (see ocamlmklib), the real check happens in `ocaml-emcc link`.
@@ -24,7 +26,10 @@ host="$OCAML_EMCC_HOST_BIN/ocamlc"
 : "${OCAML_EMCC_CFLAGS:?OCAML_EMCC_CFLAGS not set}"
 emcc="${OCAML_EMCC_EMCC:-emcc}"
 cflags="$OCAML_EMCC_CFLAGS${OCAML_EMCC_EXTRA_CFLAGS:+ $OCAML_EMCC_EXTRA_CFLAGS}"
-case "$cflags" in *-m64*) OCAML_EMCC_TRIPLE=wasm64-unknown-emscripten ;; *) OCAML_EMCC_TRIPLE=wasm32-unknown-emscripten ;; esac
+case "$cflags" in
+  *-m64*) OCAML_EMCC_TRIPLE=wasm64-unknown-emscripten word=64 int=63 ;;
+  *) OCAML_EMCC_TRIPLE=wasm32-unknown-emscripten word=32 int=31 ;;
+esac
 cppflags="-I$OCAML_EMCC_SYSROOT/lib/ocaml -I$OCAML_EMCC_SYSROOT/include -D_FILE_OFFSET_BITS=64"
 
 rewrite_config() {
@@ -44,6 +49,8 @@ rewrite_config() {
     -e "s|^target: .*|target: $OCAML_EMCC_TRIPLE|" \
     -e "s|^native_compiler: .*|native_compiler: false|" \
     -e "s|^architecture: .*|architecture: none|" \
+    -e "s|^word_size: .*|word_size: $word|" \
+    -e "s|^int_size: .*|int_size: $int|" \
     -e "s|^natdynlink_supported: .*|natdynlink_supported: false|"
 }
 

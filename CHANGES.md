@@ -28,6 +28,10 @@
 - Stub libraries a package enables for some architectures only (curve448:
   amd64, arm64...) are compiled from the C files of its native build: the
   wasm context's architecture is `none`, so dune skipped them.
+- `ocamlc -config` of the wasm32 toolchain says `word_size: 32` and
+  `int_size: 31`, the program's, and packages choosing their OCaml code by
+  them in their dune files are built for wasm32 when they are rebuilt for
+  the target.
 - The C files behind the members of a native stub archive built by CMake
   (`x.c.o`, out of the source tree) are found.
 - Stubs without dune or a recipe: the C files reaching the OCaml headers

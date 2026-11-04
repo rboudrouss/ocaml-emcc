@@ -51,6 +51,14 @@ let reads_jst_config pkg work =
      || List.exists (fun f -> has f "jst-config:config.h") (Files.find ~skip work (fun f -> f = "dune"))
         && List.exists (fun f -> has f "%%import") (Files.find ~skip work ml))
 
+(* Whether [pkg], whose sources are in [work], chooses its OCaml code by
+   the word size in its dune files, on wasm32 (the host's is 64 bits):
+   rocq-runtime's uint63_%{ocaml-config:int_size}.ml *)
+let reads_word_size work =
+  let skip = Str_util.starts_with ~prefix:"_build" in
+  let has s = List.exists (fun w -> Str_util.find s w <> None) [ "%{ocaml-config:int_size}"; "%{ocaml-config:word_size}"; "%{arch_sixtyfour}" ] in
+  !Env.target = "wasm32" && List.exists (fun f -> has (Files.contents f)) (Files.find ~skip work (fun f -> f = "dune"))
+
 (* The patches of the recipe of [pkg] that it is built with (core_unix's C
    stubs), if it has one for its opam sources: patches/*.patch, as
    `apply_patches DIR` applies them (not the subdirectories, which its
@@ -142,7 +150,7 @@ let build ?(force = false) ?(needed = fun () -> true) ?(direct = true) pkg =
       Source.sh "mkdir" [ "-p"; Filename.dirname work ];
       ignore (Source.opam_source pkg work);
       Stubs.apply_patches ~cwd:work (patches pkg);
-      let layouts = computes_layouts work || reads_jst_config pkg work || patches_ocaml pkg in
+      let layouts = computes_layouts work || reads_jst_config pkg work || reads_word_size work || patches_ocaml pkg in
       if layouts then status := "failed";
       if (not layouts) && Lazy.force unneeded then
         log "%s: nothing computed for the target, and the interfaces it was compiled against are the same for %s: not rebuilt" pkg !Env.target
