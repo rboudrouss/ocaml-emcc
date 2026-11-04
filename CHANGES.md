@@ -29,6 +29,8 @@
   (`getpwnam`...) are found by `dlsym` (opasswd stopped at startup with
   "undefined symbol"), and emscripten's libraries are looked for in
   `$EM_CACHE` when it is set.
+- The stubs of packages whose dune package is named otherwise
+  (ocaml-systemd: `-p systemd`) are built.
 
 ## 0.5.1
 

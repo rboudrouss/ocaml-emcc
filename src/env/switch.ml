@@ -65,13 +65,25 @@ let opam_build s =
 (* The `dune build` arguments selecting what the opam build of [pkg]
    builds: -p [pkg], unless it runs dune on the whole tree without -p
    (frama-c's `dune build --release @install`: its plugins are other dune
-   projects, of other packages, frama-c-wp...) *)
+   projects, of other packages, frama-c-wp...).  The dune package may be
+   named otherwise (ocaml-systemd: -p systemd). *)
 let dune_selection pkg =
   let blank c = if c = '\n' || c = '\t' || c = '\r' then ' ' else c in
   let b = match opam pkg with Some s -> String.concat " " (Str_util.words (String.map blank (opam_build s))) | None -> "" in
   let has w = Str_util.find b w <> None in
   if has "\"dune\" \"build\"" && not (List.exists has [ "\"-p"; "--only-packages"; "--for-release-of-packages" ]) then [ "--release" ]
-  else [ "-p"; pkg ]
+  else
+    let p = "\"-p\" \"" in
+    let named =
+      match Str_util.find b p with
+      | Some i -> (
+          let a = i + String.length p in
+          match String.index_from_opt b a '"' with
+          | Some e -> let n = String.sub b a (e - a) in if n = "" || String.contains n '%' then None else Some n
+          | None -> None)
+      | None -> None
+    in
+    [ "-p"; Option.value named ~default:pkg ]
 
 (* The "name" {filter} entries of a list of packages (formulas: their
    operators are skipped) *)
