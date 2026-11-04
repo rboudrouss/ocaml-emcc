@@ -55,7 +55,8 @@
   eigen (Eigen 3.4.1's fix for recent clang), gdbm (dbm),
   janestreet_cpuid (its CPUID primitives fail, as in JavaScript; its flags
   need 63-bit integers: wasm64), libcurl (curl),
-  ocaml_intrinsics (CRC-32C in software), readline,
+  ocaml_intrinsics (CRC-32C in software), readline, rocq-runtime (no perf
+  counter; its OCaml needs 63-bit integers: wasm64),
   shared-memory-ring (memory barriers for wasm), shell (no disk quotas:
   ENOSYS), tuntap (no devices:
   ENOSYS), unix-errno (Linux's errno codes), zmq (libzmq).

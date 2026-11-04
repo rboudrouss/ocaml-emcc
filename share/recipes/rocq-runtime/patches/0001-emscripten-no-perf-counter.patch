@@ -1,0 +1,23 @@
+emscripten: no instruction counter.
+
+perf.c counts instructions with Linux's perf_event_open, which dune builds
+as %{system} is linux.  emscripten has neither the syscall nor its header:
+the counter fails to initialize, as on a kernel without perf events.
+
+--- a/perf/perf.c
++++ b/perf/perf.c
+@@
++#ifdef __EMSCRIPTEN__
++#include <caml/mlvalues.h>
++#include <caml/fail.h>
++
++CAMLprim value CAML_init(value unit) { caml_failwith("initialisation failure"); }
++CAMLprim value CAML_drop(value unit) { caml_failwith("counter not initialized"); }
++CAMLprim value CAML_peek(value unit) { caml_failwith("counter not initialized"); }
++#else
+ #include <linux/perf_event.h>
+ #include <sys/syscall.h>
+@@
+   CAMLreturn(ret);
+ }
++#endif
