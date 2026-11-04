@@ -1,0 +1,16 @@
+32 bits: the semicolons of the 32-bit branches.
+
+Their int builtins miss them where ARCH_SIXTYFOUR is not defined, which
+the 64-bit hosts never compile.
+
+--- a/utils/int_builtins_c.c
++++ b/utils/int_builtins_c.c
+@@
+-    return __builtin_ffs(v)
++    return __builtin_ffs(v);
+@@
+-    return __builtin_ctz(v)
++    return __builtin_ctz(v);
+@@
+-    return __builtin_popcount(v)
++    return __builtin_popcount(v);
