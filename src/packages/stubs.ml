@@ -192,10 +192,14 @@ let native_stubs ~dir ~bdir pkg only =
                  let c = Filename.concat adir base in
                  if Sys.file_exists c then c
                  else
-                   (* (include_subdirs): the sources are in subdirectories *)
+                   (* (include_subdirs): the sources are in subdirectories;
+                      CMake builds out of the source tree *)
                    match Files.first ~skip:Files.hidden adir (( = ) base) with
                    | Some c -> c
-                   | None -> Env.fail "%s: no C source for %s (in %s)" pkg m a
+                   | None -> (
+                       match Files.first ~skip:Files.hidden dir (( = ) base) with
+                       | Some c -> c
+                       | None -> Env.fail "%s: no C source for %s (in %s)" pkg m a)
                in
                if not (compile ~cwd:dir ~flags:([ "-I" ^ Filename.dirname c; "-I" ^ adir; "-I" ^ src_dir ] @ incs) c) then
                  Env.fail "%s: cannot compile %s" pkg c;

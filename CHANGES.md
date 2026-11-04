@@ -29,7 +29,7 @@
   amd64, arm64...) are compiled from the C files of its native build: the
   wasm context's architecture is `none`, so dune skipped them.
 - The C files behind the members of a native stub archive built by CMake
-  (`x.c.o`) are found.
+  (`x.c.o`, out of the source tree) are found.
 - Stubs without dune or a recipe: the C files reaching the OCaml headers
   through several local headers are found (orsetto).
 - ctypes-foreign: the functions emscripten only has as failing stubs
