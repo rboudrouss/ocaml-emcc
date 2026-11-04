@@ -1,0 +1,10 @@
+emscripten: Linux's errno codes.
+
+Its libc is musl's, with Linux's codes: those of macOS and FreeBSD only
+(EPWROFF, EDOOFUS...) are unavailable, as on Linux.
+
+--- a/unix/unix_errno_util.c
++++ b/unix/unix_errno_util.c
+@@
+-#define LINUX defined(__linux__)
++#define LINUX (defined(__linux__) || defined(__EMSCRIPTEN__))

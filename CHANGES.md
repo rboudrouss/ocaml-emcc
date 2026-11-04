@@ -40,7 +40,8 @@
   their stubs being built apart; a library that needed rebuilding and
   failed is reported as such, not as one the target does not need.
 - Added recipes: ocaml_intrinsics (CRC-32C in software),
-  shared-memory-ring (memory barriers for wasm).
+  shared-memory-ring (memory barriers for wasm), unix-errno (Linux's
+  errno codes).
 
 ## 0.5.1
 
