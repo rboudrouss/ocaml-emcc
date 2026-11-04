@@ -755,6 +755,7 @@ A recipe is built once per switch and target, and is not rebuilt when it changes
 | `liblzo2` | lzo | |
 | `nlopt` | nlopt | its C algorithms (not StoGO or AGS, in C++) |
 | `frei0r` | frei0r | its header only: no plugins |
+| `gdbm` | dbm | GNU dbm, without readline or NLS |
 | `clang` | programs embedding clang's frontend | see [docs/recipes.md](docs/recipes.md#the-clang-recipe) |
 
 These recipes take the sources of the opam package

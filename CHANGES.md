@@ -45,7 +45,7 @@
   (re2's vendored C++ library, janestreet_cpuid's x86 stubs) are kept,
   their stubs being built apart; a library that needed rebuilding and
   failed is reported as such, not as one the target does not need.
-- Added recipes: ocaml_intrinsics (CRC-32C in software),
+- Added recipes: gdbm (dbm), ocaml_intrinsics (CRC-32C in software),
   shared-memory-ring (memory barriers for wasm), tuntap (no devices:
   ENOSYS), unix-errno (Linux's errno codes).
 
