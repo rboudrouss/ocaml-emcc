@@ -47,7 +47,7 @@
   failed is reported as such, not as one the target does not need.
 - Added recipes: gdbm (dbm), ocaml_intrinsics (CRC-32C in software),
   shared-memory-ring (memory barriers for wasm), tuntap (no devices:
-  ENOSYS), unix-errno (Linux's errno codes).
+  ENOSYS), unix-errno (Linux's errno codes), zmq (libzmq).
 
 ## 0.5.1
 
