@@ -23,6 +23,10 @@
 : "${OCAML_EMCC_SYSROOT:?OCAML_EMCC_SYSROOT not set}"
 
 host="$OCAML_EMCC_HOST_BIN/ocamlc"
+# The host's ocamlc runs the host's C compiler (a -custom link, which a
+# library without shared stubs asks for), not the sysroot's bin/path/cc of
+# the wasm context
+OCAML_EMCC_HOST_TOOLS=1; export OCAML_EMCC_HOST_TOOLS
 : "${OCAML_EMCC_CFLAGS:?OCAML_EMCC_CFLAGS not set}"
 emcc="${OCAML_EMCC_EMCC:-emcc}"
 cflags="$OCAML_EMCC_CFLAGS${OCAML_EMCC_EXTRA_CFLAGS:+ $OCAML_EMCC_EXTRA_CFLAGS}"
