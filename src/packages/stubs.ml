@@ -201,6 +201,17 @@ let native_stubs ~dir ~bdir pkg only =
          in
          mklib out (lib_name a) objs)
 
+(* The stub archives (lib<x>.a with a dll<x>.so) the host's build of [pkg]
+   installed *)
+let host_stub_archives pkg =
+  let files = Switch.lib_files pkg in
+  List.filter_map
+    (fun f ->
+      let b = Filename.basename f in
+      if lib_archive b && List.exists (fun g -> Filename.basename g = "dll" ^ lib_name b ^ ".so") files then Some b else None)
+    files
+  |> List.sort_uniq compare
+
 (* In the sources of a dune package [dir], build its stub archives with
    `dune build -x` and install them, with the link flags of the system
    libraries it uses; whether there were any.  Also for recipes that patch
@@ -238,11 +249,25 @@ let dune_stubs ~dir ~provider pkg =
             stub)
           host
       in
-      if host = [] then wasm
-      else (
-        log "host objects in %s: compiling the C files of the native build instead"
-          (String.concat " " (List.map Filename.basename host));
-        wasm @ native_stubs ~dir ~bdir pkg (List.map Filename.basename host)))
+      let host = List.map Filename.basename host in
+      if host <> [] then log "host objects in %s: compiling the C files of the native build instead" (String.concat " " host);
+      (* Libraries enabled for some architectures only (curve448's C:
+         amd64, arm64...), which the wasm context's is not (none) *)
+      let skipped =
+        List.filter
+          (fun a -> not (List.mem a host || List.exists (fun w -> Filename.basename w = a) wasm))
+          (host_stub_archives pkg)
+      in
+      let skipped =
+        if skipped = [] then []
+        else (
+          log "%s not built for %s (enabled for some architectures only?): compiling the C files of the native build"
+            (String.concat " " skipped) !Env.target;
+          (* (they may well be for those architectures only) *)
+          try native_stubs ~dir ~bdir pkg skipped
+          with Env.Failed -> log "  could not: left out"; [])
+      in
+      wasm @ (if host = [] then [] else native_stubs ~dir ~bdir pkg host) @ skipped)
     else (
       log "dune -x %s failed: compiling the C files of the native build instead" !Env.target;
       native_stubs ~dir ~bdir pkg [])

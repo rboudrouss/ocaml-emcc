@@ -20,6 +20,9 @@
 - A `dll<x>.so` that a package's own build makes with emcc (stem's
   snowball) is replaced by a placeholder when ocamlc links an executable
   of the package for the target ("Unrecognized magic").
+- Stub libraries a package enables for some architectures only (curve448:
+  amd64, arm64...) are compiled from the C files of its native build: the
+  wasm context's architecture is `none`, so dune skipped them.
 
 ## 0.5.1
 
