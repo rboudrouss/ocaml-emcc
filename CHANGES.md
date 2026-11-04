@@ -11,7 +11,9 @@
   deeper than the stack of a browser (6 000 to 15 000 nested calls) on new
   stacks of the engine (c_of_ocaml's segmented stack), in Chrome and Edge
   137 or later, or node 24 with `--experimental-wasm-jspi`. Without JSPI,
-  the program says so instead of failing to instantiate.
+  the program says so instead of failing to instantiate. Under `--wasi`,
+  the compiled code has no new stacks (it imported emscripten's JavaScript
+  for them, which a WASI host lacks).
 - `build`: the libraries compiled against a package rebuilt for the
   target are rebuilt however many rounds it takes (at most 5 before:
   netsnmp's async libraries, over core, failed with "inconsistent

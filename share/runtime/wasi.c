@@ -1156,6 +1156,12 @@ WEAK int __syscall_shutdown(int s, int how, int w, int x, int y, int z)
 /* name resolution (JavaScript in emscripten): none */
 WEAK int getaddrinfo(const char *n, const char *s, const struct addrinfo *h, struct addrinfo **r) { return EAI_FAIL; }
 WEAK int getnameinfo(const struct sockaddr *a, socklen_t al, char *h, socklen_t hl, char *s, socklen_t sl, int f) { return EAI_FAIL; }
+/* c_of_ocaml's segmented stack: with emscripten's JSPI, its deep
+   recursions go on new stacks of the engine, which its JavaScript tells
+   (EM_JS) and switches to.  A WASI host has neither: no new stacks. */
+int camlc_js_segments(void) { return 0; }
+void camlc_js_segment(void) { abort(); }
+
 uint32_t _emscripten_lookup_name(const char *name) { return 0; }
 #pragma clang diagnostic pop
 
