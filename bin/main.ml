@@ -30,6 +30,11 @@ link options (build and link):
                   threads: emscripten's pthreads (web workers sharing the
                   memory; in browsers, a cross-origin isolated page), or with
                   --wasi wasi-threads (wasmer, wasmtime <= 46)
+  --jspi          link with JSPI (emcc's -sJSPI), for browsers that have it
+                  (Chrome and Edge 137 or later; node 24 with
+                  --experimental-wasm-jspi): main is asynchronous, and the
+                  compiled code recurses deeply on new stacks of the engine
+                  (a browser gives it 500 KB to 1 MB); no standalone .wasm
   --dynlink       a program loading plugins (Emcc_dynlink of
                   ocaml-emcc.dynlink, see `plugin`), compiled only; its
                   bytecode must be linked with -linkall
@@ -202,7 +207,7 @@ let default_link_opts : Link.opts =
     bc = ""; output = ""; lib_dirs = []; libs = []; emcc_flags = []; mode = Link.Embed;
     opt = "-O2"; stack_size = "8MB"; auto_deps = true; check = true; wasi = false; wasix = false;
     compiled = true;
-    missing_prims = true; js_files = []; dynlink = false; effects = None; threads = false;
+    missing_prims = true; js_files = []; dynlink = false; effects = None; threads = false; jspi = false;
   }
 
 (* --compiled or --interpreted, when given *)
@@ -227,6 +232,7 @@ let parse_link_opts ?(extra = fun _ -> None) args =
     | "--interpreted" :: rest -> compiled_flag := Some false; go o pos rest
     | "--dynlink" :: rest -> go { o with dynlink = true } pos rest
     | "--threads" :: rest -> go { o with threads = true } pos rest
+    | "--jspi" :: rest -> go { o with jspi = true } pos rest
     | "--effects" :: e :: rest -> go { o with effects = Some e } pos rest
     | "--no-missing-primitives" :: rest -> go { o with missing_prims = false } pos rest
     | "--emcc-flag" :: f :: rest -> go { o with emcc_flags = o.emcc_flags @ [ f ] } pos rest
@@ -259,7 +265,7 @@ let with_config_flags (o : Link.opts) =
         false
     | None -> true
   in
-  { o with emcc_flags = p.link_flags @ env_flags @ o.emcc_flags; js_files = p.js_files @ o.js_files; threads = o.threads || p.threads;
+  { o with emcc_flags = p.link_flags @ env_flags @ o.emcc_flags; js_files = p.js_files @ o.js_files; threads = o.threads || p.threads; jspi = o.jspi || p.jspi;
     wasix = o.wasix || (o.wasi && p.wasix); compiled }
 
 let cmd_link args =

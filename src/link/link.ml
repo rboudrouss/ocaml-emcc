@@ -40,6 +40,7 @@ type opts = {
   dynlink : bool;  (** compiled: a main module loading plugins (Emcc_dynlink) *)
   effects : string option;  (** compiled: c_of_ocaml's --effects *)
   threads : bool;  (** Thread.create and Domain.spawn start threads (shared memory) *)
+  jspi : bool;  (** JSPI (-sJSPI): an asynchronous main; compiled, deep recursions on new stacks *)
 }
 
 (* C prototype of a primitive as the interpreter calls it. *)
@@ -794,6 +795,14 @@ let run o =
     Env.fail "no wasm runtime in %s, run `ocaml-emcc setup` first" (Env.sysroot ());
   (* emcc's -pthread among the user's flags: the program's threads *)
   let o = if List.mem "-pthread" o.emcc_flags then { o with threads = true } else o in
+  (* --jspi is emcc's -sJSPI (or the older -sASYNCIFY=2), among the user's
+     flags too *)
+  let jspi_flag f = f = "-sJSPI" || f = "-sJSPI=1" || f = "-sASYNCIFY=2" in
+  let o =
+    if o.jspi && not (List.exists jspi_flag o.emcc_flags) then { o with emcc_flags = o.emcc_flags @ [ "-sJSPI" ] }
+    else if List.exists jspi_flag o.emcc_flags then { o with jspi = true }
+    else o
+  in
   let emcc = Env.emcc () in
   let bc = Bytecode.parse o.bc in
   check_magic ~bc_path:o.bc bc;
@@ -804,6 +813,8 @@ let run o =
     Env.fail "--wasi: WASI (preview1) is 32-bit, no WASI host runs a wasm64 module.  Use --target wasm32.";
   if standalone && o.mode <> Embed then
     Env.fail "--preload and --node-fs need the JavaScript glue: not available for a standalone %s" o.output;
+  if standalone && o.jspi then
+    Env.fail "--jspi (JSPI) suspends the wasm code through the JavaScript glue: link OUT.js or OUT.html, not a standalone %s" o.output;
   if o.compiled then check_compiled ();
   if o.dynlink && not o.compiled then Env.fail "--dynlink: plugins need the compiled mode (not --interpreted)";
   if o.dynlink && standalone then Env.fail "--dynlink: plugins are loaded by the JavaScript glue: link OUT.js, not a standalone .wasm";
@@ -915,9 +926,7 @@ let run o =
       (* JSPI (-sJSPI, or the older -sASYNCIFY=2) supports them, and takes
          precedence over asyncify *)
       let all = ldflags @ flags_of_libs @ o.emcc_flags in
-      let jspi f =
-        f = "-sJSPI" || f = "-sJSPI=1" || f = "-sASYNCIFY=2"
-      in
+      let jspi = jspi_flag in
       let asyncify f = Str_util.starts_with ~prefix:"-sASYNCIFY" f && f <> "-sASYNCIFY=0" in
       let tail_calls = List.exists jspi all || not (List.exists asyncify all) in
       if not tail_calls then Env.log "asyncify: compiled without wasm tail calls";
@@ -1019,6 +1028,9 @@ let run o =
   (* compiled code runs on the wasm engine's stack: a large one under node.
      malloc and free are exported, as with the interpreter (whose file
      system needs them), for the JS code of the stubs (libffi...). *)
+  (* JSPI: checked before anything else runs (the worker of node_stack.js),
+     as without it the module fails to instantiate *)
+  let defaults = if o.jspi then defaults @ [ "--pre-js"; Filename.concat (Env.share ()) "runtime/jspi.js" ] else defaults in
   let defaults =
     if standalone || compiled = None then defaults
     else

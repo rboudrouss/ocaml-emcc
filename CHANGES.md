@@ -6,6 +6,12 @@
   in `ocaml-emcc.conf`), less tested, and is used with OCaml before 4.14;
   `--compiled` is still accepted. `tests/run.sh --interpreted` runs the
   tests interpreted.
+- `--jspi` (`jspi: yes` in `ocaml-emcc.conf`) links with JSPI (emcc's
+  `-sJSPI`): `main` is asynchronous, and the compiled code recurses
+  deeper than the stack of a browser (6 000 to 15 000 nested calls) on new
+  stacks of the engine (c_of_ocaml's segmented stack), in Chrome and Edge
+  137 or later, or node 24 with `--experimental-wasm-jspi`. Without JSPI,
+  the program says so instead of failing to instantiate.
 - `build`: the libraries compiled against a package rebuilt for the
   target are rebuilt however many rounds it takes (at most 5 before:
   netsnmp's async libraries, over core, failed with "inconsistent
