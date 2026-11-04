@@ -1,0 +1,9 @@
+emscripten: <endian.h>, as on Linux.
+
+Its libc is musl's, which has it.
+
+--- a/lib/libhdr_histogram/src/hdr_endian.h
++++ b/lib/libhdr_histogram/src/hdr_endian.h
+@@
+-#if defined(__linux__) || defined(__CYGWIN__)
++#if defined(__linux__) || defined(__CYGWIN__) || defined(__EMSCRIPTEN__)
