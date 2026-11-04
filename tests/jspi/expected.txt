@@ -1,0 +1,5 @@
+depth 200000
+length 200000
+fold_right 300000
+caught Exit
+again 200000

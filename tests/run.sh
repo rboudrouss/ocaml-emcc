@@ -78,6 +78,7 @@ lua       | lu       |            | ocaml-lua                   | wasm32 wasm64 
 stb       | sb       |            | stb_image                   | wasm32 wasm64      |
 extunix   | eu       |            | extunix                     | wasm32 wasm64      |
 snappy    | sn       |            | snappy                      | wasm32 wasm64      |
+jspi      | jp       |            |                             | wasm32 wasm64      |
 argon2    | ar       |            | argon2                      | wasm32 wasm64      |
 expat     | ex       |            | expat                       | wasm32 wasm64      |
 lmdb      | lm       |            | lmdb                        | wasm32 wasm64      |
@@ -166,7 +167,12 @@ while IFS='|' read -r name target args pkgs targets differ; do
     fi
     if [ -f expected.txt ]; then cp expected.txt out/native.txt
     else "./_build/default/$target.exe" $args > out/native.txt || echo "exit=$?" >> out/native.txt; fi
-    if [ $WASI = yes ]; then run() { wasi_run "$@"; }; else run() { $TO "$NODE" "$@"; }; fi
+    if [ $WASI = yes ]; then run() { wasi_run "$@"; }
+    elif grep -qs '^jspi: *yes' ocaml-emcc.conf; then
+      # on node's main thread, whose stack (984 KB) is that of browsers: the
+      # deep recursions of the compiled code go on JSPI's new stacks
+      run() { OCAML_EMCC_STACK_MB=0 $TO "$NODE" --experimental-wasm-jspi "$@"; }
+    else run() { $TO "$NODE" "$@"; }; fi
     if [ -f check.mjs ]; then
       # a web page: index.html, the program, and check.mjs driving a browser
       cp index.html out/
