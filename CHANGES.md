@@ -25,6 +25,10 @@
   wasm context's architecture is `none`, so dune skipped them.
 - Stubs without dune or a recipe: the C files reaching the OCaml headers
   through several local headers are found (orsetto).
+- ctypes-foreign: the functions emscripten only has as failing stubs
+  (`getpwnam`...) are found by `dlsym` (opasswd stopped at startup with
+  "undefined symbol"), and emscripten's libraries are looked for in
+  `$EM_CACHE` when it is set.
 
 ## 0.5.1
 

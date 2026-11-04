@@ -430,12 +430,12 @@ let is_c_ident s =
   let rec ok i = i >= n || ((match s.[i] with 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '_' -> true | _ -> false) && ok (i + 1)) in
   n > 0 && n <= 128 && (match s.[0] with 'a' .. 'z' | 'A' .. 'Z' | '_' -> true | _ -> false) && ok 1
 
+(* (in emscripten's cache, $EM_CACHE if set; libstubs: the functions
+   emscripten only has failing, getpwnam for opasswd) *)
 let emscripten_system_libs () =
-  let dir =
-    List.fold_left Filename.concat (Filename.dirname (Env.emcc ()))
-      [ "cache"; "sysroot"; "lib"; !Env.target ^ "-emscripten" ]
-  in
-  List.filter Sys.file_exists (List.map (Filename.concat dir) [ "libc.a"; "libdlmalloc.a"; "libcompiler_rt.a" ])
+  let cache = match Env.getenv_opt "EM_CACHE" with Some d when d <> "" -> d | _ -> Filename.concat (Filename.dirname (Env.emcc ())) "cache" in
+  let dir = List.fold_left Filename.concat cache [ "sysroot"; "lib"; !Env.target ^ "-emscripten" ] in
+  List.filter Sys.file_exists (List.map (Filename.concat dir) [ "libc.a"; "libdlmalloc.a"; "libcompiler_rt.a"; "libstubs.a" ])
 
 let foreign_exports ~archives bc =
   let syms = defined_symbols (archives @ emscripten_system_libs ()) in
