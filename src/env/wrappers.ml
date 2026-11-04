@@ -53,7 +53,8 @@ let symlink target link =
    the host in CPATH and friends would come before them (the host's ffi.h
    for ctypes-foreign): the environment loses them.
    The C standard is left out for C++ (snappy's stubs: -x c++), which clang
-   refuses with -std=gnu23.
+   refuses with -std=gnu23; `register` is allowed there, as by g++ (gbddml:
+   clang refuses it in C++17).
    An executable (-o X.exe, or without extension) is a program the build
    runs: ctypes' type generators print the layouts of the target's structs.
    It becomes a node script (the wasm inside, real files) dune can run, with
@@ -62,11 +63,11 @@ let symlink target link =
 let emcc_wrapper =
   {|#!/bin/sh
 unset CPATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH LIBRARY_PATH
-link=-L'@SYSROOT@/lib' std='@STUB_STD@' prev= exe= inc=
+link=-L'@SYSROOT@/lib' std='@STUB_STD@' cxx='@CXX_FLAGS@' prev= exe= inc=
 for a; do
   shift
-  case $a in -c|-E|-S|-M|-MM) link= ;; -xc++*|*.cc|*.cpp|*.cxx|*.C) std= ;; esac
-  case $prev$a in -xc++*) std= ;; esac
+  case $a in -c|-E|-S|-M|-MM) link= ;; -xc++*|*.cc|*.cpp|*.cxx|*.C) std= cxx=-Wno-register ;; esac
+  case $prev$a in -xc++*) std= cxx=-Wno-register ;; esac
   [ "$prev" = -o ] && case ${a##*/} in *.exe) exe=1 ;; *.*) exe= ;; *) exe=1 ;; esac
   prev=$a
   case $inc$a in
@@ -82,7 +83,7 @@ for a; do
 done
 [ -n "$link" ] && [ -n "$exe" ] && set -- "$@" -sEXECUTABLE='@NODE@' -sSINGLE_FILE=1 -sEXIT_RUNTIME=1 -sNODERAWFS=1
 [ -z "$link" ] && set -- @COMPILE_FLAGS@ "$@"
-exec '@EMCC@' @TARGET_FLAGS@ $std -idirafter '@SYSROOT@/include' $link "$@"
+exec '@EMCC@' @TARGET_FLAGS@ $std $cxx -idirafter '@SYSROOT@/include' $link "$@"
 |}
 
 let tool_wrapper =
@@ -221,11 +222,11 @@ let write () =
       ("EMSDK_BIN", Filename.dirname emcc); ("SHARE", Env.share ()); ("NODE", emscripten_node ());
     ]
   in
-  script cc (subst vars emcc_wrapper);
+  script cc (subst (("CXX_FLAGS", "") :: vars) emcc_wrapper);
   (* (C++: em++, and no C standard) *)
   let cxx = file ("bin/em++-" ^ target) in
   script cxx
-    (subst (("STUB_STD", "") :: ("EMCC", Filename.concat (Filename.dirname emcc) "em++") :: vars) emcc_wrapper);
+    (subst (("STUB_STD", "") :: ("CXX_FLAGS", "-Wno-register") :: ("EMCC", Filename.concat (Filename.dirname emcc) "em++") :: vars) emcc_wrapper);
   List.iter (fun t -> script (file ("bin/" ^ t)) (subst (("TOOL", t) :: vars) tool_wrapper)) [ "ocamlc"; "ocamlmklib" ];
   (* The other tools dune looks for next to the toolchain's ocamlc (rules
      using %{ocaml}, %{bin:ocamllex}...) are the host's.  Not ocamlopt: see

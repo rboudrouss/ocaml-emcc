@@ -15,6 +15,8 @@
   `cc`, `gcc`, `g++`, `c++`, `clang`, `clang++`, `ar` and `ranlib`. They
   were the host's, which refused emcc's flags (qbf, re2, cudd,
   hdr_histogram, cucumber, bls12-381).
+- C++ stubs may use `register`, as with g++ (clang refuses it in C++17:
+  gbddml).
 
 ## 0.5.1
 
