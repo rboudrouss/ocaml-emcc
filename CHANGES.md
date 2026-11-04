@@ -44,7 +44,8 @@
   async, shell...).
 - The OCaml libraries rebuilt for the target whose C alone failed to build
   (re2's vendored C++ library, janestreet_cpuid's x86 stubs) are kept,
-  their stubs being built apart; a library that needed rebuilding and
+  their stubs being built apart (with an empty archive where their
+  `dune-package` names one); a library that needed rebuilding and
   failed is reported as such, not as one the target does not need.
 - Added recipes: bls12-381 and bls12-381-signature (a 32-bit size_t),
   eigen (Eigen 3.4.1's fix for recent clang), gdbm (dbm), libcurl (curl),

@@ -192,6 +192,14 @@ let build ?(force = false) ?(needed = fun () -> true) ?(direct = true) pkg =
                    output_string oc (d ^ "\n");
                    close_out oc;
                    log "  %s" (findlib d)));
+          (* (its C failed: the stub archives its dune-package names, which
+             dune requires, empty; `link` takes the sysroot's) *)
+          if not built then
+            Switch.lib_files pkg
+            |> List.iter (fun f ->
+                   let t = findlib (String.sub f 4 (String.length f - 4)) in
+                   if Filename.check_suffix f ".a" && Files.is_dir (Filename.dirname t) && not (Sys.file_exists t) then
+                     Compat.write_file t "!<arch>\n");
           if pkg = "jst-config" then merge_jst_config ();
           status := "ok")
         else (
