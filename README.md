@@ -10,17 +10,17 @@ rewritten in JavaScript, so FFI-heavy code works as is.
 
 The OCaml code is compiled to C by
 [c_of_ocaml](https://github.com/rboudrouss/C_of_ocaml), a fork of
-js_of_ocaml, and emcc compiles it with the stubs: the result runs about
+js_of_ocaml, and emcc compiles it with the stubs. The result runs about
 as fast as wasm_of_ocaml's. The bytecode can also be run on an
 interpreter instead (`--interpreted`), but that mode is slower and less
 tested (see
 [Compiled or interpreted](#compiled-or-interpreted)).
 
 - [Quick start](#quick-start) · [Requirements](#requirements)
-- [What works where](#what-works-where): outputs, environments
-- [Compiled or interpreted](#compiled-or-interpreted): the two modes and their limits
+- [What works where](#what-works-where) (outputs, environments)
+- [Compiled or interpreted](#compiled-or-interpreted) (the two modes and their limits)
 - [Commands and options](#commands-and-options) · [Configuration](#configuration)
-- Running: [node](#in-node), [browsers](#in-a-browser), [raylib](#raylib-in-a-browser), [WASI](#wasi)
+- Running in [node](#in-node), [browsers](#in-a-browser), [raylib](#raylib-in-a-browser), [WASI](#wasi)
 - [JavaScript](#javascript) · [wasm32 or wasm64](#wasm32-or-wasm64) · [Plugins](#plugins) · [Threads](#threads)
 - [Differences from native](#differences-from-native) · [C dependencies](#c-dependencies) · [Without dune](#without-dune)
 - [How it works](#how-it-works) · [Status](#status) · [Development](#development)
@@ -46,11 +46,11 @@ with emcc, compiles the program to C, and writes `main.js` and
 
 | what | version | notes |
 |------|---------|-------|
-| opam switch | OCaml 4.14 or later (4.x or 5.x) | 4.08 to 4.13: interpreted only |
-| [emsdk](https://emscripten.org/docs/getting_started/downloads.html) | tested with 6.0.11 | `emcc` in `PATH`; standalone `.wasm` outputs need 4.0 or later |
-| c_of_ocaml | its `master` | in `PATH`, or `$OCAML_EMCC_C_OF_OCAML`; not needed with `--interpreted` |
+| opam switch | OCaml 4.14 or later (4.x or 5.x) | interpreted only with 4.08 to 4.13 |
+| [emsdk](https://emscripten.org/docs/getting_started/downloads.html) | tested with 6.0.11 | `emcc` in `PATH`, 4.0 or later for standalone `.wasm` outputs |
+| c_of_ocaml | its `master` | in `PATH` or `$OCAML_EMCC_C_OF_OCAML`, not needed with `--interpreted` |
 | dune | 3.11 or later | except for projects built [without dune](#without-dune) |
-| node | the one of emsdk works | to run `.js` outputs; wasm64 needs 24 or later |
+| node | the one of emsdk works | to run `.js` outputs, 24 or later for wasm64 |
 
 ocaml-emcc rebuilds the compiler's runtime and the C stubs of the packages
 from their sources. They are fetched once with `opam source` (network
@@ -73,7 +73,7 @@ export OCAML_EMCC_C_OF_OCAML=$PWD/_build/default/compiler/bin-c_of_ocaml/c_of_oc
 
 ### Outputs
 
-The extension of the output, and `--wasi`, decide what is written:
+The extension of the output and `--wasi` decide what is written.
 
 | `ocaml-emcc build ...` | what it is | runs in | run it with |
 |------------------------|------------|---------|-------------|
@@ -91,9 +91,9 @@ uses emscripten's experimental `-sPURE_WASI`.
 
 ### Environments
 
-What the program gets from where it runs. Everything else (C stubs,
-recipes, the standard library, Unix's computations) works the same in
-all of them.
+C stubs, recipes, the standard library and Unix's computations work the
+same in every environment. What the program gets from its environment
+differs.
 
 | | node | node, `--node-fs` | browser | WASI (`--wasi`) | WASIX (`--wasix`) |
 |-|------|-------------------|---------|-----------------|-------------------|
@@ -101,7 +101,7 @@ all of them.
 | standard streams | bytes (pipes, redirections) | bytes | lines (`Module.print`, `printErr`, `stdin`) | yes | yes |
 | files | in memory (emscripten's) | the real ones | in memory | the preopened directories (`--dir`) | the preopened directories |
 | `Sys.getenv` | emscripten's defaults | the process's | emscripten's defaults | what the host passes | what the host passes |
-| local time zone | the host's | the host's | the browser's | `Unix.localtime`: UTC; core: `/etc/localtime`, if preopened | idem |
+| local time zone | the host's | the host's | the browser's | UTC for `Unix.localtime`, `/etc/localtime` for core if preopened | idem |
 | sockets | emscripten's emulation, not tested | idem | idem | accept on preopened sockets (wasmtime 46) | yes (TCP, UDP, names) |
 | threads (`--threads`) | yes | yes | cross-origin isolated pages | wasmer, wasmtime ≤ 46 | wasmer |
 | processes (`Sys.command`, `fork`) | no | no | no | no | no |
@@ -123,22 +123,21 @@ all of them.
 | effect handlers (OCaml 5) | yes (c_of_ocaml's double translation, chosen per program, see `--effects`) | yes |
 | plugins (`--dynlink`) | yes | no |
 | threads, domains, js_of_ocaml's library, WASI | yes | yes |
-| deep recursion | under node, a 1 GB stack by default (millions of nested calls); in browsers, the engine's 500 KB to 1 MB (6 000 to 15 000 nested calls), without limit with [`--jspi`](#deep-recursion-in-a-browser-jspi) | the interpreter's own stack, as natively |
+| deep recursion | a 1 GB stack under node by default (millions of nested calls), the engine's 500 KB to 1 MB in browsers (6 000 to 15 000 nested calls), without limit with [`--jspi`](#deep-recursion-in-a-browser-jspi) | the interpreter's own stack, as natively |
 | `Printexc.get_callstack` | empty (backtraces of exceptions work) | yes |
 | `Marshal.Closures` | no | yes |
-| with asyncify (`-sASYNCIFY`) | no wasm tail calls: a long chain of mutually recursive tail calls may overflow (use `--jspi`) | yes |
+| with asyncify (`-sASYNCIFY`) | no wasm tail calls, so a long chain of mutually recursive tail calls may overflow (use `--jspi`) | yes |
 | `--preload` | nothing to preload | the bytecode in a separate `.data` file |
 
 The interpreted mode stays available for what the compiled one cannot do
-(OCaml before 4.14, `Marshal.Closures`, `Printexc.get_callstack`, very
-deep recursion in browsers without JSPI), or when c_of_ocaml fails on a
-program. It is
-not the default any more and is less tested: report what breaks, but
-expect the compiled mode to be the one fixed first. With an OCaml older
-than 4.14, `build` and `link` interpret, and say so. `interpreted: yes` in
+(OCaml before 4.14, `Marshal.Closures`, `Printexc.get_callstack`, very deep
+recursion in browsers without JSPI), or when c_of_ocaml fails on a program.
+It is not the default any more and is less tested. Report what breaks, but
+expect the compiled mode to be the one fixed first. With an OCaml older than
+4.14, `build` and `link` interpret, and say so. `interpreted: yes` in
 [`ocaml-emcc.conf`](#configuration) chooses it for a project.
 
-The compiled mode in more detail:
+### The compiled mode
 
 - **Speed**: there is little to gain when the program spends its time in
   C stubs (digestif's hash functions...).
@@ -147,10 +146,10 @@ The compiled mode in more detail:
   therefore runs in a worker thread with a stack of `$OCAML_EMCC_STACK_MB`
   megabytes, 1024 by default (`0` keeps it on the main thread and saves
   about 40 ms at startup). Running out of it is an uncaught
-  `Stack_overflow`. In a browser, the stack is the engine's: 984 KB on
-  the page's thread in Chrome, about 500 KB in a worker, some thousands of
-  nested calls. With `--jspi`, a recursion going deeper continues on a
-  new stack of the engine (see [Deep recursion in a
+  `Stack_overflow`. In a browser, the stack is the engine's, 984 KB on the
+  page's thread in Chrome and about 500 KB in a worker (some thousands of
+  nested calls). With `--jspi`, a recursion going deeper continues on a new
+  stack of the engine (see [Deep recursion in a
   browser](#deep-recursion-in-a-browser-jspi)).
 - **Asyncify**: tail calls are those of WebAssembly, which asyncify does
   not support. With `-sASYNCIFY`, as the raylib recipe links, they become
@@ -158,7 +157,7 @@ The compiled mode in more detail:
   browser](#deep-recursion-in-a-browser-jspi)) keeps them and gives a
   smaller build, but needs a browser that supports it, or node 24 with
   `--experimental-wasm-jspi`.
-- **Effects** cannot be performed across a callback from C: they raise
+- **Effects** performed across a callback from C raise
   `Effect.Unhandled`, as with js_of_ocaml.
 - **Backtraces** work when the bytecode is compiled with `-g`, as dune
   does.
@@ -173,18 +172,18 @@ steps, for scripts and Makefiles (see [Without dune](#without-dune)).
 |---------|--------------|
 | `build OUT [--exe DIR/NAME] [LINK OPTIONS] [-- EMCC-ARGS]` | the dune executable named like `OUT` (or `--exe`), its C stubs and those of its dependencies, the link |
 | `link PROG.bc -o OUT [LINK OPTIONS] [-- EMCC-ARGS]` | the link of a bytecode executable built otherwise |
-| `plugin LIB.cma\|M.cmo -o OUT.wasm [--main PROG.js] [--effects MODE] [-O FLAG]` | a [plugin](#plugins); `--main` checks that the program exports what it needs |
+| `plugin LIB.cma\|M.cmo -o OUT.wasm [--main PROG.js] [--effects MODE] [-O FLAG]` | a [plugin](#plugins), and with `--main`, a check that the program exports what it needs |
 | `setup [--force]` | the wasm runtime of the switch's compiler (`build` and `link` do it the first time) |
-| `install [--force] RECIPE...` | build [recipes](#c-dependencies) (gmp, project recipes...); `--force` rebuilds them |
+| `install [--force] RECIPE...` | build [recipes](#c-dependencies) (gmp, project recipes...), again with `--force` |
 | `dune [ARGS]` | `dune build -x TARGET ARGS` (the C stubs compiled with emcc), and their static archives |
 | `deps PROG.bc [-L DIR]` | build the missing stub libraries of `PROG.bc` |
 | `doctor PROG.bc [-L DIR]` | how its stub libraries and primitives resolve, its 31-bit literals, its packages rebuilt for the target |
-| `env [--cflags\|--sysroot]` | paths and configuration; `--cflags`: the flags to compile C stubs with emcc |
+| `env [--cflags\|--sysroot]` | paths and configuration, or with `--cflags` the flags to compile C stubs with emcc |
 
-`build` builds the executable at the same path as the output
-(`bin/main.js` → `bin/main`), else the only executable of the project with
-that name; `--exe DIR/NAME` names it. Any `(modes ...)` works, `byte` is
-not needed.
+`build` builds the executable at the same path as the output (`bin/main.js`
+→ `bin/main`), else the only executable of the project with that name, or
+the one `--exe DIR/NAME` names. Any `(modes ...)` works, `byte` is not
+needed.
 
 **Link options** (`build` and `link`):
 
@@ -192,14 +191,14 @@ not needed.
 |--------|--------------|----------------|
 | `--interpreted` | runs the bytecode on the interpreter | see [Compiled or interpreted](#compiled-or-interpreted) |
 | `--compiled` | the default | accepted for older scripts |
-| `--effects MODE` | effect handlers of the compiled code: `double-translation` or `disabled` | the default (double translation when the program performs effects, disabled with `--dynlink`) is right unless plugins perform effects |
+| `--effects MODE` | effect handlers of the compiled code, `double-translation` or `disabled` | the default (double translation when the program performs effects, disabled with `--dynlink`) is right unless plugins perform effects |
 | `--threads` | `Thread.create` and `Domain.spawn` start real threads | a program with threads or domains, see [Threads](#threads) |
 | `--dynlink` | a program loading plugins | see [Plugins](#plugins) |
-| `--jspi` | links with JSPI (`-sJSPI`): an asynchronous `main`, and compiled, deep recursions on new stacks | deep recursion in browsers that have JSPI, see [Deep recursion in a browser](#deep-recursion-in-a-browser-jspi) |
+| `--jspi` | links with JSPI (`-sJSPI`), with an asynchronous `main` and, compiled, deep recursions on new stacks | deep recursion in browsers that have JSPI, see [Deep recursion in a browser](#deep-recursion-in-a-browser-jspi) |
 | `--wasi` | `OUT.wasm` for a WASI host | see [WASI](#wasi) |
 | `--wasix` | `--wasi`, with WASIX's sockets | network programs under wasmer |
 | `--node-fs` | the real file system and environment, node only | programs reading files installed with them (dune-site, why3's `share/why3`, frama-c) or the user's files |
-| `--preload` | interpreted: the bytecode in a separate `main.data` | a page loading the bytecode apart |
+| `--preload` | the bytecode in a separate `main.data` (interpreted) | a page loading the bytecode apart |
 | `-l LIB`, `-L DIR` | more libraries (`-lfoo`, `libfoo.a`, `x.o`) and where to find them | C of your own, built by hand |
 | `--no-deps` | does not build the missing stub libraries | to see what is missing without building |
 | `--no-missing-primitives` | a primitive no library defines is a link error | instead of a stub raising `Failure` when called |
@@ -212,7 +211,7 @@ not needed.
 
 | option | what it does |
 |--------|--------------|
-| `--target wasm32\|wasm64` | wasm32 (default): 31-bit ints at run time; wasm64: memory64, the semantics of the 64-bit host (see [wasm32 or wasm64](#wasm32-or-wasm64)) |
+| `--target wasm32\|wasm64` | wasm32 (default) has 31-bit ints at run time, wasm64 has memory64 and the semantics of the 64-bit host (see [wasm32 or wasm64](#wasm32-or-wasm64)) |
 | `--switch SW` | the opam switch (default: the current one) |
 | `--sysroot DIR` | where wasm artifacts go (default `<switch>/emcc-sysroot/<target>`) |
 | `--recipes DIR` | another recipe directory (repeatable) |
@@ -228,14 +227,14 @@ not needed.
 | `OCAML_EMCC_RECIPES_PATH` | build | more recipe directories (`:`-separated) |
 | `OCAML_EMCC_LDFLAGS` | build | more emcc link flags |
 | `OCAML_EMCC_EXTRA_CFLAGS` | build | more C flags for the stubs and recipes |
-| `OCAML_EMCC_STACK_MB` | run, node, compiled | the stack of the program, in MB (default 1024; `0`: node's main thread) |
+| `OCAML_EMCC_STACK_MB` | run, node, compiled | the stack of the program, in MB (default 1024, `0` for node's main thread) |
 | `OCAML_EMCC_CPUS` | run, WASI | `Domain.recommended_domain_count` (default 4) |
-| `OCAMLRUNPARAM` | run | as natively (`d=N`: the number of domains); read with `--node-fs` and under WASI only, as elsewhere the program does not see the process's environment |
+| `OCAMLRUNPARAM` | run | as natively (`d=N` sets the number of domains), read with `--node-fs` and under WASI only, as elsewhere the program does not see the process's environment |
 
 ## Configuration
 
 A project can have an `ocaml-emcc.conf`, looked up from the current
-directory upwards. Every field is optional:
+directory upwards. Every field is optional.
 
 | field | what | example |
 |-------|------|---------|
@@ -250,9 +249,9 @@ directory upwards. Every field is optional:
 | `wasix:` | `--wasi` links with `--wasix` | `wasix: yes` |
 | `interpreted:` | link with `--interpreted` (`--compiled` overrides it) | `interpreted: yes` |
 
-Emscripten link flags come from, in increasing precedence (emcc keeps the
-last `-s` setting): `link-flags:`, `$OCAML_EMCC_LDFLAGS`, `--emcc-flag F`,
-then the arguments after `--`:
+Emscripten link flags come from `link-flags:`, `$OCAML_EMCC_LDFLAGS`,
+`--emcc-flag F`, then the arguments after `--`, in increasing precedence
+(emcc keeps the last `-s` setting):
 
 ```sh
 ocaml-emcc build app.js -- --preload-file assets@/assets \
@@ -267,18 +266,18 @@ ocaml-emcc build app.js -- --preload-file assets@/assets \
 node main.js arg1 arg2
 ```
 
-The program behaves like a native executable: it gets the arguments, the
+The program behaves like a native executable. It gets the arguments, the
 exit code, and the standard streams of the node process as bytes
 (`node main.js < in.bin > out.bin` works). Its files are in emscripten's
-in-memory file system, unless it is built with `--node-fs`: it then only
+in-memory file system, unless it is built with `--node-fs`. It then only
 runs in node, and sees the real file system and the environment variables
 (`Sys.getenv`). Interpreted, its bytecode is embedded in the `.wasm`, or
 written next to `main.js` with `--node-fs`.
 
 ### In a browser
 
-The same `main.js` and `main.wasm` work in a web page. The `Module` object
-gives the arguments and receives the output:
+The same `main.js` and `main.wasm` work in a web page, with the arguments
+and the output in the `Module` object:
 
 ```html
 <script>
@@ -291,7 +290,7 @@ gives the arguments and receives the output:
 <script src="main.js"></script>
 ```
 
-- Don't declare global `out` or `err` variables in the page: emscripten's
+- Don't declare global `out` or `err` variables in the page, emscripten's
   script declares them.
 - `Module.print`, `Module.printErr` and `Module.stdin` handle lines of
   text rather than bytes. They take precedence over node's streams too.
@@ -300,47 +299,48 @@ gives the arguments and receives the output:
 
 ### Deep recursion in a browser (JSPI)
 
-Compiled code recurses on the stack of the wasm engine: in a browser,
-984 KB on the page's thread in Chrome and about 500 KB in a worker, that
-is 6 000 to 15 000 nested calls of OCaml code. A parser or an analyser
+Compiled code recurses on the stack of the wasm engine, which is 984 KB
+on the page's thread in Chrome and about 500 KB in a worker, that is
+6 000 to 15 000 nested calls of OCaml code. A parser or an analyser
 recursing on a large input runs out of it (MOPSA, on a C file including
 some headers). Linked with `--jspi` (`jspi: yes` in `ocaml-emcc.conf`),
 a compiled function about to go deeper than a limit of the current stack
 calls itself again on a new stack of the engine, which JSPI
 (WebAssembly's JavaScript Promise Integration) gives, while the current
-one waits, suspended (c_of_ocaml's segmented stack): the recursion is then
-only limited by memory.
+one waits, suspended (c_of_ocaml's segmented stack). The recursion is
+then only limited by memory.
 
 ```sh
 ocaml-emcc build app.js --jspi
 ```
 
-- **Browsers**: JSPI is in Chrome and Edge 137 and later; Firefox
+- **Browsers**: JSPI is in Chrome and Edge 137 and later. Firefox
   announces it for version 153, Safari has it in its preview only. A
-  build with `--jspi` does not load without it (the program says so): for
-  the others, serve a second build without `--jspi`, compiled (a smaller
-  stack) or interpreted (the interpreter has a stack of its own), and
-  choose with `typeof WebAssembly.Suspending == "function"`.
+  build with `--jspi` does not load without it (the program says so). For
+  the other browsers, serve a second build without `--jspi`, compiled (a
+  smaller stack) or interpreted (the interpreter has a stack of its own),
+  and choose with `typeof WebAssembly.Suspending == "function"`.
 - **An asynchronous `main`**: the program runs as an asynchronous
   function. A page or a worker that starts it (`Module.callMain` with
   `-sINVOKE_RUN=0`, or the module of `-sMODULARIZE=1`) gets a promise, to
-  wait for before using its results; `exit` still ends it with an
+  wait for before using its results. `exit` still ends it with an
   `ExitStatus`.
 - **Callbacks**: OCaml code called back from C or JavaScript (an event
   handler, a js_of_ocaml callback) stays on the stack it is called on,
-  as JSPI cannot suspend JavaScript frames: a deep recursion has to start
+  as JSPI cannot suspend JavaScript frames. A deep recursion has to start
   from the program's main code.
 - **Cost**: about 2 % of speed on average over c_of_ocaml's benchmarks,
   up to a third on a plain recursion of integers (each call checks the
   stack left).
-- **node**: not needed, the program has a 1 GB stack there; node 24 runs
-  a `--jspi` build with `node --experimental-wasm-jspi`. No standalone
-  `.wasm` (`--wasi`): JSPI works through the JavaScript glue.
+- **node**: not needed, the program has a 1 GB stack there. node 24 runs
+  a `--jspi` build with `node --experimental-wasm-jspi`.
+- **WASI**: no `--jspi` for a standalone `.wasm`, as JSPI works through
+  the JavaScript glue.
 
 ### raylib in a browser
 
 A game using [raylib-ocaml](https://github.com/tjammer/raylib-ocaml) builds
-as is, with the usual loop:
+as is, with the usual loop.
 
 ```ocaml
 let () =
@@ -360,9 +360,9 @@ ocaml-emcc build game.html            # emscripten's page, with a canvas
 ```
 
 - The `raylib` recipe builds the raylib that the package vendors for
-  raylib's `PLATFORM_WEB`: emscripten's GLFW (`-sUSE_GLFW=3`) and WebGL.
-  The window is the page's canvas (`Module.canvas` in a page of your
-  own); there is no window under node. raylib-ocaml's master after 2.3.0
+  raylib's `PLATFORM_WEB`, with emscripten's GLFW (`-sUSE_GLFW=3`) and
+  WebGL. The window is the page's canvas (`Module.canvas` in a page of
+  your own). There is no window under node. raylib-ocaml's master after 2.3.0
   does it itself for a wasm target, the recipe patches the releases
   before.
 - `window_should_close` gives the browser a frame (`emscripten_sleep`),
@@ -383,42 +383,44 @@ A `--wasi` module imports only WASI (preview 1) functions. It is wasm32
 only, as no host runs wasm64 WASI modules.
 
 **Hosts.** The host must implement the standard exception handling
-instructions (exnref), which wasmtime 50 and node 22 do: OCaml raises
+instructions (exnref), as wasmtime 50 and node 22 do. OCaml raises
 exceptions from C with `longjmp`, which uses them.
 
 | host | command |
 |------|---------|
-| wasmtime | `wasmtime run -W exceptions=y --dir DIR main.wasm`: a `--dir` for each directory the program may use |
+| wasmtime | `wasmtime run -W exceptions=y --dir DIR main.wasm`, with a `--dir` for each directory the program may use |
 | node | `node:wasi` with `version: 'preview1'` and `preopens` (see `tests/wasi-run.mjs`) |
 | wasmer | `wasmer run --volume DIR:/DIR main.wasm` (`--net` for WASIX, `--enable-tail-call` for compiled code) |
 
-**What works:**
+**What works.**
 
 - **Files**: paths are resolved against the preopened directories, as
-  wasi-libc does: `/tmp/x` is `x` in the directory preopened as `/tmp`, and
-  a directory preopened as `.` holds every other path. Opening, reading,
+  wasi-libc does. `/tmp/x` is `x` in the directory preopened as `/tmp`,
+  and a directory preopened as `.` holds every other path. Opening, reading,
   writing, `stat`, directories, renaming, removing, truncating, links and
   times work. An absolute symbolic link is followed through the preopened
-  directories, which hosts refuse to do (`/etc/localtime`, a link into
-  `/usr/share/zoneinfo`: core's `Timezone.local` needs both preopened).
+  directories, which hosts refuse to do (core's `Timezone.local` needs
+  `/etc/localtime` and `/usr/share/zoneinfo`, which it links into, both
+  preopened).
   `Sys.chdir` and `Sys.getcwd` use a current directory kept by the
   program, `/` at first.
 - **Waiting**: `Unix.sleep` and `Unix.select` wait for the host instead of
   spinning. `Sys.time` is the CPU time of the process, or the time since it
   started when the host has no CPU clock.
 - **`Unix.dup` and `dup2`** of a file the program opened open it again at
-  the same position, giving a copy with its own position: enough for a C
-  library doing `fdopen(dup(fd))`, or to redirect `stdout` to a file. The
+  the same position, giving a copy with its own position. That is enough
+  for a C library doing `fdopen(dup(fd))`, or to redirect `stdout` to a
+  file. The
   standard streams cannot be duplicated.
 - **Pipes** (`Unix.pipe`) are buffers in memory, between descriptors of
-  the program: enough for the wake-up pipes of Async and lwt. Reading an
+  the program, enough for the wake-up pipes of Async and lwt. Reading an
   empty pipe fails with `EAGAIN` rather than block, as nothing else can
-  fill it, unless the program has threads (`--threads`): it then waits
-  for another thread to write. Each end takes a descriptor from the host,
+  fill it. With threads (`--threads`), it waits for another thread to
+  write. Each end takes a descriptor from the host,
   so a pipe needs a preopened directory (`--dir`).
 - **lwt** (`Lwt_unix`, `Lwt_io`), core and async.
 
-**Sockets.** WASI preview 1 has no call creating a socket:
+**Sockets.** WASI preview 1 has no call creating a socket.
 
 - `--wasix` (or `wasix: yes` in `ocaml-emcc.conf`, for `--wasi`) uses
   WASIX's, wasmer's extension of preview 1: `Unix.socket`, `connect`,
@@ -430,24 +432,25 @@ exceptions from C with `longjmp`, which uses them.
   of a listening socket cannot be read.
 - Without `--wasix`, a program can only accept connections on the sockets
   its host preopens, the descriptors after the standard streams
-  (`(Obj.magic 3 : Unix.file_descr)`), with no addresses nor options:
-  wasmtime 46 does it (`-S preview2=n -S tcplisten=127.0.0.1:8080`), 47
-  removed it.
+  (`(Obj.magic 3 : Unix.file_descr)`), with no addresses nor options.
+  wasmtime 46 preopens them (`-S preview2=n -S tcplisten=127.0.0.1:8080`),
+  47 removed it.
 - WASI preview 2's sockets need a component, which emscripten does not
   produce.
 
-**What does not work:**
+**What does not work.**
 
-- processes and `Sys.command` fail with `ENOSYS`;
-- there are no users: everything is owned by root, and `chmod` and
-  `chown` do nothing;
-- file locks (`fcntl`, `lockf`) always succeed, as there is a single
-  process;
-- `Unix.localtime` is UTC;
+- Processes and `Sys.command` fail with `ENOSYS`.
+- There are no users. Everything is owned by root, and `chmod` and
+  `chown` do nothing.
+- File locks (`fcntl`, `lockf`) always succeed, as there is a single
+  process.
+- `Unix.localtime` is UTC.
 - C libraries that call functions emscripten implements in JavaScript
-  (SDL, the `dlsym` of ctypes-foreign) keep importing them. `link` lists the imports that are not WASI, and
-  such a module only runs where they are defined
-  (`wasmtime -W unknown-imports-trap=y` runs it until one is called).
+  (SDL, the `dlsym` of ctypes-foreign) keep importing them. `link` lists
+  the imports that are not WASI, and such a module only runs where they
+  are defined (`wasmtime -W unknown-imports-trap=y` runs it until one is
+  called).
 
 ## JavaScript
 
@@ -456,7 +459,7 @@ exceptions from C with `longjmp`, which uses them.
 Programs using [js_of_ocaml](https://ocsigen.org/js_of_ocaml)'s library
 (`Js`, `Dom_html`, `Js.Unsafe`, its ppx's `o##m x`, `object%js`...), and
 libraries built on it (js_of_ocaml-lwt, [Brr](https://erratique.ch/software/brr)), build
-as is, interpreted or compiled, on both targets: ocaml-emcc implements
+as is, interpreted or compiled, on both targets. ocaml-emcc implements
 its primitives (`share/runtime/jsoo.c`, on top of the emscripten library
 `jsoo.js`) instead of linking their stubs, which only abort outside
 JavaScript.
@@ -472,14 +475,15 @@ let () =
   Js.export "add" (Js.wrap_callback (fun a b -> a + b))   (* add(1, 2) in the page *)
 ```
 
-JavaScript values follow the conventions of wasm_of_ocaml: in a table on
-the JavaScript side, a custom block on the OCaml side, released by the GC.
-So code written for wasm_of_ocaml works unchanged:
+JavaScript values follow the conventions of wasm_of_ocaml, in a table on
+the JavaScript side and a custom block on the OCaml side, released by the
+GC. Code written for wasm_of_ocaml works unchanged.
 
 - A JavaScript number that is an integer (31 bits on wasm32, 53 on wasm64)
   is an OCaml `int`, and an `int` given to JavaScript is a number. Other
-  numbers are JavaScript values: use `Js.float_of_number`/`Js.number_of_float`
-  (an OCaml float given to JavaScript is a number too).
+  numbers are JavaScript values, converted with `Js.float_of_number` and
+  `Js.number_of_float` (an OCaml float given to JavaScript is a number
+  too).
 - Strings are converted (`Js.string`, `Js.to_string`), in UTF-8.
 - Any other OCaml value given to JavaScript is an opaque object, and comes
   back as the same OCaml value.
@@ -499,16 +503,16 @@ So code written for wasm_of_ocaml works unchanged:
   `Sys_js.mount` gives the files under a path on demand, in emscripten's
   file system (`create_file` and `read_file` use it too).
 
-The differences with js_of_ocaml:
+**Differences with js_of_ocaml.**
 
-- Each call goes from wasm to JavaScript and back: 0.1 to 0.5 µs.
+- Each call goes from wasm to JavaScript and back, 0.1 to 0.5 µs.
 - `==` between two JavaScript values is physical equality of the OCaml
-  blocks, false for two handles on the same object: use `Js.equals` or
-  `Js.strict_equals` (as `Js.Opt` does).
-- Typed arrays and bigarrays (`Typed_array`) are copied, not shared: the
-  wasm memory can move when it grows.
+  blocks, false for two handles on the same object. `Js.equals` and
+  `Js.strict_equals` compare the objects (as `Js.Opt` does).
+- Typed arrays and bigarrays (`Typed_array`) are copied, not shared, as
+  the wasm memory can move when it grows.
 - An exception raised by the function of a `Sys_js` channel or mount point
-  does not reach the program: the function is called from a system call,
+  does not reach the program. The function is called from a system call,
   which fails (`Sys_error`), and the exception is printed on the console.
   `Sys_js.mount_point` only lists the paths mounted by the program.
 
@@ -531,28 +535,28 @@ function my_greet(s) { return "hello " + s; }
 external greet : Js.js_string Js.t -> Js.js_string Js.t = "my_greet"
 ```
 
-ocamlc checks that the primitives of an executable exist: link it with
+ocamlc checks that the primitives of an executable exist, so link it with
 `-no-check-prims` (`(link_flags (-no-check-prims))` with dune), as for
 js_of_ocaml. Primitives can also be written in C and linked with `-l`.
 These files use the conventions above, not those of js_of_ocaml's runtime
-(whose strings are not JavaScript strings, among other differences): the
+(whose strings are not JavaScript strings, among other differences). The
 JavaScript files of js_of_ocaml libraries are not linked.
 
 ## wasm32 or wasm64
 
 The bytecode is always the one of your switch, compiled for 64 bits. The
-target is what the runtime and the C code are compiled for:
+target is what the runtime and the C code are compiled for.
 
-- **wasm32** (default): smaller, faster, supported everywhere, but OCaml
-  ints are 31 bits at run time (see below).
-- **wasm64** (`--target wasm64`): memory64, exactly the semantics of the
-  native 64-bit program. Needs node 24 or later (the one shipped with emsdk
+- **wasm32** (default) is smaller, faster and supported everywhere, but
+  OCaml ints are 31 bits at run time (see below).
+- **wasm64** (`--target wasm64`) has memory64 and exactly the semantics of
+  the native 64-bit program. Needs node 24 or later (the one shipped with emsdk
   works), Chrome 133 or Firefox 134, and has no WASI.
 
 On wasm32, as with a 32-bit OCaml:
 
 - Integer literals beyond 31 bits (`0x40000000`, `123456789012`) are
-  wrapped when the program starts: `0x40000000` becomes `min_int`. This is
+  wrapped when the program starts (`0x40000000` becomes `min_int`). This is
   right for code that picks 32-bit variants with `Sys.word_size` (optint,
   used by checkseum and decompress), wrong otherwise. `build`, `link` and
   `doctor` **warn** when there are any (the check is exact). Marshalled
@@ -560,32 +564,33 @@ On wasm32, as with a 32-bit OCaml:
   (`input_value: integer too large`).
 - Arithmetic beyond 31 bits wraps silently (`1 lsl 40` is 256).
 
-Packages that require 63-bit ints (`assert (Sys.int_size >= 62)` in matrix,
-hence k7 and kaun-board; binsec's marshalled data; janestreet_cpuid's
-flags) need wasm64: matrix, k7, kaun-board and binsec run there. Some are
-patched to run on wasm32 too: frama-c (unionFind's identifiers; with
-`--node-fs`, for its share directory; c_of_ocaml peaks at about 2 GB on
-it) and rocq-runtime (rebuilt with its 31-bit integers and floats, which it
-picks with `%{ocaml-config:int_size}`: the wasm32 toolchain says 31).
+Packages that require 63-bit ints need wasm64, where matrix (its
+`assert (Sys.int_size >= 62)`, hence k7 and kaun-board), binsec (its
+marshalled data) and janestreet_cpuid (its flags) run. Two are patched to
+run on wasm32 too. frama-c uses unionFind's identifiers patched for 31
+bits, and `--node-fs` for its share directory (c_of_ocaml peaks at about
+2 GB on it). rocq-runtime is rebuilt with its 31-bit integers and floats,
+which it picks with `%{ocaml-config:int_size}`, 31 in the wasm32
+toolchain.
 
 Jane Street's libraries choose some of their code with the configuration
 of jst-config, computed on the 64-bit host. On wasm32, `build` and `link`
 rebuild jst-config and those of the program's libraries that read its
 configuration, or were compiled against one whose interface differs
 (core, and with it the async stack), for the target, as for ctypes (see
-[internals](docs/internals.md#jane-streets-configuration)): the first
+[internals](docs/internals.md#jane-streets-configuration)). The first
 build of an async program takes some tens of minutes. core and async then
 run on wasm32, interpreted or compiled, in node and with `--wasi`. Without
-threads, the jobs of Async's thread pool (`In_thread.run`: file I/O...)
+threads, the jobs of Async's thread pool (`In_thread.run`, file I/O...)
 run synchronously.
 
 ## Plugins
 
-A program can load plugins while it runs: parts of it compiled
-apart, which a web page fetches only when they are needed. The program
-uses the library `ocaml-emcc.dynlink` (module `Emcc_dynlink`), and its
-bytecode is linked with `-linkall` (`(link_flags (-linkall))`), since a
-plugin may use any module of it (`tests/dynlink`, `tests/dynweb`):
+A program can load plugins while it runs, parts of it compiled apart
+that a web page fetches only when they are needed. The program uses the
+library `ocaml-emcc.dynlink` (module `Emcc_dynlink`), and its bytecode is
+linked with `-linkall` (`(link_flags (-linkall))`), since a plugin may use
+any module of it (`tests/dynlink`, `tests/dynweb`).
 
 ```ocaml
 (* in the program *)
@@ -614,15 +619,15 @@ below.)
   interface of a loaded module, as `Dynlink` does. A plugin can use the
   modules of the plugins loaded before it.
 - `--dynlink` links the program as an emscripten main module. It exports
-  the C symbols plugins import: the runtime, and the stubs and C
-  libraries the program links. Its compilation units are kept whole and
-  registered by name. This makes the program bigger: 1.2 MB for
-  `tests/dynlink`, with the whole standard library.
+  the C symbols plugins import (the runtime, and the stubs and C
+  libraries the program links). Its compilation units are kept whole and
+  registered by name, which makes the program bigger (1.2 MB for
+  `tests/dynlink`, with the whole standard library).
 
-Limitations:
+**Limitations.**
 
 - A plugin links the C libraries its `.cma` names (its stubs, built for
-  the target when missing); the others it calls must be in the program
+  the target when missing). The others it calls must be in the program
   (`plugin --main` checks it).
 - Plugins cannot be unloaded.
 - Effect handlers (OCaml 5) are disabled by default in a program with
@@ -630,7 +635,7 @@ Limitations:
   (`tests/dyneffects`), and a plugin built with `--main` follows the
   program. An effect can then be performed by a plugin under a handler of
   the program, and the other way round. The choice is made when the
-  program is built: its plugins may perform effects through any of its
+  program is built, as its plugins may perform effects through any of its
   functions (`List.iter`...), which must then have their CPS version,
   and the program's own code cannot tell, since `-linkall` keeps
   `Stdlib.Effect` (and every other module) whole. That doubles the size of
@@ -639,7 +644,7 @@ Limitations:
 - Compiled mode only (not `--interpreted`).
 - A program linked with asyncify (`-sASYNCIFY`, as raylib's) loads
   plugins, but must not suspend while the code of a plugin is on the
-  stack: asyncify only instruments the program. JSPI (`--jspi`) has no
+  stack, as asyncify only instruments the program. JSPI (`--jspi`) has no
   such limit.
 
 ## Threads
@@ -652,8 +657,8 @@ wasmtime run -W exceptions=y,threads=y,shared-memory=y -S threads=y --dir . main
 ```
 
 With `--threads` (or `threads: yes` in `ocaml-emcc.conf`), `Thread.create`
-starts a real thread, and so does `Domain.spawn` with OCaml 5.3 or later:
-domains run in parallel. `Mutex`, `Condition`, `Event`, `Atomic` and
+starts a real thread, and so does `Domain.spawn` with OCaml 5.3 or later
+(domains run in parallel). `Mutex`, `Condition`, `Event`, `Atomic` and
 `Domain.DLS` work as natively, compiled (the generated code polls in its
 loops and before its tail calls, so that a thread computing lets the
 others run) or interpreted.
@@ -669,10 +674,10 @@ others run) or interpreted.
 The C code is compiled for threads either way (`-pthread`), with no
 measurable cost.
 
-**node and browsers**: threads are web workers sharing the memory of the
+**node and browsers.** Threads are web workers sharing the memory of the
 program (emscripten's pthreads).
 
-- The program's main thread is a worker too (`-sPROXY_TO_PTHREAD`): the
+- The program's main thread is a worker too (`-sPROXY_TO_PTHREAD`), so the
   JavaScript thread stays free to run what the others ask it (emscripten's
   file system is there) and to start their workers.
 - In a browser, the page must be cross-origin isolated, served with the
@@ -680,27 +685,28 @@ program (emscripten's pthreads).
   `Cross-Origin-Embedder-Policy: require-corp` (SharedArrayBuffer).
 - Programs using js_of_ocaml's primitives keep their main thread on the
   page's, for the DOM. Their workers are started before the program, 8 of
-  them (OCaml's tick thread included; `-sPTHREAD_POOL_SIZE=N` sets it),
+  them (OCaml's tick thread included, `-sPTHREAD_POOL_SIZE=N` sets it),
   since a browser only starts a new one once that thread is back in its
-  event loop: a program waiting for more threads than that at once blocks
+  event loop. A program waiting for more threads than that at once blocks
   forever. That thread waits by spinning, and runs the other threads' file
   operations only when it waits.
 - Compiled, under node, every thread gets the large stack of the main one
   (`$OCAML_EMCC_STACK_MB`).
 
-**WASI**: threads use wasi-threads (`thread-spawn`), the ABI of wasi-libc's
-`wasm32-wasip1-threads`. wasmer (7.5; `--volume DIR:/DIR` for files) and
-wasmtime up to 46 (`-S threads=y`; 47 removed it) run them. The module
+**WASI.** Threads use wasi-threads (`thread-spawn`), the ABI of wasi-libc's
+`wasm32-wasip1-threads`. wasmer (7.5, `--volume DIR:/DIR` for files) and
+wasmtime up to 46 (`-S threads=y`, 47 removed it) run them. The module
 imports its memory, shared. `Domain.recommended_domain_count` is
 `$OCAML_EMCC_CPUS`, or 4.
 
-The runtime reserves the minor heaps of the possible domains at startup:
-8 by default (32 MB on wasm32, 16 MB on wasm64), `OCAMLRUNPARAM=d=N` sets
-it.
+The runtime reserves the minor heaps of the possible domains at startup,
+8 by default (32 MB on wasm32, 16 MB on wasm64). `OCAMLRUNPARAM=d=N` sets
+the number.
 
 ## Differences from native
 
-Besides 31-bit integers on wasm32:
+Besides 31-bit integers on wasm32 (see [wasm32 or
+wasm64](#wasm32-or-wasm64)):
 
 - **Threads** need `--threads` (see [Threads](#threads)).
 - **ctypes structs**: ctypes and the packages using it are rebuilt for the
@@ -713,19 +719,19 @@ Besides 31-bit integers on wasm32:
   the program, not names computed at run time. `dlopen` accepts any file
   name, since everything is linked in.
 - **Missing primitives.** A primitive that no linked library defines (a
-  stub written for one OS only: Linux's epoll, Windows...) becomes a stub
-  raising `Failure "NAME not implemented"` when called, as with
-  js_of_ocaml: `link` warns, and a program that never calls it runs.
+  stub written for one OS only, such as Linux's epoll or Windows') becomes
+  a stub raising `Failure "NAME not implemented"` when called, as with
+  js_of_ocaml. `link` warns, and a program that never calls it runs.
   `--no-missing-primitives` makes it a link error instead.
 - **C type mismatches.** A C function declared by a stub with other types
   than its definition (`int` for `long`) becomes a trap on wasm64. `link`
   warns about each one.
 - **Files**: outside `--node-fs`, the program has emscripten's file system
   in memory, with `/etc/localtime`, the local time zone's file (also under
-  its name in `/usr/share/zoneinfo`): under node the host's (and that of
-  `$TZ`), in browsers one made from the browser's time zone, exact from
-  1970 to 2037.
-- **Floating-point rounding modes** do not exist in wasm: only
+  its name in `/usr/share/zoneinfo`). Under node it is the host's (and
+  that of `$TZ`). In browsers, it is made from the browser's time zone,
+  exact from 1970 to 2037.
+- **Floating-point rounding modes** do not exist in wasm. Only
   round-to-nearest is available, so code that switches to directed rounding
   (`fesetround`) loses that guarantee.
 
@@ -734,16 +740,16 @@ Besides 31-bit integers on wasm32:
 ### What is built automatically
 
 Most programs need no configuration. `build` and `link` find the C a
-program needs from its bytecode and its opam packages:
+program needs from its bytecode and its opam packages.
 
-- **Stub libraries of opam packages** are
-  rebuilt with emcc from the package that installed them: with the builtin
-  recipe of that package if there is one, else with the package's own dune
-  rules, else from the C files of its native build. Those built with dune
+- **Stub libraries of opam packages** are rebuilt with emcc from the
+  package that installed them, with the builtin recipe of that package if
+  there is one, else with the package's own dune rules, else from the C
+  files of its native build. Those built with dune
   or from the native build are built again when the package changes
   version, and when ocaml-emcc's toolchain wrappers change.
-- **System C libraries**: when a package depends on `conf-gmp`,
-  `conf-zlib`..., the recipe of the same name is built and linked. So is
+- **System C libraries**: a package depending on `conf-gmp`,
+  `conf-zlib`... gets the recipe of the same name built and linked. So is
   any recipe providing a `libX.a` for a `-lX` that the package's `.cma`
   files record.
 - **`c_library_flags`**: the `-lX` that libraries record for their stubs
@@ -767,8 +773,9 @@ program needs from its bytecode and its opam packages:
 - **ctypes**: bindings using stub generation (`Cstubs`, dune's `(ctypes)`
   stanza) and ctypes-foreign work on both targets.
 
-A recipe is built once per switch and target, and is not rebuilt when it changes
-(ocaml-emcc says so): `ocaml-emcc install --force NAME` rebuilds it.
+A recipe is built once per switch and target, and is not rebuilt when it
+changes (ocaml-emcc says so). `ocaml-emcc install --force NAME` rebuilds
+it.
 
 ### Builtin recipes
 
@@ -788,60 +795,60 @@ A recipe is built once per switch and target, and is not rebuilt when it changes
 | `fftw3` | fftw3 | double and single precision, no threads or SIMD |
 | `glpk` | glpk | |
 | `libargon2` | argon2 | reference implementation, no threads |
-| `liblmdb` | lmdb | `MDB_NOLOCK \| MDB_WRITEMAP`: emscripten has no process-shared mutexes, and its file mappings are copies |
-| `sdl2` | tsdl | emscripten's port (`-sUSE_SDL=2`); under node, only the timer and events subsystems |
-| `glfw3` | glfw-ocaml | emscripten's (`-sUSE_GLFW=3`), WebGL 2; no gamepads; a window needs a web page |
+| `liblmdb` | lmdb | `MDB_NOLOCK \| MDB_WRITEMAP`, as emscripten has no process-shared mutexes and its file mappings are copies |
+| `sdl2` | tsdl | emscripten's port (`-sUSE_SDL=2`), only the timer and events subsystems under node |
+| `glfw3` | glfw-ocaml | emscripten's (`-sUSE_GLFW=3`), WebGL 2, no gamepads, a window needs a web page |
 | `libev` | lwt (when the host's uses it) | poll backend |
-| `libssl` | ssl | OpenSSL: generic C |
-| `ffmpeg` | ffmpeg-avutil, ffmpeg-avcodec... | its own codecs, formats and filters; generic C, no threads, networking or external libraries |
-| `cairo` (`pixman`, `libpng`, `freetype`, `libfontconfig`) | cairo2 | image, PDF, PostScript, SVG and script surfaces, FreeType fonts; fontconfig finds the host's fonts under node; no X11; pixman without SIMD; built with meson (and gperf) |
+| `libssl` | ssl | OpenSSL in generic C |
+| `ffmpeg` | ffmpeg-avutil, ffmpeg-avcodec... | its own codecs, formats and filters, in generic C, without threads, networking or external libraries |
+| `cairo` (`pixman`, `libpng`, `freetype`, `libfontconfig`) | cairo2 | image, PDF, PostScript, SVG and script surfaces, FreeType fonts (fontconfig finds the host's fonts under node), no X11, pixman without SIMD, built with meson (and gperf) |
 | `oniguruma` | oniguruma | |
-| `secp256k1` | secp256k1 | recovery, ECDH, extrakeys, schnorrsig, ellswift and musig modules; the host's minor version |
+| `secp256k1` | secp256k1 | recovery, ECDH, extrakeys, schnorrsig, ellswift and musig modules, the host's minor version |
 | `libogg`, `libopus` | ogg, opus | opus without intrinsics |
 | `mad` | mad | 64-bit fixed point, no assembly |
 | `faad` | faad | |
 | `shine` | shine | |
-| `ncurses` | curses | wide-character libraries; reads the host's terminfo under node; needs more than 64 KB of stack |
-| `libjpeg`, `gd` | gd | libjpeg-turbo without SIMD; libgd with PNG, JPEG and FreeType |
+| `ncurses` | curses | wide-character libraries, the host's terminfo under node, more than 64 KB of stack needed |
+| `libjpeg`, `gd` | gd | libjpeg-turbo without SIMD, libgd with PNG, JPEG and FreeType |
 | `liblo` | lo | Open Sound Control (its server thread needs `--threads`) |
-| `openblas` | lacaml, nx, owl... (`-lblas`, `-llapack` too) | BLAS, CBLAS, LAPACK and LAPACKE in C (no Fortran), generic kernels, no threads; its subroutines' C signatures made to agree (wasm traps on a mismatch); 30 to 40 minutes to build on one core |
+| `openblas` | lacaml, nx, owl... (`-lblas`, `-llapack` too) | BLAS, CBLAS, LAPACK and LAPACKE in C (no Fortran), generic kernels, no threads, its subroutines' C signatures made to agree (wasm traps on a mismatch), 30 to 40 minutes to build on one core |
 | `lame` | lame | libmp3lame, no assembly |
 | `libevent` | libevent | poll and select backends, no OpenSSL |
 | `liblzo2` | lzo | |
 | `nlopt` | nlopt | its C algorithms (not StoGO or AGS, in C++) |
-| `frei0r` | frei0r | its header only: no plugins |
+| `frei0r` | frei0r | its header only, no plugins |
 | `gdbm` | dbm | GNU dbm, without readline or NLS |
-| `zmq` | zmq | libzmq, C++; poll, no CURVE (libsodium) or draft API |
+| `zmq` | zmq | libzmq in C++, with poll, without CURVE (libsodium) or the draft API |
 | `readline` | readline | GNU readline and history, with ncurses |
-| `libcurl` | curl | with OpenSSL and zlib; no HTTP/2, HTTP/3, IDN, PSL, brotli, zstd, LDAP or SSH; the blocking resolver |
+| `libcurl` | curl | with OpenSSL, zlib and the blocking resolver, without HTTP/2, HTTP/3, IDN, PSL, brotli, zstd, LDAP or SSH |
 | `clang` | programs embedding clang's frontend | see [docs/recipes.md](docs/recipes.md#the-clang-recipe) |
 
-These recipes take the sources of the opam package
-that vendors the library if the switch has it, else
-the newest upstream release compatible with the host's library (see
-[system recipes](docs/recipes.md#system-recipes)).
+These recipes take the sources of the opam package that vendors the
+library if the switch has it, else the newest upstream release compatible
+with the host's library (see [system
+recipes](docs/recipes.md#system-recipes)).
 
-OCaml packages, built from the sources of the installed package:
-`zarith`, `camlidl`, `mlgmpidl`, `apron` (every domain and numeric
+Recipes of OCaml packages, built from the sources of the installed package,
+cover `zarith`, `camlidl`, `mlgmpidl`, `apron` (every domain and numeric
 variant), `mlcuddidl` (its bundled CUDD, and the stubs camlidl generates),
-`hacl-star-raw` (portable C only: the vectorized and Vale variants trap if
-called), and packages whose sources need a change for wasm, described in
-their `share/recipes/<name>/` directory: `mirage-crypto` (and `-ec`,
-`-rng`), `lwt`, `cryptokit`, `secp256k1-internal`, `lmdb`, `mccs`,
-`core_unix`, `async_unix`, `async_ssl`, `eio_posix`, `num`, `rowex`,
-`mirage-block-unix`, `shared-memory-ring`, `ocaml_intrinsics`,
-`unix-errno`, `tuntap`, `eigen`, `bls12-381`, `bls12-381-signature`,
-`janestreet_cpuid`, `shell`, `rocq-runtime`, `hdr_histogram`, `codex`,
-`unionFind`, `miou`, `osdp`, `bls12-381-unix`, `lacaml`, `setcore`, `cpu`,
-`memcpy`, `scrypt`, `poll`, `bytesrw`, `class_group_vdf`, `ocaml-lua` and
-`raylib` (see [raylib in a browser](#raylib-in-a-browser)).
+`hacl-star-raw` (portable C only, the vectorized and Vale variants trap if
+called), and, with sources changed for wasm (see their
+`share/recipes/<name>/` directory), `mirage-crypto` (and `-ec`, `-rng`),
+`lwt`, `cryptokit`, `secp256k1-internal`, `lmdb`, `mccs`, `core_unix`,
+`async_unix`, `async_ssl`, `eio_posix`, `num`, `rowex`, `mirage-block-unix`,
+`shared-memory-ring`, `ocaml_intrinsics`, `unix-errno`, `tuntap`, `eigen`,
+`bls12-381`, `bls12-381-signature`, `janestreet_cpuid`, `shell`,
+`rocq-runtime`, `hdr_histogram`, `codex`, `unionFind`, `miou`, `osdp`,
+`bls12-381-unix`, `lacaml`, `setcore`, `cpu`, `memcpy`, `scrypt`, `poll`,
+`bytesrw`, `class_group_vdf`, `ocaml-lua` and `raylib` (see [raylib in a
+browser](#raylib-in-a-browser)).
 
 ### Project recipes
 
 A project recipe lives in `emcc-recipes/<name>/recipe.sh` next to
 `dune-project`, is listed in `requires:` and linked with `link-flags:` in
 [`ocaml-emcc.conf`](#configuration). This one clones cJSON
-(`tests/gitrecipe`):
+(`tests/gitrecipe`).
 
 ```sh
 # emcc-recipes/cjson/recipe.sh
@@ -860,10 +867,11 @@ Project recipes take precedence over the builtin ones (`share/recipes/`).
 More directories can be added with `--recipes DIR` or
 `$OCAML_EMCC_RECIPES_PATH`.
 
-A project recipe can also **refine** a builtin one: `include_recipe NAME`
+A project recipe can also **refine** a builtin one. `include_recipe NAME`
 reads the next recipe of that name, after the project's variables are set,
 and an optional `pre_build` function runs before its `build`, to patch the
-sources. [MOPSA](https://github.com/rboudrouss/mopsa-emcc/tree/ocaml-emcc) pins clang 9 and patches apron this way:
+sources. [MOPSA](https://github.com/rboudrouss/mopsa-emcc/tree/ocaml-emcc)
+pins clang 9 and patches apron this way.
 
 ```sh
 # emcc-recipes/clang/recipe.sh
@@ -881,8 +889,8 @@ recipes can use, and how their patches are applied are described in
 
 ## Without dune
 
-`build` chains the following commands, which can also be run on their own
-from scripts and Makefiles:
+`build` chains these commands, which scripts and Makefiles can also run on
+their own.
 
 ```sh
 ocaml-emcc setup                         # wasm runtime of the switch (once per target)
@@ -912,15 +920,15 @@ prog.bc: prog.ml      # -no-check-prims: our primitives only exist in libstub.a
 ```
 
 A bytecode that uses ctypes should be compiled against the packages
-rebuilt for the target (`link` warns otherwise):
+rebuilt for the target, with
 `OCAMLFIND_CONF=<sysroot>/findlib.conf ocamlfind -toolchain wasm32 ocamlc ...`
-(or `-toolchain wasm64`).
+(or `-toolchain wasm64`). `link` warns otherwise.
 
 ## How it works
 
 The bytecode is compiled by the switch's own `ocamlc`, then to C by
 c_of_ocaml, and emcc compiles that C with the runtime that it builds from
-the sources of the switch's compiler (interpreted: the bytecode runs on
+the sources of the switch's compiler (interpreted, the bytecode runs on
 the `ocamlrun` of that runtime). The C stubs of the program and of its
 dependencies are rebuilt with emcc and linked with them into one module.
 [docs/internals.md](docs/internals.md) details each step, standalone and
@@ -943,34 +951,35 @@ to 5.5, and its WASI part with wasmtime 50.
 
 `tests/versions.sh` installs each version of a package in turn (opam takes
 its dependents along), runs the tests about it, and puts the packages of
-the switch back. On wasm32, OCaml 4.14.2:
+the switch back. These results are on wasm32, with OCaml 4.14.2.
 
 | tests | package | versions that pass | others |
 |-------|---------|--------------------|--------|
 | `zarith` | zarith | 1.11, 1.12, 1.13, 1.14 | |
 | `mixed` | digestif | 1.1.2, 1.3.0, 1.4.1 | |
 | `sqlite` | sqlite3 | 5.0.3, 5.2.0, 5.4.2 | |
-| `zstd` | zstd | 0.4 | 0.3: the test uses later functions |
-| `gsl` | gsl | 1.24.3, 1.25.1 | 1.22.0: not installable on OCaml 4.14 |
+| `zstd` | zstd | 0.4 | 0.3 (the test uses later functions) |
+| `gsl` | gsl | 1.24.3, 1.25.1 | 1.22.0 (not installable on OCaml 4.14) |
 | `camlzip` | camlzip | 1.11, 1.13, 1.14 | |
-| `ctypes`, `cstanza` | ctypes, ctypes-foreign | 0.21.1, 0.22.0, 0.23.0, 0.24.0 | 0.20.2, built by make, cannot be rebuilt for wasm32: its layouts are the host's (`link` warns) |
+| `ctypes`, `cstanza` | ctypes, ctypes-foreign | 0.21.1, 0.22.0, 0.23.0, 0.24.0 | 0.20.2, built by make, cannot be rebuilt for wasm32, so its layouts are the host's (`link` warns) |
 | `yaml` | yaml | 3.0.1, 3.1.0, 3.2.0 | |
-| `mcrypto` | mirage-crypto | 2.4.1 | 2.0.2, 2.2.0: the test uses later functions |
+| `mcrypto` | mirage-crypto | 2.4.1 | 2.0.2, 2.2.0 (the test uses later functions) |
 | `lwt` | lwt | 5.6.1, 5.9.2, 6.1.2 | |
-| `cryptokit` | cryptokit | 1.21.1 | 1.20: the test uses later functions |
+| `cryptokit` | cryptokit | 1.21.1 | 1.20 (the test uses later functions) |
 | `secp` | secp256k1-internal | 0.3.1, 0.4.0 | |
-| `apron` | apron | v0.9.14, v0.9.15 | v0.9.13: does not build natively (GCC 14) |
-| `extunix` | extunix | 0.4.4 | 0.3.2, 0.4.1: `splice.c` returns a `value *` as an `off_t *`, an error on 32-bit targets |
+| `apron` | apron | v0.9.14, v0.9.15 | v0.9.13 (does not build natively with GCC 14) |
+| `extunix` | extunix | 0.4.4 | 0.3.2, 0.4.1 (`splice.c` returns a `value *` as an `off_t *`, an error on 32-bit targets) |
 | `stb` | stb_image | 0.4, 0.5 | |
 | `minisat` | minisat | 0.4, 0.6 | |
-| `cudd` | mlcuddidl | 3.0.8 | 3.0.6, 3.0.7: do not build natively (GCC 14) |
-| `hacl` | hacl-star | 0.7.2 | 0.5.0, 0.6.2: the test uses later modules (`K256`) |
-| `posix` | posix-time2, -socket, -stat | 4.0.2 | 2.2.0, 3.0.0: no posix-stat |
+| `cudd` | mlcuddidl | 3.0.8 | 3.0.6, 3.0.7 (do not build natively with GCC 14) |
+| `hacl` | hacl-star | 0.7.2 | 0.5.0, 0.6.2 (the test uses later modules, `K256`) |
+| `posix` | posix-time2, -socket, -stat | 4.0.2 | 2.2.0, 3.0.0 (no posix-stat) |
 | `mccs` | mccs | 1.1+13, 1.1+17, 1.1+19 | |
 | `raylib` | raylib | 2.2.2, 2.3.0, master (bd831de) | |
 
-The recipes' patches (placed by their text, see [patches](docs/recipes.md#patches)) were
-also checked to apply, as GNU patch applied the previous ones, to the
+The recipes' patches (placed by their text, see
+[patches](docs/recipes.md#patches)) were also checked to apply, as GNU
+patch applied the previous ones, to the
 sources of every OCaml version from 4.08 to 5.5 and of lwt 5.4 to 6.1,
 mirage-crypto 0.11 to 2.4, cryptokit 1.16 to 1.21, secp256k1-internal 0.3
 and 0.4, lmdb 1.1, dune 3.12 to 3.24 and mccs 1.1+13 to 1.1+19.
@@ -982,7 +991,7 @@ and 0.4, lmdb 1.1, dune 3.12 to 3.24 and mccs 1.1+13 to 1.1+19.
   the switch's dune can build it.
 - More recipes: ppl (C++, apron's `ppl` and `polkaGrid` domains), flint,
   libtidy, and newer LLVM versions for `clang`.
-- WASI: a `dlsym` that needs no JavaScript (a table of the exported
+- A WASI `dlsym` that needs no JavaScript (a table of the exported
   functions generated by `link`), though ctypes-foreign would still need a
   libffi without JavaScript. WASI preview 2 (components, its sockets) is
   not targeted.
@@ -992,7 +1001,7 @@ and 0.4, lmdb 1.1, dune 3.12 to 3.24 and mccs 1.1+13 to 1.1+19.
 ocaml-emcc is distributed under the MIT license (`LICENSE`), except
 `share/runtime/jsoo.js`, the JavaScript side of js_of_ocaml's primitives,
 parts of which are adapted from js_of_ocaml's runtime. It is distributed
-under js_of_ocaml's license: the GNU LGPL version 2.1 or later, with a
+under js_of_ocaml's license, the GNU LGPL version 2.1 or later, with a
 linking exception (`share/runtime/jsoo.js.LICENSE`). The exception lets a
 program linked with it be distributed under any terms.
 
