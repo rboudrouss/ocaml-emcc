@@ -31,6 +31,10 @@
   `$EM_CACHE` when it is set.
 - The stubs of packages whose dune package is named otherwise
   (ocaml-systemd: `-p systemd`) are built.
+- The OCaml libraries rebuilt for the target are built again once dune is
+  downgraded: an older dune cannot read the newer one's `dune-package`
+  files ("Version 3.24 of the dune language is not supported": re2,
+  async, shell...).
 
 ## 0.5.1
 

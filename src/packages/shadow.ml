@@ -79,6 +79,19 @@ let patches_ocaml pkg =
 let patch_tag pkg =
   "patch=" ^ match patches pkg with [] -> "" | l -> Recipe.checksum (String.concat "" (List.map Compat.read_file l))
 
+(* "dune=<version>" of the dune building it, in the stamp.  Its
+   dune-package files say (lang dune <its version>), which an older dune
+   cannot read: once dune downgraded (3.24 to 3.23, by a package's
+   constraint), they are built again. *)
+let dune_tag () = "dune=" ^ Option.value (Switch.version "dune") ~default:""
+
+let dune_readable fields =
+  match List.find_opt (Str_util.starts_with ~prefix:"dune=") fields with
+  | None -> true
+  | Some f ->
+      let built = String.sub f 5 (String.length f - 5) and current = Option.value (Switch.version "dune") ~default:"" in
+      Source.compare_versions built current <= 0
+
 let findlib d = Env.sysroot_file (Filename.concat "lib/findlib" d)
 let dirs_file pkg = Stubs.meta ("shadow-" ^ pkg ^ ".dirs")
 
@@ -110,7 +123,7 @@ let build ?(force = false) ?(needed = fun () -> true) ?(direct = true) pkg =
   let name = "shadow-" ^ pkg in
   let built =
     match Stamp.read name with
-    | Some f -> Stamp.version f = ver && Stamp.current_toolchain f && List.mem (patch_tag pkg) f
+    | Some f -> Stamp.version f = ver && Stamp.current_toolchain f && List.mem (patch_tag pkg) f && dune_readable f
     | None -> false
   in
   if force || not built then (
@@ -175,4 +188,4 @@ let build ?(force = false) ?(needed = fun () -> true) ?(direct = true) pkg =
           ignore (Env.run ~out:Unix.stderr "tail" [ "-n"; "30"; log_file ]);
           log "%s: could not be built for %s (log: %s)" pkg !Env.target log_file)
         else log "  not built for %s, which it does not need: no structs in its generated types" !Env.target));
-    Stamp.write name [ ver; !status; "emcc-" ^ Lazy.force Toolchain.emcc_version; Stamp.toolchain; patch_tag pkg ])
+    Stamp.write name [ ver; !status; "emcc-" ^ Lazy.force Toolchain.emcc_version; Stamp.toolchain; patch_tag pkg; dune_tag () ])

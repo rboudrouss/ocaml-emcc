@@ -108,6 +108,7 @@ let stamp pkg =
     when Some v = Switch.version pkg
          && Stamp.current_toolchain rest
          && List.mem (Shadow.patch_tag pkg) rest
+         && Shadow.dune_readable rest
          && (List.mem (dep_versions pkg) rest || dep_versions pkg = "deps=") ->
       Some status
   | _ -> None
