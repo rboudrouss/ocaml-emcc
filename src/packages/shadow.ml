@@ -160,13 +160,23 @@ let build ?(force = false) ?(needed = fun () -> true) ?(direct = true) pkg =
         let has_cmi d = Files.first d (fun f -> Filename.check_suffix f ".cmi") <> None in
         (* (jst-config has none, only headers) *)
         let host_has_cmi = List.exists (fun f -> Filename.check_suffix f ".cmi") (Switch.lib_files pkg) in
-        let ok =
+        let built =
           Env.run_logged ~cwd:work ~env log_file dune
             ([ "build"; "--build-dir"; "_build.ocaml-emcc"; "--workspace"; ".ocaml-emcc-workspace" ]
             @ Switch.dune_selection pkg @ [ "@install" ])
           = 0
-          && (has_cmi lib || not host_has_cmi)
         in
+        (* Failed for C alone (re2's vendored C++ library, janestreet_cpuid's
+           x86 stubs): dune builds what it can, here every library of the
+           host's, which is enough, its stubs being built apart (Stubs) *)
+        let ocaml_files =
+          lazy
+            (List.filter (fun f -> Filename.check_suffix f ".cma" || Filename.check_suffix f ".cmi") (Switch.lib_files pkg)
+            |> List.map (fun f -> String.sub f 4 (String.length f - 4)))
+        in
+        let complete () = Lazy.force ocaml_files <> [] && List.for_all (fun f -> Sys.file_exists (Filename.concat lib f)) (Lazy.force ocaml_files) in
+        let ok = (built || complete ()) && (has_cmi lib || not host_has_cmi) in
+        if ok && not built then log "  (its C failed: built apart)";
         if ok then (
           Source.sh "mkdir" [ "-p"; Env.sysroot_file "lib/findlib" ];
           (try List.sort compare (Array.to_list (Sys.readdir lib)) with Sys_error _ -> [])
@@ -184,8 +194,10 @@ let build ?(force = false) ?(needed = fun () -> true) ?(direct = true) pkg =
                    log "  %s" (findlib d)));
           if pkg = "jst-config" then merge_jst_config ();
           status := "ok")
-        else if layouts then (
+        else (
+          (* (needed: it lays C types out, or was compiled against an
+             interface that differs for the target) *)
+          status := "failed";
           ignore (Env.run ~out:Unix.stderr "tail" [ "-n"; "30"; log_file ]);
-          log "%s: could not be built for %s (log: %s)" pkg !Env.target log_file)
-        else log "  not built for %s, which it does not need: no structs in its generated types" !Env.target));
+          log "%s: could not be built for %s (log: %s)" pkg !Env.target log_file)));
     Stamp.write name [ ver; !status; "emcc-" ^ Lazy.force Toolchain.emcc_version; Stamp.toolchain; patch_tag pkg; dune_tag () ])

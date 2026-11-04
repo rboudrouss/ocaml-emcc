@@ -35,6 +35,10 @@
   downgraded: an older dune cannot read the newer one's `dune-package`
   files ("Version 3.24 of the dune language is not supported": re2,
   async, shell...).
+- The OCaml libraries rebuilt for the target whose C alone failed to build
+  (re2's vendored C++ library, janestreet_cpuid's x86 stubs) are kept,
+  their stubs being built apart; a library that needed rebuilding and
+  failed is reported as such, not as one the target does not need.
 
 ## 0.5.1
 
