@@ -15,7 +15,9 @@
   `cc`, `gcc`, `g++`, `c++`, `clang`, `clang++`, `ar` and `ranlib`. They
   were the host's, which refused emcc's flags (qbf, re2, cudd,
   hdr_histogram, cucumber, bls12-381). CMake looks for their libraries in
-  the sysroot first (hdr_histogram's zlib).
+  the sysroot first (hdr_histogram's zlib). In the host context, those
+  compilers drop emscripten's flags, which a build script may take from
+  `CFLAGS` (bls12-381's build_blst.sh).
 - As with gcc, C++ stubs may use `register` (clang refuses it in C++17:
   gbddml), and C functions declared without a prototype are no error with
   `-Werror` (cucumber's gherkin-c).

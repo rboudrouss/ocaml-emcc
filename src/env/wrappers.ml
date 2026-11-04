@@ -5,7 +5,7 @@
 (* Bumped whenever [write] changes: the CLI then regenerates the toolchain
    in existing sysroots (cheap: the runtime is not rebuilt), and the stubs
    built with it are built again (see [Stamp.toolchain]). *)
-let version = "20"
+let version = "21"
 
 (* [template] with each @KEY@ replaced *)
 let subst vars template =
@@ -165,14 +165,24 @@ esac
    build.sh: cc; uring's configure: clang) get emcc and its tools, with the
    flags of the sysroot's C compiler wrappers.  The host's elsewhere, and
    for the tools of the toolchain that need it (OCAML_EMCC_HOST_TOOLS:
-   placeholder-dll's host shared objects). *)
+   placeholder-dll's host shared objects); without emscripten's own flags
+   for a compiler ([host_filter]): the CFLAGS of dune's environment are the
+   target's, and a build script of the host context expands them itself
+   (bls12-381's build_blst.sh). *)
 let host_tool_wrapper =
   {|#!/bin/sh
 [ -n "${OCAML_EMCC_HOST_TOOLS:-}" ] || case $INSIDE_DUNE/:$PWD/ in
   */default.@TARGET@/*) exec '@WRAPPED@' "$@" ;;
 esac
-|}
+@FILTER@|}
   ^ next_in_path
+
+let host_filter =
+  {|for a; do
+  shift
+  case $a in -s[A-Z]*|-fwasm-exceptions) ;; *) set -- "$@" "$a" ;; esac
+done
+|}
 
 (* The node of emscripten's configuration *)
 let emscripten_node () =
@@ -257,7 +267,9 @@ let write () =
   List.iter (fun t -> script (file ("bin/path/" ^ t)) (subst (("TOOL", t) :: vars) llvm_wrapper)) [ "llvm-config"; "clang" ];
   script (file "bin/path/cmake") (subst (("TOOL", "cmake") :: vars) cmake_wrapper);
   List.iter
-    (fun (t, w) -> script (file ("bin/path/" ^ t)) (subst (("TOOL", t) :: ("WRAPPED", w) :: vars) host_tool_wrapper))
+    (fun (t, w) ->
+      let filter = if t = "ar" || t = "ranlib" then "" else host_filter in
+      script (file ("bin/path/" ^ t)) (subst (("TOOL", t) :: ("WRAPPED", w) :: ("FILTER", filter) :: vars) host_tool_wrapper))
     [ ("cc", cc); ("gcc", cc); ("c++", cxx); ("g++", cxx); ("clang++", cxx);
       ("ar", Toolchain.emar ()); ("ranlib", Filename.concat (Filename.dirname emcc) "emranlib") ];
   let prefix = Switch.prefix () in
