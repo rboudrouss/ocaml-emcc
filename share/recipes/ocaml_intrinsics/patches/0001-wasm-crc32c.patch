@@ -1,0 +1,39 @@
+wasm: CRC-32C in C.
+
+The crc32 instruction of SSE 4.2 (x86) or of arm64's CRC extension, there
+in software: the same polynomial (Castagnoli, reflected 0x82F63B78), the
+data in little-endian order, without the final inversion.
+
+--- a/src/crc_stubs.c
++++ b/src/crc_stubs.c
+@@
+ #endif // ARCH_SIXTYFOUR
+ 
++#elif defined(__wasm__)
++
++static inline uint32_t crc32c_bytes(uint32_t crc, uint64_t data, int n)
++{
++  for (int i = 0; i < n; i++) {
++    crc ^= (uint32_t) (data & 0xff);
++    data >>= 8;
++    for (int k = 0; k < 8; k++)
++      crc = (crc >> 1) ^ (0x82F63B78u & (0u - (crc & 1)));
++  }
++  return crc;
++}
++
++#ifdef ARCH_SIXTYFOUR
++static inline uint64_t crc64(uint64_t initial, uint64_t data)
++{
++  return crc32c_bytes((uint32_t) initial, data, 8);
++}
++#else
++static inline uint32_t crc32(uint32_t initial, uint32_t data)
++{
++  return crc32c_bytes(initial, data, 4);
++}
++#endif // ARCH_SIXTYFOUR
++
+ #else
+ 
+ #error "Target not supported"
