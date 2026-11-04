@@ -1,0 +1,13 @@
+wasm32: a 32-bit size_t.
+
+The stubs know a 64-bit size_t only, as ctypes' ctypes_primitives.h they
+copy, which also handles 32 bits: integers' Size_t is then a UInt32.
+
+--- a/src/lib_bls12_381_signature/blst_bindings_stubs.c
++++ b/src/lib_bls12_381_signature/blst_bindings_stubs.c
+@@
+ #define ctypes_copy_size_t integers_copy_uint64
++#elif SIZE_MAX == UINT32_MAX
++#define ctypes_size_t_val Uint32_val
++#define ctypes_copy_size_t integers_copy_uint32
+ #else

@@ -771,7 +771,7 @@ variant), `mlcuddidl` (its bundled CUDD, and the stubs camlidl generates),
 called), and packages whose sources need a change for wasm, described in
 their `share/recipes/<name>/` directory: `mirage-crypto` (and `-ec`,
 `-rng`), `lwt`, `cryptokit`, `secp256k1-internal`, `lmdb`, `mccs`,
-`core_unix`, `async_unix`, `async_ssl`, `eio_posix`, `num`, `rowex`, `mirage-block-unix`, `shared-memory-ring`, `ocaml_intrinsics`, `unix-errno`, `tuntap`, `eigen`, `miou`, `osdp`, `bls12-381-unix`, `lacaml`, `setcore`, `cpu`, `memcpy`, `scrypt`, `poll`, `bytesrw`, `class_group_vdf`, `ocaml-lua` and `raylib` (see [raylib in a
+`core_unix`, `async_unix`, `async_ssl`, `eio_posix`, `num`, `rowex`, `mirage-block-unix`, `shared-memory-ring`, `ocaml_intrinsics`, `unix-errno`, `tuntap`, `eigen`, `bls12-381`, `bls12-381-signature`, `miou`, `osdp`, `bls12-381-unix`, `lacaml`, `setcore`, `cpu`, `memcpy`, `scrypt`, `poll`, `bytesrw`, `class_group_vdf`, `ocaml-lua` and `raylib` (see [raylib in a
 browser](#raylib-in-a-browser)).
 
 ### Project recipes
