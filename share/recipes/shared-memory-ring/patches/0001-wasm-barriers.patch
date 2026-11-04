@@ -1,0 +1,10 @@
+--- a/lib/barrier.h
++++ b/lib/barrier.h
+@@
+ #define xen_wmb()  asm volatile ("dmb sy" : : : "memory")
++#elif defined(__wasm__)
++#define xen_mb()   __sync_synchronize()
++#define xen_rmb()  __sync_synchronize()
++#define xen_wmb()  __sync_synchronize()
+ #else
+ #error "Define barriers"

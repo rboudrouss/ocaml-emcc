@@ -39,6 +39,7 @@
   (re2's vendored C++ library, janestreet_cpuid's x86 stubs) are kept,
   their stubs being built apart; a library that needed rebuilding and
   failed is reported as such, not as one the target does not need.
+- Added recipe: shared-memory-ring (memory barriers for wasm).
 
 ## 0.5.1
 
