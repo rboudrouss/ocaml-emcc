@@ -758,6 +758,7 @@ A recipe is built once per switch and target, and is not rebuilt when it changes
 | `gdbm` | dbm | GNU dbm, without readline or NLS |
 | `zmq` | zmq | libzmq, C++; poll, no CURVE (libsodium) or draft API |
 | `readline` | readline | GNU readline and history, with ncurses |
+| `libcurl` | curl | with OpenSSL and zlib; no HTTP/2, HTTP/3, IDN, PSL, brotli, zstd, LDAP or SSH; the blocking resolver |
 | `clang` | programs embedding clang's frontend | see [docs/recipes.md](docs/recipes.md#the-clang-recipe) |
 
 These recipes take the sources of the opam package
