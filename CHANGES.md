@@ -23,6 +23,8 @@
 - Stub libraries a package enables for some architectures only (curve448:
   amd64, arm64...) are compiled from the C files of its native build: the
   wasm context's architecture is `none`, so dune skipped them.
+- Stubs without dune or a recipe: the C files reaching the OCaml headers
+  through several local headers are found (orsetto).
 
 ## 0.5.1
 

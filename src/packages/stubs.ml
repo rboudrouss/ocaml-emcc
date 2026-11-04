@@ -316,20 +316,25 @@ let archive_sources dir a =
   let files = List.map found members in
   if List.mem None files then None else Some (List.map Option.get files)
 
-(* Whether the C file [f] includes the OCaml headers, directly or through a
-   header of its directory (b0's b0_stubs.h) *)
+(* Whether the C file [f] includes the OCaml headers, directly or through
+   headers of its directory (b0's b0_stubs.h; orsetto's cf_tai64_aux.h,
+   through cf_common_aux.h) *)
 let includes_caml f =
   let caml s = Files.has_seq s "#include" [ "<caml/"; "\"caml/" ] in
-  let s = Files.contents f in
-  caml s
-  || List.exists
-       (fun l ->
-         match Str_util.words (String.trim l) with
-         | [ "#include"; h ] when String.length h > 2 && h.[0] = '"' ->
-             let h = Filename.concat (Filename.dirname f) (String.sub h 1 (String.length h - 2)) in
-             Sys.file_exists h && caml (Files.contents h)
-         | _ -> false)
-       (String.split_on_char '\n' s)
+  let rec go depth f =
+    let s = Files.contents f in
+    caml s
+    || depth > 0
+       && List.exists
+            (fun l ->
+              match Str_util.words (String.trim l) with
+              | [ "#include"; h ] when String.length h > 2 && h.[0] = '"' ->
+                  let h = Filename.concat (Filename.dirname f) (String.sub h 1 (String.length h - 2)) in
+                  Sys.file_exists h && go (depth - 1) h
+              | _ -> false)
+            (String.split_on_char '\n' s)
+  in
+  go 3 f
 
 (* Last resort for packages with neither a recipe nor dune.  If the kept
    native build has lib<lib>.a, the C files behind its members are compiled
