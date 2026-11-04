@@ -123,15 +123,16 @@ all of them.
 | effect handlers (OCaml 5) | yes (c_of_ocaml's double translation, chosen per program, see `--effects`) | yes |
 | plugins (`--dynlink`) | yes | no |
 | threads, domains, js_of_ocaml's library, WASI | yes | yes |
-| deep recursion | under node, a 1 GB stack by default (millions of nested calls); in browsers, some tens of thousands | the interpreter's own stack, as natively |
+| deep recursion | under node, a 1 GB stack by default (millions of nested calls); in browsers, the engine's 500 KB to 1 MB (6 000 to 15 000 nested calls), without limit with [`--jspi`](#deep-recursion-in-a-browser-jspi) | the interpreter's own stack, as natively |
 | `Printexc.get_callstack` | empty (backtraces of exceptions work) | yes |
 | `Marshal.Closures` | no | yes |
-| with asyncify (`-sASYNCIFY`) | no wasm tail calls: a long chain of mutually recursive tail calls may overflow (use `-sJSPI`) | yes |
+| with asyncify (`-sASYNCIFY`) | no wasm tail calls: a long chain of mutually recursive tail calls may overflow (use `--jspi`) | yes |
 | `--preload` | nothing to preload | the bytecode in a separate `.data` file |
 
 The interpreted mode stays available for what the compiled one cannot do
 (OCaml before 4.14, `Marshal.Closures`, `Printexc.get_callstack`, very
-deep recursion in browsers), or when c_of_ocaml fails on a program. It is
+deep recursion in browsers without JSPI), or when c_of_ocaml fails on a
+program. It is
 not the default any more and is less tested: report what breaks, but
 expect the compiled mode to be the one fixed first. With an OCaml older
 than 4.14, `build` and `link` interpret, and say so. `interpreted: yes` in
@@ -146,12 +147,16 @@ The compiled mode in more detail:
   therefore runs in a worker thread with a stack of `$OCAML_EMCC_STACK_MB`
   megabytes, 1024 by default (`0` keeps it on the main thread and saves
   about 40 ms at startup). Running out of it is an uncaught
-  `Stack_overflow`.
+  `Stack_overflow`. In a browser, the stack is the engine's: 984 KB on
+  the page's thread in Chrome, about 500 KB in a worker, some thousands of
+  nested calls. With `--jspi`, a recursion going deeper continues on a
+  new stack of the engine (see [Deep recursion in a
+  browser](#deep-recursion-in-a-browser-jspi)).
 - **Asyncify**: tail calls are those of WebAssembly, which asyncify does
   not support. With `-sASYNCIFY`, as the raylib recipe links, they become
-  ordinary calls. JSPI (`-- -sJSPI`, see [raylib in a
-  browser](#raylib-in-a-browser)) keeps them and gives a smaller build,
-  but needs a browser that supports it, or node 24 with
+  ordinary calls. JSPI (`--jspi`, see [Deep recursion in a
+  browser](#deep-recursion-in-a-browser-jspi)) keeps them and gives a
+  smaller build, but needs a browser that supports it, or node 24 with
   `--experimental-wasm-jspi`.
 - **Effects** cannot be performed across a callback from C: they raise
   `Effect.Unhandled`, as with js_of_ocaml.
@@ -190,6 +195,7 @@ not needed.
 | `--effects MODE` | effect handlers of the compiled code: `double-translation` or `disabled` | the default (double translation when the program performs effects, disabled with `--dynlink`) is right unless plugins perform effects |
 | `--threads` | `Thread.create` and `Domain.spawn` start real threads | a program with threads or domains, see [Threads](#threads) |
 | `--dynlink` | a program loading plugins | see [Plugins](#plugins) |
+| `--jspi` | links with JSPI (`-sJSPI`): an asynchronous `main`, and compiled, deep recursions on new stacks | deep recursion in browsers that have JSPI, see [Deep recursion in a browser](#deep-recursion-in-a-browser-jspi) |
 | `--wasi` | `OUT.wasm` for a WASI host | see [WASI](#wasi) |
 | `--wasix` | `--wasi`, with WASIX's sockets | network programs under wasmer |
 | `--node-fs` | the real file system and environment, node only | programs reading files installed with them (dune-site, why3's `share/why3`, frama-c) or the user's files |
@@ -240,6 +246,7 @@ directory upwards. Every field is optional:
 | `recipes:` | recipe directories (default: `./emcc-recipes`) | `recipes: emcc-recipes vendor/r` |
 | `js-files:` | primitives written in JavaScript | `js-files: js/prims.js` |
 | `threads:` | link with `--threads` | `threads: yes` |
+| `jspi:` | link with `--jspi` | `jspi: yes` |
 | `wasix:` | `--wasi` links with `--wasix` | `wasix: yes` |
 | `interpreted:` | link with `--interpreted` (`--compiled` overrides it) | `interpreted: yes` |
 
@@ -291,6 +298,45 @@ gives the arguments and receives the output:
 - `-- -sMODULARIZE=1 -sEXPORT_NAME=createMain` gives a module to
   instantiate yourself.
 
+### Deep recursion in a browser (JSPI)
+
+Compiled code recurses on the stack of the wasm engine: in a browser,
+984 KB on the page's thread in Chrome and about 500 KB in a worker, that
+is 6 000 to 15 000 nested calls of OCaml code. A parser or an analyser
+recursing on a large input runs out of it (MOPSA, on a C file including
+some headers). Linked with `--jspi` (`jspi: yes` in `ocaml-emcc.conf`),
+a compiled function about to go deeper than a limit of the current stack
+calls itself again on a new stack of the engine, which JSPI
+(WebAssembly's JavaScript Promise Integration) gives, while the current
+one waits, suspended (c_of_ocaml's segmented stack): the recursion is then
+only limited by memory.
+
+```sh
+ocaml-emcc build app.js --jspi
+```
+
+- **Browsers**: JSPI is in Chrome and Edge 137 and later; Firefox
+  announces it for version 153, Safari has it in its preview only. A
+  build with `--jspi` does not load without it (the program says so): for
+  the others, serve a second build without `--jspi`, compiled (a smaller
+  stack) or interpreted (the interpreter has a stack of its own), and
+  choose with `typeof WebAssembly.Suspending == "function"`.
+- **An asynchronous `main`**: the program runs as an asynchronous
+  function. A page or a worker that starts it (`Module.callMain` with
+  `-sINVOKE_RUN=0`, or the module of `-sMODULARIZE=1`) gets a promise, to
+  wait for before using its results; `exit` still ends it with an
+  `ExitStatus`.
+- **Callbacks**: OCaml code called back from C or JavaScript (an event
+  handler, a js_of_ocaml callback) stays on the stack it is called on,
+  as JSPI cannot suspend JavaScript frames: a deep recursion has to start
+  from the program's main code.
+- **Cost**: about 2 % of speed on average over c_of_ocaml's benchmarks,
+  up to a third on a plain recursion of integers (each call checks the
+  stack left).
+- **node**: not needed, the program has a 1 GB stack there; node 24 runs
+  a `--jspi` build with `node --experimental-wasm-jspi`. No standalone
+  `.wasm` (`--wasi`): JSPI works through the JavaScript glue.
+
 ### raylib in a browser
 
 A game using [raylib-ocaml](https://github.com/tjammer/raylib-ocaml) builds
@@ -320,7 +366,7 @@ ocaml-emcc build game.html            # emscripten's page, with a canvas
   does it itself for a wasm target, the recipe patches the releases
   before.
 - `window_should_close` gives the browser a frame (`emscripten_sleep`),
-  which the recipe links with `-sASYNCIFY` for. `-- -sJSPI` replaces it
+  which the recipe links with `-sASYNCIFY` for. `--jspi` replaces it
   with a smaller build that keeps tail calls, for browsers with JSPI.
 - emcc warns that ASYNCIFY is not compatible with `-fwasm-exceptions`, but
   OCaml exceptions work, raised from OCaml or from C, and leaving the
@@ -593,7 +639,7 @@ Limitations:
 - Compiled mode only (not `--interpreted`).
 - A program linked with asyncify (`-sASYNCIFY`, as raylib's) loads
   plugins, but must not suspend while the code of a plugin is on the
-  stack: asyncify only instruments the program. JSPI (`-sJSPI`) has no
+  stack: asyncify only instruments the program. JSPI (`--jspi`) has no
   such limit.
 
 ## Threads
