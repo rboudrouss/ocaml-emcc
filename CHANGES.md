@@ -15,8 +15,9 @@
   `cc`, `gcc`, `g++`, `c++`, `clang`, `clang++`, `ar` and `ranlib`. They
   were the host's, which refused emcc's flags (qbf, re2, cudd,
   hdr_histogram, cucumber, bls12-381).
-- C++ stubs may use `register`, as with g++ (clang refuses it in C++17:
-  gbddml).
+- As with gcc, C++ stubs may use `register` (clang refuses it in C++17:
+  gbddml), and C functions declared without a prototype are no error with
+  `-Werror` (cucumber's gherkin-c).
 - A `dll<x>.so` that a package's own build makes with emcc (stem's
   snowball) is replaced by a placeholder when ocamlc links an executable
   of the package for the target ("Unrecognized magic").
