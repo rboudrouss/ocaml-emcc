@@ -17,6 +17,9 @@
   hdr_histogram, cucumber, bls12-381).
 - C++ stubs may use `register`, as with g++ (clang refuses it in C++17:
   gbddml).
+- A `dll<x>.so` that a package's own build makes with emcc (stem's
+  snowball) is replaced by a placeholder when ocamlc links an executable
+  of the package for the target ("Unrecognized magic").
 
 ## 0.5.1
 
