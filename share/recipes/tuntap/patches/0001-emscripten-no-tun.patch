@@ -1,0 +1,31 @@
+emscripten: no tun/tap devices.
+
+Opening one, or reading the MAC address of an interface, fails with
+ENOSYS: the library links, the programs not opening devices run.
+
+--- a/lib/tuntap_stubs.c
++++ b/lib/tuntap_stubs.c
+@@
+   if (fd == -1)
+     tun_raise_error("open", -1);
+   return fd;
+ }
++
++#elif defined(__EMSCRIPTEN__)
++
++static int
++tun_alloc(char *dev, int kind, int pi, int persist, int user, int group)
++{
++  errno = ENOSYS;
++  tun_raise_error("open", -1);
++  return -1;
++}
++
++CAMLprim value
++get_macaddr(value devname)
++{
++  errno = ENOSYS;
++  tun_raise_error("get_macaddr", -1);
++  return Val_unit;
++}
+ #endif
