@@ -329,8 +329,8 @@ type compiled = {
 }
 
 (* PROG.bc -> PROG.c (c_of_ocaml), compiled with the runtime support of the
-   generated code (camlc.h, camlc_runtime.c, which defines main), to be
-   linked with libcamlrun.a: its interpreter is not used. *)
+   generated code (camlc.h, camlc_runtime.c, whose camlc_main main.c
+   calls), to be linked with libcamlrun.a: its interpreter is not used. *)
 let compile_to_c ?(dynlink = false) ?(cps_stack = false) ?effects ~emcc ~flags ~tail_calls ~work ~base ~bc bc_path =
   let cooc = c_of_ocaml () in
   let support = Filename.concat work "c_of_ocaml" in
@@ -371,7 +371,8 @@ let compile_to_c ?(dynlink = false) ?(cps_stack = false) ?effects ~emcc ~flags ~
     @ [ "-I" ^ support; "-Wno-incompatible-function-pointer-types" ]
   in
   let support_obj = Filename.concat work "camlc_runtime.o" in
-  Env.run_exn emcc (flags @ [ "-c"; Filename.concat support "camlc_runtime.c"; "-o"; support_obj ]);
+  (* (started by main.c) *)
+  Env.run_exn emcc (flags @ [ "-DCAMLC_NO_MAIN"; "-c"; Filename.concat support "camlc_runtime.c"; "-o"; support_obj ]);
   (* c_of_ocaml does not rewrite the parts left unchanged: they are not
      compiled again if their flags are the same (PART.flags) *)
   let cc extra =
@@ -942,8 +943,8 @@ let run o =
       Some (compile_to_c ~dynlink:o.dynlink ~cps_stack:o.cps_stack ?effects:o.effects ~emcc ~flags:(cflags @ [ o.opt ] @ inc) ~tail_calls ~work ~base ~bc o.bc))
     else None
   in
-  if compiled = None then
-    Env.run_exn emcc (cflags @ [ o.opt; main_def ] @ inc @ [ "-c"; Filename.concat (Env.share ()) "runtime/main.c"; "-o"; main_o ]);
+  let main_def = if compiled <> None then "-DOCAML_EMCC_COMPILED" else main_def in
+  Env.run_exn emcc (cflags @ [ o.opt; main_def ] @ inc @ [ "-c"; Filename.concat (Env.share ()) "runtime/main.c"; "-o"; main_o ]);
   let runtime_object = runtime_object ~emcc ~flags:(cflags @ [ o.opt ]) ~lib_syms ~work in
   let compat_o =
     runtime_object "compat" ~defs:[ Printf.sprintf "-DOCAML_EMCC_MAX_DOMAINS=%d" (if o.threads then max_domains else 1) ]
@@ -1069,7 +1070,7 @@ let run o =
   let defaults = if o.threads then defaults @ threads_flags ~wasi:o.wasi ~proxy_to_pthread else defaults in
   let program_objs =
     match compiled with
-    | Some c -> c.c_objs @ [ c.support_obj ]
+    | Some c -> main_o :: c.c_objs @ [ c.support_obj ]
     | None -> [ main_o; prims_o ]
   in
   (* the primitives of the --js-file files no library defines: stubs
