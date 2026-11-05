@@ -1,0 +1,16 @@
+31-bit integers: the flags shifted in 63 bits.
+
+bit63 shifted an int before making it an Int63: on wasm32 (31-bit ints),
+bit 30 became min_int and bit 31 nothing, which Flags.Make refuses when
+the module starts ("Flag.Make got flags with no bits set").
+
+--- a/src/intel_cpuid.ml
++++ b/src/intel_cpuid.ml
+@@
+-let bit63 n = Int63.of_int (bit n)
++let bit63 n = Int63.shift_left Int63.one n
+--- a/src/amd_cpuid.ml
++++ b/src/amd_cpuid.ml
+@@
+-let bit63 n = Int63.of_int (bit n)
++let bit63 n = Int63.shift_left Int63.one n
