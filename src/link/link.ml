@@ -41,6 +41,7 @@ type opts = {
   effects : string option;  (** compiled: c_of_ocaml's --effects *)
   threads : bool;  (** Thread.create and Domain.spawn start threads (shared memory) *)
   jspi : bool;  (** JSPI (-sJSPI): an asynchronous main; compiled, deep recursions on new stacks *)
+  cps_stack : bool;  (** compiled: deep recursions go on in CPS, on the heap (c_of_ocaml's --cps-stack) *)
 }
 
 (* C prototype of a primitive as the interpreter calls it. *)
@@ -330,7 +331,7 @@ type compiled = {
 (* PROG.bc -> PROG.c (c_of_ocaml), compiled with the runtime support of the
    generated code (camlc.h, camlc_runtime.c, which defines main), to be
    linked with libcamlrun.a: its interpreter is not used. *)
-let compile_to_c ?(dynlink = false) ?effects ~emcc ~flags ~tail_calls ~work ~base ~bc bc_path =
+let compile_to_c ?(dynlink = false) ?(cps_stack = false) ?effects ~emcc ~flags ~tail_calls ~work ~base ~bc bc_path =
   let cooc = c_of_ocaml () in
   let support = Filename.concat work "c_of_ocaml" in
   if not (Sys.file_exists support) then Unix.mkdir support 0o755;
@@ -346,7 +347,15 @@ let compile_to_c ?(dynlink = false) ?effects ~emcc ~flags ~tail_calls ~work ~bas
      for plugins *)
   let dynlink = if dynlink then [ "--dynlink" ] else [] in
   let effects = match effects with Some e -> [ "--effects"; e ] | None -> [] in
-  Env.run_exn cooc (debug @ word_size @ dynlink @ effects @ [ bc_path; "--split"; c_dir ]);
+  (* (a version in CPS of the recursive functions, double translation's) *)
+  let cps_stack =
+    if not cps_stack then []
+    else
+      match Env.output_of cooc [ "--help" ] with
+      | Some h when Str_util.find h "--cps-stack" <> None -> [ "--cps-stack" ]
+      | _ -> Env.fail "--cps-stack: %s does not have it, a newer c_of_ocaml does" cooc
+  in
+  Env.run_exn cooc (debug @ word_size @ dynlink @ effects @ cps_stack @ [ bc_path; "--split"; c_dir ]);
   let parts =
     Sys.readdir c_dir |> Array.to_list
     |> List.filter (fun f -> Filename.check_suffix f ".c")
@@ -813,6 +822,13 @@ let run o =
     Env.fail "--wasi: WASI (preview1) is 32-bit, no WASI host runs a wasm64 module.  Use --target wasm32.";
   if standalone && o.mode <> Embed then
     Env.fail "--preload and --node-fs need the JavaScript glue: not available for a standalone %s" o.output;
+  if o.cps_stack && o.compiled then (
+    if o.dynlink then Env.fail "--cps-stack: not with --dynlink (c_of_ocaml compiles plugins without CPS versions)";
+    match o.effects with
+    | Some e when e <> "double-translation" ->
+        Env.fail "--cps-stack needs double translation (it runs the CPS versions of the functions): not --effects %s" e
+    | _ -> ());
+  if o.cps_stack && not o.compiled then Env.log "note: --cps-stack is for the compiled mode: ignored (interpreted)";
   if standalone && o.jspi then
     Env.fail "--jspi (JSPI) suspends the wasm code through the JavaScript glue: link OUT.js or OUT.html, not a standalone %s" o.output;
   if o.compiled then check_compiled ();
@@ -923,7 +939,7 @@ let run o =
       let asyncify f = Str_util.starts_with ~prefix:"-sASYNCIFY" f && f <> "-sASYNCIFY=0" in
       let tail_calls = List.exists jspi all || not (List.exists asyncify all) in
       if not tail_calls then Env.log "asyncify: compiled without wasm tail calls";
-      Some (compile_to_c ~dynlink:o.dynlink ?effects:o.effects ~emcc ~flags:(cflags @ [ o.opt ] @ inc) ~tail_calls ~work ~base ~bc o.bc))
+      Some (compile_to_c ~dynlink:o.dynlink ~cps_stack:o.cps_stack ?effects:o.effects ~emcc ~flags:(cflags @ [ o.opt ] @ inc) ~tail_calls ~work ~base ~bc o.bc))
     else None
   in
   if compiled = None then

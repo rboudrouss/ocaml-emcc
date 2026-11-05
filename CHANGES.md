@@ -17,6 +17,12 @@
   the program says so instead of failing to instantiate. Under `--wasi`,
   the compiled code has no new stacks (it imported emscripten's JavaScript
   for them, which a WASI host lacks).
+- `--cps-stack` (`cps-stack: yes`), compiled: the recursive functions get
+  a version in continuation-passing style (c_of_ocaml's `--cps-stack`),
+  in which a recursion deeper than the stack of a browser goes on, on the
+  heap, in every browser and with a synchronous `main`, for a program
+  about 1.5 times bigger. Not with `--dynlink`, nor with `--effects`
+  other than `double-translation`.
 - `build`: the libraries compiled against a package rebuilt for the
   target are rebuilt however many rounds it takes (at most 5 before:
   netsnmp's async libraries, over core, failed with "inconsistent
