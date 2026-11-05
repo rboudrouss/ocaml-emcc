@@ -30,9 +30,9 @@ extern void caml_fatal_uncaught_exception(value exn);
 EMSCRIPTEN_KEEPALIVE void *ocaml_emcc_tls_base(void) { return __builtin_wasm_tls_base(); }
 
 #ifdef OCAML_EMCC_DOUBLE_TRANSLATION
-/* Exported by a program compiled with effects (--effects
-   double-translation): `ocaml-emcc plugin --main` compiles its plugins the
-   same way, which camlc_plugin_init requires */
+/* Exported by a program c_of_ocaml compiled with effects (double
+   translation, as its manifest says): `ocaml-emcc plugin --main` compiles
+   its plugins the same way, which camlc_plugin_init requires */
 EMSCRIPTEN_KEEPALIVE void ocaml_emcc_double_translation(void) {}
 #endif
 

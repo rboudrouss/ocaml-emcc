@@ -906,24 +906,6 @@ let run o =
       (if not jsoo then []
        else [ runtime_object ~emcc ~flags:(Env.manifest_flags "cflags" @ [ o.opt; "-I" ^ Env.sysroot_file "lib/ocaml" ]) ~lib_syms ~work "jsoo" ])
   in
-  let dynlink_objs =
-    lazy
-      (if not (uses_runtime "dynlink" bc || o.dynlink) then []
-       else
-         [ runtime_object ~emcc ~lib_syms ~work "dynlink"
-             ~flags:
-               (Env.manifest_flags "cflags" @ [ o.opt; "-I" ^ Env.sysroot_file "lib/ocaml" ]
-               @ (if o.dynlink then [ "-DOCAML_EMCC_DYNLINK" ] else [])
-               @ if o.effects = Some "double-translation" then [ "-DOCAML_EMCC_DOUBLE_TRANSLATION" ] else []) ])
-  in
-  if o.check then (
-    let syms = defined_symbols (archives @ user_archives () @ flag_archives @ Lazy.force jsoo_objs @ Lazy.force dynlink_objs) in
-    let missing = List.filter (fun p -> not (Hashtbl.mem syms p || List.mem p js_provided)) prims in
-    if missing <> [] then
-      Env.log "warning: %d primitive(s) not defined by any linked library:\n  %s\n\
-               (add the library providing them with -l/-L, or %s)"
-        (List.length missing) (String.concat " " missing)
-        (if o.missing_prims then "they raise Failure when called" else "link will fail"));
   (* 4. emcc *)
   let inc = [ "-I" ^ Env.sysroot_file "lib/ocaml"; "-I" ^ Env.sysroot_file "include" ] in
   let vfs_path = "/ocaml/" ^ bc_name in
@@ -948,6 +930,28 @@ let run o =
       Some (compile_to_c ~dynlink:o.dynlink ~cps_stack:o.cps_stack ?effects:o.effects ~emcc ~flags:(cflags @ [ o.opt ] @ inc) ~tail_calls ~work ~base ~bc o.bc))
     else None
   in
+  let dynlink_objs =
+    lazy
+      (if not (uses_runtime "dynlink" bc || o.dynlink) then []
+       else
+         [ runtime_object ~emcc ~lib_syms ~work "dynlink"
+             ~flags:
+               (Env.manifest_flags "cflags" @ [ o.opt; "-I" ^ Env.sysroot_file "lib/ocaml" ]
+               @ (if o.dynlink then [ "-DOCAML_EMCC_DYNLINK" ] else [])
+               @ (* (the effects c_of_ocaml compiled the program with, which
+                    `plugin --main` reads back) *)
+                 match compiled with
+                 | Some c when c.c_effects = "double-translation" -> [ "-DOCAML_EMCC_DOUBLE_TRANSLATION" ]
+                 | _ -> []) ])
+  in
+  if o.check then (
+    let syms = defined_symbols (archives @ user_archives () @ flag_archives @ Lazy.force jsoo_objs @ Lazy.force dynlink_objs) in
+    let missing = List.filter (fun p -> not (Hashtbl.mem syms p || List.mem p js_provided)) prims in
+    if missing <> [] then
+      Env.log "warning: %d primitive(s) not defined by any linked library:\n  %s\n\
+               (add the library providing them with -l/-L, or %s)"
+        (List.length missing) (String.concat " " missing)
+        (if o.missing_prims then "they raise Failure when called" else "link will fail"));
   let main_def = if compiled <> None then "-DOCAML_EMCC_COMPILED" else main_def in
   Env.run_exn emcc (cflags @ [ o.opt; main_def ] @ inc @ [ "-c"; Filename.concat (Env.share ()) "runtime/main.c"; "-o"; main_o ]);
   let runtime_object = runtime_object ~emcc ~flags:(cflags @ [ o.opt ]) ~lib_syms ~work in
