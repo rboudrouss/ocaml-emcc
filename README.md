@@ -787,6 +787,7 @@ it.
 | `libffi` | ctypes-foreign | |
 | `libbz2` | bz2 | |
 | `libpcre2-8` | pcre2 | no JIT |
+| `libpcre` | pcre | PCRE 8.45 (the last one), UTF-8 and Unicode properties, no JIT |
 | `zstd` | zstd | single-threaded |
 | `gsl` | gsl | with its CBLAS |
 | `liblz4` | lz4 | |
