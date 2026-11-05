@@ -72,7 +72,7 @@
   codex (its 32-bit branches), eigen (Eigen 3.4.1's fix for recent
   clang), gdbm (dbm), hdr_histogram (musl's <endian.h>), janestreet_cpuid
   (its CPUID primitives fail, as in JavaScript; its flags shifted in 63
-  bits), libcurl (curl), ocaml_intrinsics (CRC-32C in
+  bits), libcurl (curl), libpcre (pcre), ocaml_intrinsics (CRC-32C in
   software), readline, rocq-runtime (no perf counter; its OCaml rebuilt
   for 31-bit integers on wasm32), shared-memory-ring (memory barriers for
   wasm), shell (no disk quotas: ENOSYS), tuntap (no devices: ENOSYS), unionFind
