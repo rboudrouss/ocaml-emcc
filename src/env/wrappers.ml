@@ -5,7 +5,7 @@
 (* Bumped whenever [write] changes: the CLI then regenerates the toolchain
    in existing sysroots (cheap: the runtime is not rebuilt), and the stubs
    built with it are built again (see [Stamp.toolchain]). *)
-let version = "22"
+let version = "23"
 
 (* [template] with each @KEY@ replaced *)
 let subst vars template =
@@ -42,7 +42,10 @@ let symlink target link =
    which the libraries built without it refuse); the code then runs
    serially (_OPENMP undefined).
    So are -march, -mtune and -mcpu (CPU tuning, nx's -march=native), which
-   clang refuses for wasm, and -Ofast, deprecated (hacl's -Werror): -O3
+   clang refuses for wasm, x86's SIMD and floating-point flags (-msse2,
+   -mfpmath=sse: rocq-runtime's configure tests the host's compiler) unless
+   wasm SIMD is asked for (-msimd128: emscripten emulates SSE with it, as
+   rowex does; emcc refuses them otherwise), and -Ofast, deprecated (hacl's -Werror): -O3
    -ffast-math.  So are the host's headers (-I/usr/include..., from the
    host's pkg-config in a package configured on the host): their libc is not
    emscripten's, and a missing library reads better as a missing header.
@@ -65,7 +68,8 @@ let symlink target link =
 let emcc_wrapper =
   {|#!/bin/sh
 unset CPATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH LIBRARY_PATH
-link=-L'@SYSROOT@/lib' std='@STUB_STD@' lang='@LANG_FLAGS@' prev= exe= inc=
+link=-L'@SYSROOT@/lib' std='@STUB_STD@' lang='@LANG_FLAGS@' prev= exe= inc= simd=
+for a; do case $a in -msimd128|-mrelaxed-simd) simd=1 ;; esac; done
 for a; do
   shift
   case $a in -c|-E|-S|-M|-MM) link= ;; -xc++*|*.cc|*.cpp|*.cxx|*.C) std= lang=-Wno-register ;; esac
@@ -79,6 +83,8 @@ for a; do
     -isystem/usr/include|-isystem/usr/include/*|-isystem/usr/local/include|-isystem/usr/local/include/*) ;;
     -pthread|-fopenmp|-fopenmp=*|-march=*|-mtune=*|-mcpu=*) ;;
     -Ofast) set -- "$@" -O3 -ffast-math ;;
+    -mfpmath=*) ;;
+    -msse*|-mssse3|-mavx*|-mfma) [ -n "$simd" ] && set -- "$@" "$a" ;;
     *) set -- "$@" $inc "$a" ;;
   esac
   inc=

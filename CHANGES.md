@@ -37,6 +37,9 @@
   (`asin` and `acos` were missing from those `link --dynlink` exported).
 - `--dynlink` is implied when a compiled program (not a standalone
   `.wasm`) links `Emcc_dynlink`.
+- x86's SIMD and floating-point flags (`-msse2`, `-mfpmath=sse`...), which
+  a configure run on the host may add (rocq-runtime on wasm64), are dropped
+  from C compilations unless they ask for wasm SIMD (`-msimd128`).
 - `build`: the libraries compiled against a package rebuilt for the
   target are rebuilt however many rounds it takes (at most 5 before:
   netsnmp's async libraries, over core, failed with "inconsistent
