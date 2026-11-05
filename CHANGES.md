@@ -69,15 +69,16 @@
   `dune-package` names one); a library that needed rebuilding and
   failed is reported as such, not as one the target does not need.
 - Added recipes: bls12-381 and bls12-381-signature (a 32-bit size_t),
-  codex (its 32-bit branches), eigen (Eigen 3.4.1's fix for recent
-  clang), gdbm (dbm), hdr_histogram (musl's <endian.h>), janestreet_cpuid
-  (its CPUID primitives fail, as in JavaScript; its flags shifted in 63
-  bits), libcurl (curl), libpcre (pcre), ocaml_intrinsics (CRC-32C in
-  software), readline, rocq-runtime (no perf counter; its OCaml rebuilt
-  for 31-bit integers on wasm32), shared-memory-ring (memory barriers for
-  wasm), shell (no disk quotas: ENOSYS), tuntap (no devices: ENOSYS), unionFind
-  (identifiers for 31-bit integers: frama-c on wasm32), unix-errno
-  (Linux's errno codes), zmq (libzmq).
+  codex (its 32-bit branches), eigen (Eigen 3.4.1's fix for recent clang),
+  gdbm (dbm), hdr_histogram (musl's <endian.h>), janestreet_cpuid (its
+  CPUID primitives fail, as in JavaScript; its flags shifted in 63 bits),
+  libcurl (curl), libpcre (pcre), mariadb (mysql, mariadb),
+  ocaml_intrinsics (CRC-32C in software), readline, rocq-runtime (no perf
+  counter; its OCaml rebuilt for 31-bit integers on wasm32),
+  shared-memory-ring (memory barriers for wasm), shell (no disk quotas:
+  ENOSYS), tuntap (no devices: ENOSYS), unionFind (identifiers for 31-bit
+  integers: frama-c on wasm32), unix-errno (Linux's errno codes), zmq
+  (libzmq).
 
 ## 0.5.1
 

@@ -822,6 +822,7 @@ it.
 | `zmq` | zmq | libzmq in C++, with poll, without CURVE (libsodium) or the draft API |
 | `readline` | readline | GNU readline and history, with ncurses |
 | `libcurl` | curl | with OpenSSL, zlib and the blocking resolver, without HTTP/2, HTTP/3, IDN, PSL, brotli, zstd, LDAP or SSH |
+| `mariadb` | mysql, mariadb | MariaDB Connector/C, static, with OpenSSL and zlib, its authentication plugins built in |
 | `clang` | programs embedding clang's frontend | see [docs/recipes.md](docs/recipes.md#the-clang-recipe) |
 
 These recipes take the sources of the opam package that vendors the
