@@ -168,7 +168,9 @@ let opam_version pkg ver dest =
 (* A tarball, extracted without its top directory; checked against
    [sha256] if given *)
 let url ?(sha256 = "") u dest =
-  let file = cache (Filename.basename u) in
+  (* (SourceForge's .../pcre-8.45.tar.bz2/download) *)
+  let name = if Filename.basename u = "download" then Filename.basename (Filename.dirname u) else Filename.basename u in
+  let file = cache name in
   if not (Sys.file_exists file) then (
     Env.log "downloading %s" u;
     if not (ok "curl" [ "-fsSL"; "--retry"; "3"; "-o"; file ^ ".tmp"; u ]) then (
@@ -181,7 +183,7 @@ let url ?(sha256 = "") u dest =
     | _ -> Sys.remove file; Env.fail "checksum mismatch for %s" u);
   sh "mkdir" [ "-p"; dest ];
   sh "tar" [ "-xf"; file; "-C"; dest; "--strip-components=1" ];
-  Filename.basename u
+  name
 
 (* A shallow clone, without history.  Tags and branches go through `clone
    --branch`; commits through `fetch --depth 1 <sha>`, which GitHub and
