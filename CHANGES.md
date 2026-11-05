@@ -54,7 +54,9 @@
 - ctypes-foreign: the functions emscripten only has as failing stubs
   (`getpwnam`...) are found by `dlsym` (opasswd stopped at startup with
   "undefined symbol"), and emscripten's libraries are looked for in
-  `$EM_CACHE` when it is set.
+  `$EM_CACHE` when it is set. The rest of the users database, which it
+  lacks, finds no one and writes nothing (`putpwent`, the shadow
+  passwords' `getspnam`..., `lckpwdf`).
 - The stubs of packages whose dune package is named otherwise
   (ocaml-systemd: `-p systemd`) are built.
 - The OCaml libraries rebuilt for the target are built again once dune is

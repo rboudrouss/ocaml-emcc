@@ -902,13 +902,6 @@ let run o =
                (add the library providing them with -l/-L, or %s)"
         (List.length missing) (String.concat " " missing)
         (if o.missing_prims then "they raise Failure when called" else "link will fail"));
-  let foreign =
-    if not (List.mem "ctypes_dlsym" prims) then None
-    else
-      let names = foreign_exports ~archives:(archives @ user_archives () @ flag_archives) bc in
-      Env.log "dlsym (ctypes-foreign): exporting %d C symbol(s) named in the program" (List.length names);
-      Some names
-  in
   (* 4. emcc *)
   let inc = [ "-I" ^ Env.sysroot_file "lib/ocaml"; "-I" ^ Env.sysroot_file "include" ] in
   let vfs_path = "/ocaml/" ^ bc_name in
@@ -938,6 +931,14 @@ let run o =
   let runtime_object = runtime_object ~emcc ~flags:(cflags @ [ o.opt ]) ~lib_syms ~work in
   let compat_o =
     runtime_object "compat" ~defs:[ Printf.sprintf "-DOCAML_EMCC_MAX_DOMAINS=%d" (if o.threads then max_domains else 1) ]
+  in
+  (* (compat.c's functions too: the users database's) *)
+  let foreign =
+    if not (List.mem "ctypes_dlsym" prims) then None
+    else
+      let names = foreign_exports ~archives:((compat_o :: archives) @ user_archives () @ flag_archives) bc in
+      Env.log "dlsym (ctypes-foreign): exporting %d C symbol(s) named in the program" (List.length names);
+      Some names
   in
   let foreign_objs, foreign_flags =
     match foreign with

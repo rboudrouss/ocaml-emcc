@@ -12,6 +12,43 @@ __attribute__((weak)) int sigsuspend(const sigset_t *mask)
   return -1;
 }
 
+/* The users database, which emscripten's libc has only part of (getpwnam,
+   getpwuid and getpwent find no one).  There are no shadow passwords
+   either, as on a system without /etc/shadow, and nothing can be written
+   (opasswd binds them with ctypes-foreign).  Locking it succeeds: there
+   is a single process. */
+#include <pwd.h>
+#include <shadow.h>
+#include <stdio.h>
+
+__attribute__((weak)) int putpwent(const struct passwd *p, FILE *f)
+{
+  (void)p; (void)f;
+  errno = ENOSYS;
+  return -1;
+}
+
+__attribute__((weak)) struct spwd *getspnam(const char *name)
+{
+  (void)name;
+  errno = ENOENT;
+  return 0;
+}
+
+__attribute__((weak)) struct spwd *getspent(void) { return 0; }
+__attribute__((weak)) void setspent(void) {}
+__attribute__((weak)) void endspent(void) {}
+
+__attribute__((weak)) int putspent(const struct spwd *p, FILE *f)
+{
+  (void)p; (void)f;
+  errno = ENOSYS;
+  return -1;
+}
+
+__attribute__((weak)) int lckpwdf(void) { return 0; }
+__attribute__((weak)) int ulckpwdf(void) { return 0; }
+
 /* OCaml < 4.12: runtime/afl.c (AFL fuzzing support) attaches shared memory
    when AFL asks for it, which never happens here. */
 __attribute__((weak)) void *shmat(int shmid, const void *shmaddr, int shmflg)
