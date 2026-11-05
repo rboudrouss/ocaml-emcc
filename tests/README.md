@@ -50,7 +50,7 @@ stopped, and its test fails.
 | `lmdb`      | lmdb + liblmdb: a database file, cursors, transactions |
 | `sdl`       | tsdl + sdl2: timer, events, surfaces, RWops (wasm64) |
 | `raylib`    | raylib (raylib-ocaml): its vendored raylib built for the web, ctypes structs holding pointers; images, colors, collisions, text, without a window |
-| `dynlink`   | plugins (`ocaml-emcc plugin`, `--dynlink`, `Emcc_dynlink.loadfile`): a `.cmo` using the program, the standard library and str's stubs; a `.cma`; a plugin using another; a `.cma` with C stubs of its own (static data, calls to the runtime); errors (module missing, already loaded, compiled against another interface, exception, no file); `load_url` after the main program (compiled mode only) |
+| `dynlink`   | plugins (`ocaml-emcc plugin`, `--dynlink` implied by `Emcc_dynlink`, `Emcc_dynlink.loadfile`): a `.cmo` using the program, the standard library and str's stubs; a `.cma`; a plugin using another; a `.cma` with C stubs of its own (static data, calls to the runtime); errors (module missing, already loaded, compiled against another interface, exception, no file); `load_url` after the main program (compiled mode only) |
 | `dyneffects` | plugins and effects (`--effects double-translation`, OCaml 5): effects performed by a plugin under the program's handler, through `List.fold_left`, and under its own; a plugin built without effects refused |
 | `dynweb`    | the plugins of `dynlink` fetched by a web page in headless Chromium (`load_url`) |
 | `jsoo`      | js_of_ocaml's library and ppx under node: properties, methods, strings, numbers, arrays, callbacks, OCaml values and exceptions through JavaScript, JavaScript errors, typed arrays, timers and promises after the main program |

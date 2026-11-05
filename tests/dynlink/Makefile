@@ -11,7 +11,7 @@ PLUGINS = out/a.wasm out/b.wasm out/raises.wasm out/stale.wasm out/late.wasm out
 # the plugins are read from the real file system (--node-fs)
 out/main.js: main.bc $(PLUGINS:.wasm=.src)
 	mkdir -p out
-	$(OCAML_EMCC) link main.bc -o $@ --dynlink --node-fs $(LINK_FLAGS)
+	$(OCAML_EMCC) link main.bc -o $@ --node-fs $(LINK_FLAGS)
 	for p in $(PLUGINS); do $(OCAML_EMCC) plugin $$(cat $${p%.wasm}.src) -o $$p --main $@ || exit 1; done
 
 # -linkall: the plugins may use any module of the program

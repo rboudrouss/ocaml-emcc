@@ -41,7 +41,8 @@ link options (build and link):
                   with --dynlink
   --dynlink       a program loading plugins (Emcc_dynlink of
                   ocaml-emcc.dynlink, see `plugin`), compiled only; its
-                  bytecode must be linked with -linkall
+                  bytecode must be linked with -linkall; implied when the
+                  program links Emcc_dynlink (not for a standalone .wasm)
  where it runs (and the extension of OUT: .js, .html, .wasm)
   --wasi          OUT.wasm for a WASI host (wasmtime, node:wasi...): files,
                   clocks, sleep... on WASI instead of emscripten's JS (wasm32);

@@ -823,6 +823,14 @@ let run o =
   check_magic ~bc_path:o.bc bc;
   (* OUT.wasm alone: emcc's standalone mode, no JavaScript glue *)
   let standalone = Filename.check_suffix o.output ".wasm" in
+  (* a program linking Emcc_dynlink loads plugins: c_of_ocaml compiles it
+     for them (all its compilation units kept and registered by name) *)
+  let o =
+    if o.compiled && (not o.dynlink) && (not standalone) && uses_runtime "dynlink" bc then (
+      Env.log "%s links Emcc_dynlink: a program loading plugins (--dynlink)" (Filename.basename o.bc);
+      { o with dynlink = true })
+    else o
+  in
   if o.wasi && not standalone then Env.fail "--wasi makes a WASI module: the output must be OUT.wasm (not %s)" o.output;
   if o.wasi && !Env.target = "wasm64" then
     Env.fail "--wasi: WASI (preview1) is 32-bit, no WASI host runs a wasm64 module.  Use --target wasm32.";
