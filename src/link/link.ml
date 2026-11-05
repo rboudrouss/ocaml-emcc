@@ -849,18 +849,21 @@ let run o =
     Env.fail "--wasi: WASI (preview1) is 32-bit, no WASI host runs a wasm64 module.  Use --target wasm32.";
   if standalone && o.mode <> Embed then
     Env.fail "--preload and --node-fs need the JavaScript glue: not available for a standalone %s" o.output;
-  if o.cps_stack && o.compiled then (
-    (match o.effects with
-    | Some e when e <> "double-translation" ->
-        Env.fail "--cps-stack needs double translation (it runs the CPS versions of the functions): not --effects %s" e
-    | _ -> ());
-    (* the functions with a frame on emscripten's C stack (the arguments of
-       an application whose arity differs) use it up to the limit where
-       the recursion goes on in CPS: 1 MB holds that *)
-    match stack_bytes o.stack_size with
-    | Some b when b < 1024 * 1024 ->
-        Env.log "warning: --cps-stack with --stack-size %s: give the C stack at least 1MB" o.stack_size
-    | _ -> ());
+  (if o.cps_stack && o.compiled then
+     match o.effects with
+     | Some e when e <> "double-translation" ->
+         Env.fail "--cps-stack needs double translation (it runs the CPS versions of the functions): not --effects %s" e
+     | _ -> ());
+  (* the deep recursions of --cps-stack and --jspi leave the stack of the
+     engine, not emscripten's C stack, which grows with them through the
+     over-applications (more arguments than the arity) and C functions:
+     c_of_ocaml asks for 1 MB at least *)
+  (if o.compiled && (o.cps_stack || o.jspi) then
+     match stack_bytes o.stack_size with
+     | Some b when b < 1024 * 1024 ->
+         Env.log "warning: %s with --stack-size %s: give the C stack at least 1MB"
+           (if o.cps_stack then "--cps-stack" else "--jspi") o.stack_size
+     | _ -> ());
   if o.cps_stack && not o.compiled then Env.log "note: --cps-stack is for the compiled mode: ignored (interpreted)";
   if standalone && o.jspi then
     Env.fail "--jspi (JSPI) suspends the wasm code through the JavaScript glue: link OUT.js or OUT.html, not a standalone %s" o.output;
