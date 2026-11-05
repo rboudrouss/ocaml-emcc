@@ -335,7 +335,7 @@ type compiled = {
 (* PROG.bc -> PROG.c (c_of_ocaml), compiled with the runtime support of the
    generated code (camlc.h, camlc_runtime.c, whose camlc_main main.c
    calls), to be linked with libcamlrun.a: its interpreter is not used. *)
-let compile_to_c ?(dynlink = false) ?(cps_stack = false) ?effects ~emcc ~flags ~tail_calls ~work ~base ~bc bc_path =
+let compile_to_c ?(dynlink = false) ?(cps_stack = false) ?effects ~emcc ~flags ~tail_calls ~work ~base bc_path =
   let cooc = c_of_ocaml () in
   let support = Filename.concat work "c_of_ocaml" in
   if not (Sys.file_exists support) then Unix.mkdir support 0o755;
@@ -345,8 +345,6 @@ let compile_to_c ?(dynlink = false) ?(cps_stack = false) ?effects ~emcc ~flags ~
      DIR/manifest *)
   let c_dir = Filename.concat work (base ^ ".c.d") in
   Env.log "compiling %s to C (c_of_ocaml)" (Filename.basename bc_path);
-  (* backtraces when the bytecode has debug information (ocamlc -g) *)
-  let debug = if Bytecode.section bc "DBUG" <> None then [ "--debug-info" ] else [] in
   let word_size = if !Env.target = "wasm64" then [ "--word-size"; "64" ] else [] in
   (* --dynlink: every compilation unit kept whole and registered by name,
      for plugins *)
@@ -360,7 +358,9 @@ let compile_to_c ?(dynlink = false) ?(cps_stack = false) ?effects ~emcc ~flags ~
       | Some h when Str_util.find h "--cps-stack" <> None -> [ "--cps-stack" ]
       | _ -> Env.fail "--cps-stack: %s does not have it, a newer c_of_ocaml does" cooc
   in
-  Env.run_exn cooc (debug @ word_size @ dynlink @ effects @ cps_stack @ [ bc_path; "--split"; c_dir ]);
+  (* (backtraces when the bytecode has debug events, ocamlc -g: c_of_ocaml's
+     default) *)
+  Env.run_exn cooc (word_size @ dynlink @ effects @ cps_stack @ [ bc_path; "--split"; c_dir ]);
   let parts =
     Sys.readdir c_dir |> Array.to_list
     |> List.filter (fun f -> Filename.check_suffix f ".c")
@@ -373,7 +373,7 @@ let compile_to_c ?(dynlink = false) ?(cps_stack = false) ?effects ~emcc ~flags ~
      plain calls (deep tail recursion may run out of stack) *)
   let flags =
     flags @ (if tail_calls then [ "-mtail-call" ] else [])
-    @ [ "-I" ^ support; "-Wno-incompatible-function-pointer-types" ]
+    @ [ "-I" ^ support ]
   in
   let support_obj = Filename.concat work "camlc_runtime.o" in
   (* (started by main.c) *)
@@ -927,7 +927,7 @@ let run o =
       let asyncify f = Str_util.starts_with ~prefix:"-sASYNCIFY" f && f <> "-sASYNCIFY=0" in
       let tail_calls = List.exists jspi all || not (List.exists asyncify all) in
       if not tail_calls then Env.log "asyncify: compiled without wasm tail calls";
-      Some (compile_to_c ~dynlink:o.dynlink ~cps_stack:o.cps_stack ?effects:o.effects ~emcc ~flags:(cflags @ [ o.opt ] @ inc) ~tail_calls ~work ~base ~bc o.bc))
+      Some (compile_to_c ~dynlink:o.dynlink ~cps_stack:o.cps_stack ?effects:o.effects ~emcc ~flags:(cflags @ [ o.opt ] @ inc) ~tail_calls ~work ~base o.bc))
     else None
   in
   let dynlink_objs =
@@ -1308,9 +1308,8 @@ let plugin ?effects ~input ~output ~main ~opt () =
   let c_dir = Filename.concat work (base ^ ".c.d") in
   Env.log "compiling %s to C (c_of_ocaml)" (Filename.basename input);
   let word_size = if !Env.target = "wasm64" then [ "--word-size"; "64" ] else [] in
-  (* the locations of backtraces, when compiled with -g *)
   let effects = match effects with Some e -> [ "--effects"; e ] | None -> [] in
-  Env.run_exn cooc (word_size @ effects @ [ "--debug-info"; input; "--split"; c_dir ]);
+  Env.run_exn cooc (word_size @ effects @ [ input; "--split"; c_dir ]);
   let parts =
     Sys.readdir c_dir |> Array.to_list
     |> List.filter (fun f -> Filename.check_suffix f ".c")
@@ -1320,7 +1319,6 @@ let plugin ?effects ~input ~output ~main ~opt () =
   let flags =
     Env.manifest_flags "cflags"
     @ [ opt; "-fPIC"; "-mtail-call"; "-I" ^ support; "-I" ^ Env.sysroot_file "lib/ocaml" ]
-    @ [ "-Wno-incompatible-function-pointer-types" ]
   in
   let objs =
     List.map
