@@ -1,0 +1,7 @@
+pdeep: 200000 200000 200000
+fold_right 199999
+caught Exit
+loaded out/pdeep.wasm
+pplain: 1000 200000
+loaded out/pplain.wasm
+out/nodt.wasm: Failure c_of_ocaml: the program is compiled with double translation, not the plugin

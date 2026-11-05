@@ -97,6 +97,7 @@ posix     | px       |            | posix-time2 posix-socket posix-stat | wasm32
 mccs      | mc       |            | mccs                        | wasm32 wasm64      |
 dynlink   | main     |            | compiled                    | wasm32 wasm64      |
 dyneffects | main    |            | compiled ocaml>=5           | wasm32 wasm64      |
+dyncps    | main     |            | compiled cps-stack-dynlink  | wasm32 wasm64      |
 dynweb    | main     |            | compiled playwright         | wasm32 wasm64      |
 jsoo      | js       |            | js_of_ocaml-ppx             | wasm32 wasm64      |
 jsprims   | jp       |            | js_of_ocaml                 | wasm32 wasm64      |
@@ -121,7 +122,8 @@ threadsockets | ts   |            | wasmer                      | wasi          
 # too, for now: its ctypes structs, laid out with the sizes of the host
 # before ctypes was rebuilt for wasm32 (as yaml's are), were not tried since.
 # depgraph needs its package installed: opam install ./tests/depgraph/pkg
-# dynlink, dyneffects and dynweb (plugins) are for the compiled mode only.
+# dynlink, dyneffects, dyncps and dynweb (plugins) are for the compiled mode
+# only.
 # threads and domains (--threads) under --wasi need a wasmtime with
 # wasi-threads ($WASMTIME_THREADS, <= 46); threadsweb runs threads in
 # Chromium, as jsdom.  Compiled: c_of_ocaml 69880cea or later.
@@ -140,6 +142,8 @@ has_pkg() {
     wasi-threads) [ $WASI = no ] || { [ -n "$WASMTIME_THREADS" ] && [ "$("$WASMTIME_THREADS" --version | sed 's/^wasmtime \([0-9]*\).*/\1/')" -le 46 ]; } ;;
     playwright) [ -n "${PLAYWRIGHT_DIR:-}" ] && [ -d "$PLAYWRIGHT_DIR/node_modules/playwright" ] ;;
     cps-stack) "${OCAML_EMCC_C_OF_OCAML:-c_of_ocaml}" --help 2>/dev/null | grep -q -- --cps-stack ;;
+    # (the c_of_ocaml before 45c785ea refuses --cps-stack with --dynlink)
+    cps-stack-dynlink) has_pkg cps-stack && ! grep -qs 'not supported with --dynlink and for plugins' "$(command -v "${OCAML_EMCC_C_OF_OCAML:-c_of_ocaml}")" ;;
     ocaml\>=*) [ "$(printf '%s\n' "${1#ocaml>=}" "$(ocamlc -vnum)" | sort -V | head -1)" = "${1#ocaml>=}" ] ;;
     *) ocamlfind query "$1" >/dev/null 2>&1 || [ -d "$OPAM_SWITCH_PREFIX/lib/$1" ] ;;
   esac
