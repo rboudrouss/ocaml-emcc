@@ -19,6 +19,7 @@ stopped, and its test fails.
 | `gitrecipe` | a project recipe cloning cJSON from GitHub |
 | `nodune`    | a Makefile, ocamlfind, a hand-compiled stub and `ocaml-emcc link` |
 | `binio`     | binary data on stdout and stderr under node |
+| `nodefs`    | `--node-fs`: real files, `Sys.chdir` and relative paths in the worker thread of compiled code |
 | `depgraph`  | an installed package (`opam install ./tests/depgraph/pkg`): stubs on mpfr with flags from `pkg-config`, zarith; gmp, mpfr and both stub libraries built from the program |
 | `zarith`    | zarith + gmp (recipe: configure's defines) |
 | `mixed`     | digestif (stubs rebuilt by its own dune rules), yojson, re, cmdliner |

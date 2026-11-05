@@ -28,5 +28,51 @@ if (typeof process == "object" && process.versions && process.versions.node) {
     });
     // The module is instantiated by the worker only
     Module["instantiateWasm"] = function () {};
+  } else if (!ocamlEmccThreads.isMainThread) {
+    // A worker cannot change the current directory of the process
+    // (process.chdir throws, which emscripten's NODERAWFS turned into a
+    // chdir that silently did nothing): the worker keeps its own, as
+    // getcwd(3) the directory's real path, and the file system functions of
+    // NODERAWFS, which give node the paths as they are (stat, open...), get
+    // them made absolute from it.
+    var ocamlEmccFs = require("fs");
+    var ocamlEmccPath = require("path");
+    var ocamlEmccCwd = process.cwd();
+    var ocamlEmccAbs = function (p) {
+      return typeof p == "string" && p !== "" ? ocamlEmccPath.resolve(ocamlEmccCwd, p) : p;
+    };
+    Module["preRun"] = [].concat(Module["preRun"] || [], function () {
+      if (typeof NODERAWFS == "undefined") return;
+      var wrap = function (name, first, second) {
+        var f = FS[name];
+        if (typeof f != "function") return;
+        FS[name] = function (a, b) {
+          var args = Array.prototype.slice.call(arguments);
+          if (first) args[0] = ocamlEmccAbs(a);
+          if (second) args[1] = ocamlEmccAbs(b);
+          return f.apply(this, args);
+        };
+      };
+      ["lookupPath", "mknod", "mkdir", "rmdir", "readdir", "unlink", "readlink", "stat", "lstat",
+       "statfs", "chmod", "lchmod", "chown", "lchown", "truncate", "utime", "open"].forEach(function (n) {
+        wrap(n, true, false);
+      });
+      wrap("rename", true, true);
+      wrap("link", true, true);
+      // the target of a symbolic link is relative to the link
+      wrap("symlink", false, true);
+    });
+    process.cwd = function () {
+      return ocamlEmccCwd;
+    };
+    process.chdir = function (dir) {
+      var d = ocamlEmccFs.realpathSync(ocamlEmccAbs(dir));
+      if (!ocamlEmccFs.statSync(d).isDirectory()) {
+        var e = new Error("ENOTDIR: not a directory, chdir '" + dir + "'");
+        e.code = "ENOTDIR";
+        throw e;
+      }
+      ocamlEmccCwd = d;
+    };
   }
 }

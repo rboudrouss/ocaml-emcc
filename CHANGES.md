@@ -37,6 +37,10 @@
   (`asin` and `acos` were missing from those `link --dynlink` exported).
 - `--dynlink` is implied when a compiled program (not a standalone
   `.wasm`) links `Emcc_dynlink`.
+- `--node-fs`, compiled: `Sys.chdir` changes the current directory, which
+  relative paths then follow (node's worker thread running the program
+  cannot change the process's: chdir did nothing, Rocq found none of its
+  libraries).
 - x86's SIMD and floating-point flags (`-msse2`, `-mfpmath=sse`...), which
   a configure run on the host may add (rocq-runtime on wasm64), are dropped
   from C compilations unless they ask for wasm SIMD (`-msimd128`).
