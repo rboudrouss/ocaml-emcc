@@ -332,6 +332,16 @@ type compiled = {
   c_effects : string;  (** c_of_ocaml's choice: disabled or double-translation *)
 }
 
+(* A size of emcc's settings (-sSTACK_SIZE=8MB): bytes, or KB, MB, GB *)
+let stack_bytes s =
+  let s = String.uppercase_ascii (String.trim s) in
+  let num, mult =
+    match List.find_opt (fun (suf, _) -> Filename.check_suffix s suf) [ ("KB", 1 lsl 10); ("MB", 1 lsl 20); ("GB", 1 lsl 30) ] with
+    | Some (suf, m) -> (Filename.chop_suffix s suf, m)
+    | None -> (s, 1)
+  in
+  Option.map (fun n -> n * mult) (int_of_string_opt (String.trim num))
+
 (* PROG.bc -> PROG.c (c_of_ocaml), compiled with the runtime support of the
    generated code (camlc.h, camlc_runtime.c, whose camlc_main main.c
    calls), to be linked with libcamlrun.a: its interpreter is not used. *)
@@ -838,9 +848,16 @@ let run o =
     Env.fail "--preload and --node-fs need the JavaScript glue: not available for a standalone %s" o.output;
   if o.cps_stack && o.compiled then (
     if o.dynlink then Env.fail "--cps-stack: not with --dynlink (c_of_ocaml compiles plugins without CPS versions)";
-    match o.effects with
+    (match o.effects with
     | Some e when e <> "double-translation" ->
         Env.fail "--cps-stack needs double translation (it runs the CPS versions of the functions): not --effects %s" e
+    | _ -> ());
+    (* the functions with a frame on emscripten's C stack (the arguments of
+       an application whose arity differs) use it up to the limit where
+       the recursion goes on in CPS: 1 MB holds that *)
+    match stack_bytes o.stack_size with
+    | Some b when b < 1024 * 1024 ->
+        Env.log "warning: --cps-stack with --stack-size %s: give the C stack at least 1MB" o.stack_size
     | _ -> ());
   if o.cps_stack && not o.compiled then Env.log "note: --cps-stack is for the compiled mode: ignored (interpreted)";
   if standalone && o.jspi then
