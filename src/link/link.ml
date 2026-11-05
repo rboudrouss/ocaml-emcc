@@ -526,12 +526,12 @@ let linked_symbols ~objects ~archives =
   Array.iteri (fun i (_, d, _) -> if linked.(i) then acc := d @ !acc) members;
   !acc
 
-(* C functions the code of a plugin may call directly, exported by a main
-   module even when it does not use them itself *)
+(* C functions the C stubs of a plugin may call directly, exported by a
+   main module even when it does not use them itself (c_of_ocaml --dynlink
+   links those its code calls itself in the program) *)
 let plugin_libc =
   [ "malloc"; "calloc"; "realloc"; "free"; "memcpy"; "memmove"; "memset"; "memcmp"; "strlen"; "strcmp";
-    "fmod"; "pow"; "exp"; "log"; "log10"; "floor"; "ceil"; "round"; "trunc"; "sqrt"; "sin"; "cos"; "tan";
-    "atan"; "atan2"; "fabs"; "ldexp"; "frexp"; "expm1"; "log1p" ]
+    "fmod"; "pow"; "log10"; "round"; "atan2"; "ldexp"; "frexp"; "expm1"; "log1p" ]
 
 (* The symbols a main module (--dynlink) exports for its plugins: those its
    runtime support (EXPORTED objects) and the members of the archives it
