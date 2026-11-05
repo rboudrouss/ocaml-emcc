@@ -79,6 +79,7 @@ stb       | sb       |            | stb_image                   | wasm32 wasm64 
 extunix   | eu       |            | extunix                     | wasm32 wasm64      |
 snappy    | sn       |            | snappy                      | wasm32 wasm64      |
 jspi      | jp       |            |                             | wasm32 wasm64      |
+cpsstack  | cs       |            | cps-stack                   | wasm32 wasm64      |
 argon2    | ar       |            | argon2                      | wasm32 wasm64      |
 expat     | ex       |            | expat                       | wasm32 wasm64      |
 lmdb      | lm       |            | lmdb                        | wasm32 wasm64      |
@@ -137,6 +138,7 @@ has_pkg() {
     wasmer) [ -n "$WASMER" ] ;;
     wasi-threads) [ $WASI = no ] || { [ -n "$WASMTIME_THREADS" ] && [ "$("$WASMTIME_THREADS" --version | sed 's/^wasmtime \([0-9]*\).*/\1/')" -le 46 ]; } ;;
     playwright) [ -n "${PLAYWRIGHT_DIR:-}" ] && [ -d "$PLAYWRIGHT_DIR/node_modules/playwright" ] ;;
+    cps-stack) "${OCAML_EMCC_C_OF_OCAML:-c_of_ocaml}" --help 2>/dev/null | grep -q -- --cps-stack ;;
     ocaml\>=*) [ "$(printf '%s\n' "${1#ocaml>=}" "$(ocamlc -vnum)" | sort -V | head -1)" = "${1#ocaml>=}" ] ;;
     *) ocamlfind query "$1" >/dev/null 2>&1 || [ -d "$OPAM_SWITCH_PREFIX/lib/$1" ] ;;
   esac
@@ -172,6 +174,9 @@ while IFS='|' read -r name target args pkgs targets differ; do
       # on node's main thread, whose stack (984 KB) is that of browsers: the
       # deep recursions of the compiled code go on JSPI's new stacks
       run() { OCAML_EMCC_STACK_MB=0 $TO "$NODE" --experimental-wasm-jspi "$@"; }
+    elif grep -qs '^cps-stack: *yes' ocaml-emcc.conf; then
+      # the same, the deep recursions going on in CPS on the heap
+      run() { OCAML_EMCC_STACK_MB=0 $TO "$NODE" "$@"; }
     else run() { $TO "$NODE" "$@"; }; fi
     if [ -f check.mjs ]; then
       # a web page: index.html, the program, and check.mjs driving a browser

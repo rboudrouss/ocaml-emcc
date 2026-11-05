@@ -57,6 +57,7 @@ stopped, and its test fails.
 | `jsprims`   | primitives implemented in a JavaScript file (`js-files:` in `ocaml-emcc.conf`) |
 | `jsdom`     | a web page in headless Chromium (`check.mjs`, playwright): DOM, an event handler, `Js.export` |
 | `jspi`      | `--jspi` (`jspi: yes`): recursions 200 000 calls deep (plain, allocating, `List.fold_right`, an exception crossing them) on node's main thread, whose 984 KB stack is that of browsers: compiled, they go on JSPI's new stacks (node 24 with `--experimental-wasm-jspi`) |
+| `cpsstack`  | the recursions of `jspi` with `--cps-stack` (`cps-stack: yes`), without JSPI: compiled, they go on in CPS, on the heap (skipped when c_of_ocaml has no `--cps-stack`) |
 | `localtime` | the local time zone's file (`/etc/localtime`, or that of `$TZ`) gives the offsets of `Unix.localtime` |
 | `core`      | core: `Int63` (an `int64` on wasm32), times, maps, bin_prot, sexps, dates, the local time zone |
 | `async`     | async: the scheduler, a timer, deferreds, a pipe, writers |
