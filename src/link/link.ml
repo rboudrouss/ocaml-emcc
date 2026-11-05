@@ -297,26 +297,29 @@ let threads_flags ~wasi ~proxy_to_pthread =
          would cost 200 ms and 140 MB at startup. *)
       [ "-sPTHREAD_POOL_SIZE=ENVIRONMENT_IS_NODE?0:8" ]
 
-(* The primitives called by the generated C, with the arity of their call
-   sites (-1: an array and its length), from its declarations
-   "extern value NAME(value, value);". *)
-let generated_prims c_file =
-  let prefix = "extern value " in
-  String.split_on_char '\n' (Compat.read_file c_file)
-  |> List.filter_map (fun l ->
-         if not (Str_util.starts_with ~prefix l) then None
-         else
-           match (String.index_opt l '(', String.rindex_opt l ')') with
-           | Some i, Some j when i > String.length prefix && j > i ->
-               let name = String.sub l (String.length prefix) (i - String.length prefix) in
-               let params = String.trim (String.sub l (i + 1) (j - i - 1)) in
-               let arity =
-                 if params = "void" then 0
-                 else if params = "value *, int" then -1
-                 else List.length (String.split_on_char ',' params)
-               in
-               Some (name, arity)
-           | _ -> None)
+(* c_of_ocaml's manifest of the C code (DIR/manifest with --split, see its
+   README): the primitives the code calls, with the arity of their calls
+   (-1: an array and its length), and the effect handlers of the program.
+   Unknown keys are ignored. *)
+type manifest = { prims : (string * int) list; effects : string }
+
+let read_manifest file =
+  if not (Sys.file_exists file) then
+    Env.fail "%s: no manifest, this c_of_ocaml is older than ocaml-emcc: update it" file;
+  let m =
+    List.fold_left
+      (fun m l ->
+        match Str_util.words l with
+        | [ "primitive"; name; arity ] -> (
+            match int_of_string_opt arity with
+            | Some a -> { m with prims = (name, a) :: m.prims }
+            | None -> Env.fail "%s: bad line %S" file l)
+        | [ "effects"; e ] -> { m with effects = e }
+        | _ -> m)
+      { prims = []; effects = "disabled" }
+      (String.split_on_char '\n' (Compat.read_file file))
+  in
+  { m with prims = List.rev m.prims }
 
 type compiled = {
   c_objs : string list;
@@ -326,6 +329,7 @@ type compiled = {
           are known *)
   c_prims : string list;
   c_arities : (int, int) Hashtbl.t;  (** arities by index in [c_prims] *)
+  c_effects : string;  (** c_of_ocaml's choice: disabled or double-translation *)
 }
 
 (* PROG.bc -> PROG.c (c_of_ocaml), compiled with the runtime support of the
@@ -337,7 +341,8 @@ let compile_to_c ?(dynlink = false) ?(cps_stack = false) ?effects ~emcc ~flags ~
   if not (Sys.file_exists support) then Unix.mkdir support 0o755;
   Env.run_exn cooc [ "--runtime-files"; support ];
   (* the C code in parts, compiled separately: DIR/part0.c (static data,
-     tables, the declarations of the primitives), DIR/part1.c, ... *)
+     tables, the declarations of the primitives), DIR/part1.c, ..., and
+     DIR/manifest *)
   let c_dir = Filename.concat work (base ^ ".c.d") in
   Env.log "compiling %s to C (c_of_ocaml)" (Filename.basename bc_path);
   (* backtraces when the bytecode has debug information (ocamlc -g) *)
@@ -392,10 +397,10 @@ let compile_to_c ?(dynlink = false) ?(cps_stack = false) ?effects ~emcc ~flags ~
           write_file stamp key))
       parts c_objs
   in
-  let prims = generated_prims (Filename.concat c_dir "part0.c") in
+  let m = read_manifest (Filename.concat c_dir "manifest") in
   let c_arities = Hashtbl.create 64 in
-  List.iteri (fun i (_, a) -> Hashtbl.replace c_arities i a) prims;
-  { c_objs; support_obj; cc; c_prims = List.map fst prims; c_arities }
+  List.iteri (fun i (_, a) -> Hashtbl.replace c_arities i a) m.prims;
+  { c_objs; support_obj; cc; c_prims = List.map fst m.prims; c_arities; c_effects = m.effects }
 
 let rec mkdir_p d =
   if not (Sys.file_exists d) then (
