@@ -119,6 +119,9 @@ let patched_dune () =
       ignore (Env.run ~out:Unix.stderr "tail" [ "-n"; "20"; Filename.concat work "build.log" ]);
       Env.fail "could not build the patched dune (log: %s/build.log)" work);
     Source.sh "mkdir" [ "-p"; Filename.dirname bin ];
+    (* (the previous one, of another version: read-only, as in dune's
+       _build, which cp cannot overwrite) *)
+    Source.remove bin;
     sh "cp" [ Filename.concat work "_build/install/default/bin/dune"; bin ];
     Stamp.write "patched-dune" [ ver; "patch=" ^ sum ];
     Source.remove work);

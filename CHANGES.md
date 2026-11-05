@@ -6,6 +6,9 @@
   in `ocaml-emcc.conf`), less tested, and is used with OCaml before 4.14;
   `--compiled` is still accepted. `tests/run.sh --interpreted` runs the
   tests interpreted.
+- The dune patched for the (ctypes) stanza is built again once dune is
+  upgraded (the copy of the previous one, read-only, made it fail:
+  bls12-381, lilv).
 - `--jspi` (`jspi: yes` in `ocaml-emcc.conf`) links with JSPI (emcc's
   `-sJSPI`): `main` is asynchronous, and the compiled code recurses
   deeper than the stack of a browser (6 000 to 15 000 nested calls) on new
