@@ -23,6 +23,20 @@
   heap, in every browser and with a synchronous `main`, for a program
   about 1.5 times bigger. Not with `--dynlink`, nor with `--effects`
   other than `double-translation`.
+- Compiled mode leaves to c_of_ocaml what is about the code, and keeps
+  here what is about emscripten; it needs a c_of_ocaml with a manifest
+  (`--manifest`) and `camlc_main`. The primitives the code calls and the
+  effects it was compiled with come from c_of_ocaml's manifest instead of
+  its C (the marker that `plugin --main` reads followed `--effects`, not
+  c_of_ocaml's choice). Backtraces follow the debug events of the
+  bytecode on c_of_ocaml's side, which warns of integer literals beyond 31
+  bits itself (`link` only does for the interpreter). The program starts
+  from `main.c`, and JSPI's new stacks for the segmented stack come from
+  `share/runtime/jspi.c`, linked with `--jspi` only. The C functions the
+  code of plugins calls are linked in the program by c_of_ocaml
+  (`asin` and `acos` were missing from those `link --dynlink` exported).
+- `--dynlink` is implied when a compiled program (not a standalone
+  `.wasm`) links `Emcc_dynlink`.
 - `build`: the libraries compiled against a package rebuilt for the
   target are rebuilt however many rounds it takes (at most 5 before:
   netsnmp's async libraries, over core, failed with "inconsistent

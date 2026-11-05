@@ -54,14 +54,28 @@
 ## Compiled mode
 
 By default (not `--interpreted`), `link` (step 5 above) runs `c_of_ocaml
-PROG.bc -o PROG.c` instead of embedding the bytecode, and `c_of_ocaml --runtime-files
+PROG.bc --split DIR` instead of embedding the bytecode, and `c_of_ocaml --runtime-files
 DIR` for the runtime support of the generated code (`camlc.h`,
 `camlc_runtime.c`). On wasm64, c_of_ocaml gets `--word-size 64`, for
-63-bit integers. Both C files are compiled with the flags of the runtime
-and linked with `libcamlrun.a` and the stub libraries, in place of
-`main.c` and the primitive table. `camlc_runtime.c` defines `main` and the
-functions of the runtime's `callback.c`, so that the interpreter is never
-linked.
+63-bit integers. The C files are compiled with the flags of the runtime
+and linked with `libcamlrun.a` and the stub libraries, in place of the
+primitive table. `camlc_runtime.c` defines the functions of the runtime's
+`callback.c`, so that the interpreter is never linked, and `camlc_main`,
+which `main.c` calls (`-DOCAML_EMCC_COMPILED`; `camlc_runtime.c` is
+compiled with `-DCAMLC_NO_MAIN`).
+
+c_of_ocaml only translates bytecode to C: what depends on emscripten is
+here. ocaml-emcc never reads the generated C. What it needs to know of it
+comes from c_of_ocaml's manifest (`DIR/manifest`): the primitives the code
+calls, with the arity of their calls, and the effects c_of_ocaml compiled
+the program with. c_of_ocaml decides what is about the code: backtraces
+when the bytecode has debug events, its warnings (integer literals beyond
+31 bits, which `link` only reports for the interpreter). ocaml-emcc gives
+the code what is about the platform: the default number of domains
+(`compat.c`), and with `--jspi` the new stacks of c_of_ocaml's segmented
+stack (`camlc_host_new_stacks` and `camlc_host_on_new_stack`, defined by
+`share/runtime/jspi.c` with emscripten's JSPI; without, the weak
+definitions of `camlc_runtime.c` have none).
 
 The C code is compiled with `-mtail-call`, so that its tail calls are
 tail calls of WebAssembly. Asyncify does not support them: when the link
@@ -241,7 +255,8 @@ the `--pre-js` files.
 
 ## Plugins
 
-`link --dynlink` runs `c_of_ocaml --dynlink`, which registers every
+`link --dynlink` (implied when a compiled program links `Emcc_dynlink`)
+runs `c_of_ocaml --dynlink`, which registers every
 compilation unit of the program by name, and links with `-sMAIN_MODULE=2`.
 A main module only exports the symbols it is told to
 (`-sEXPORTED_FUNCTIONS=@exports.json`). `--export-dynamic` does not do it:
@@ -250,8 +265,10 @@ through its `GOT.mem`. The list is computed before the link. `link` reads
 with `llvm-nm` what each member of the archives defines and needs, takes
 the members a link of the objects takes, as wasm-ld does (any order), and
 exports what they and the runtime support objects define, plus a few
-functions of libc and libm the generated code may call. The generated C of
-the program is not exported, since plugins look its units up by name.
+functions of libc and libm C stubs may call. The functions of the C
+library that the generated code of plugins calls are among them: c_of_ocaml
+`--dynlink` makes the program refer to them. The generated C of the program
+is not exported, since plugins look its units up by name.
 Exporting a symbol of an archive member makes wasm-ld link it, hence the
 exact computation: camlc_runtime.o replaces some members of libcamlrun.a,
 which would otherwise come along.

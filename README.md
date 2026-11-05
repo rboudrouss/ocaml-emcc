@@ -195,7 +195,7 @@ needed.
 | `--compiled` | the default | accepted for older scripts |
 | `--effects MODE` | effect handlers of the compiled code, `double-translation` or `disabled` | the default (double translation when the program performs effects, disabled with `--dynlink`) is right unless plugins perform effects |
 | `--threads` | `Thread.create` and `Domain.spawn` start real threads | a program with threads or domains, see [Threads](#threads) |
-| `--dynlink` | a program loading plugins | see [Plugins](#plugins) |
+| `--dynlink` | a program loading plugins (implied when it links `Emcc_dynlink`) | see [Plugins](#plugins) |
 | `--jspi` | links with JSPI (`-sJSPI`), with an asynchronous `main` and, compiled, deep recursions on new stacks | deep recursion in browsers that have JSPI, see [Deep recursion in a browser](#deep-recursion-in-a-browser) |
 | `--cps-stack` | compiled, deep recursions go on in CPS on the heap (a bigger program) | deep recursion in every browser, or with a synchronous `main`, see [Deep recursion in a browser](#deep-recursion-in-a-browser) |
 | `--wasi` | `OUT.wasm` for a WASI host | see [WASI](#wasi) |
@@ -632,7 +632,7 @@ let () =
 ```
 
 ```sh
-ocaml-emcc build app.js --dynlink     # or link app.bc -o app.js --dynlink
+ocaml-emcc build app.js     # or link app.bc -o app.js; --dynlink implied by Emcc_dynlink
 ocaml-emcc plugin editor.cma -o editor.wasm --main app.js
 ```
 
