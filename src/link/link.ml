@@ -973,6 +973,8 @@ let run o =
   in
   (* the main thread frees the workers of exited threads while blocked *)
   let threads_objs = if o.threads && not o.wasi then [ runtime_object "threads" ] else [] in
+  (* the new stacks of the compiled code (c_of_ocaml's segmented stack) *)
+  let jspi_objs = if o.jspi && compiled <> None then [ runtime_object "jspi" ] else [] in
   let standalone_objs =
     if not standalone then []
     else if compiled <> None then wasi_objs ()
@@ -1120,7 +1122,8 @@ let run o =
     else defaults
   in
   let args ?(extra = []) ~output () =
-    defaults @ fs_flags @ program_objs @ [ compat_o ] @ standalone_objs @ threads_objs @ foreign_objs @ js_objs @ dynlink_objs @ extra
+    defaults @ fs_flags @ program_objs @ [ compat_o ] @ standalone_objs @ threads_objs @ jspi_objs @ foreign_objs @ js_objs @ dynlink_objs
+    @ extra
     @ archives @ o.libs
     @ [ "-L" ^ Env.sysroot_file "lib" ]
     @ flags_of_libs @ [ "-lm" ] @ foreign_flags @ js_flags @ dynlink_flags @ o.emcc_flags @ [ "-o"; output ]
