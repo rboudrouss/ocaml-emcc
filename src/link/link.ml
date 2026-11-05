@@ -841,7 +841,8 @@ let run o =
   if o.dynlink && not o.compiled then Env.fail "--dynlink: plugins need the compiled mode (not --interpreted)";
   if o.dynlink && standalone then Env.fail "--dynlink: plugins are loaded by the JavaScript glue: link OUT.js, not a standalone .wasm";
   if o.threads then check_threads ~standalone o;
-  if !Env.target = "wasm32" then warn_literals bc;
+  (* (compiled, c_of_ocaml warns of them itself) *)
+  if !Env.target = "wasm32" && not o.compiled then warn_literals bc;
   if o.auto_deps then (Layouts.prune (); ignore (Layouts.ensure bc));
   Layouts.warn ~bc_path:o.bc bc;
   let out_dir = Filename.dirname o.output in
