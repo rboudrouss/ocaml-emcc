@@ -344,10 +344,10 @@ faster, the GC scanning a shorter stack. An infinite recursion exhausts
 the memory instead of raising `Stack_overflow`. Both options together
 give the functions without a CPS version JSPI's new stacks. The limit is
 conservative, about 200 KB of stack, for the 500 KB of Chrome's workers.
-With `--cps-stack`, emscripten's C stack (`--stack-size`, 8 MB by
-default) needs 1 MB or more, as the functions with a frame there (the
-arguments of an application whose arity differs) fill it up to the limit.
-ocaml-emcc warns below 1 MB.
+Both options leave emscripten's C stack (`--stack-size`, 8 MB by default)
+as it is. A deep recursion makes it grow only through over-applications
+(a function applied to more arguments than its arity) and C functions,
+and it needs 1 MB or more. ocaml-emcc warns below 1 MB.
 MOPSA, compiled, overflows at 500 KB without either option. With
 `--cps-stack` it runs on 984, 500 and 300 KB stacks with the same
 results, in 1.77 s (1.81 s without it on a large stack, 1.72 s with
