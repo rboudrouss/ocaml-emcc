@@ -21,8 +21,11 @@
   a version in continuation-passing style (c_of_ocaml's `--cps-stack`),
   in which a recursion deeper than the stack of a browser goes on, on the
   heap, in every browser and with a synchronous `main`, for a program
-  about 1.5 times bigger. Not with `--dynlink`, nor with `--effects`
-  other than `double-translation`.
+  about 1.5 times bigger. With `--dynlink`, the plugins have it too
+  (`plugin --main` follows the program, or `plugin --cps-stack`), and all
+  have double translation. Not with `--effects` other than
+  `double-translation`. A C stack under 1 MB (`--stack-size`) gets a
+  warning.
 - Compiled mode leaves to c_of_ocaml what is about the code, and keeps
   here what is about emscripten; it needs a c_of_ocaml with a manifest
   (`--manifest`) and `camlc_main`. The primitives the code calls and the

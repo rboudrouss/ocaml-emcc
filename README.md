@@ -121,7 +121,7 @@ differs.
 | link time | about 1.5 times longer (the generated C is compiled) | |
 | tested | the whole test suite, in CI (OCaml 4.14 and 5.5, wasm32, wasm64, WASI) | in CI, threads, sockets and Jane Street's libraries only |
 | effect handlers (OCaml 5) | yes (c_of_ocaml's double translation, chosen per program, see `--effects`) | yes |
-| plugins (`--dynlink`) | yes | no |
+| plugins (`--dynlink`) | yes | yes, compiled with `--cps-stack` too (see [Plugins](#plugins)) |
 | threads, domains, js_of_ocaml's library, WASI | yes | yes |
 | deep recursion | a 1 GB stack under node by default (millions of nested calls), the engine's 500 KB to 1 MB in browsers (6 000 to 15 000 nested calls), without limit with [`--jspi` or `--cps-stack`](#deep-recursion-in-a-browser) | the interpreter's own stack, as natively |
 | `Printexc.get_callstack` | empty (backtraces of exceptions work) | yes |
@@ -344,6 +344,10 @@ faster, the GC scanning a shorter stack. An infinite recursion exhausts
 the memory instead of raising `Stack_overflow`. Both options together
 give the functions without a CPS version JSPI's new stacks. The limit is
 conservative, about 200 KB of stack, for the 500 KB of Chrome's workers.
+With `--cps-stack`, emscripten's C stack (`--stack-size`, 8 MB by
+default) needs 1 MB or more, as the functions with a frame there (the
+arguments of an application whose arity differs) fill it up to the limit.
+ocaml-emcc warns below 1 MB.
 MOPSA, compiled, overflows at 500 KB without either option. With
 `--cps-stack` it runs on 984, 500 and 300 KB stacks with the same
 results, in 1.77 s (1.81 s without it on a large stack, 1.72 s with
@@ -662,7 +666,8 @@ below.)
   (`plugin --main` checks it).
 - Plugins cannot be unloaded.
 - Effect handlers (OCaml 5) are disabled by default in a program with
-  plugins and in its plugins. `--effects double-translation` enables them
+  plugins and in its plugins, unless `--cps-stack`. `--effects
+  double-translation` enables them
   (`tests/dyneffects`), and a plugin built with `--main` follows the
   program. An effect can then be performed by a plugin under a handler of
   the program, and the other way round. The choice is made when the
@@ -672,6 +677,16 @@ below.)
   `Stdlib.Effect` (and every other module) whole. That doubles the size of
   the program (1.4 to 2.8 MB for `tests/dynlink`), though its speed
   hardly changes. A plugin built in the other mode is refused when loaded.
+- `cps-stack: yes` (`--cps-stack`) applies to a program loading plugins
+  and to its plugins, whose deep recursions then go on in CPS too
+  (`tests/dyncps`). `plugin --main` compiles a plugin with `--cps-stack`
+  when the program has it, as does `plugin --cps-stack`. The program and
+  its plugins then all have double translation, and a plugin built
+  without effects has to be rebuilt. A plugin with double translation but
+  without `--cps-stack` loads, its own recursions limited by the stack,
+  the program's functions it calls not. The sizes add up: `-linkall`,
+  double translation, then the CPS versions (about 60 % more than double
+  translation alone for MOPSA).
 - Compiled mode only (not `--interpreted`).
 - A program linked with asyncify (`-sASYNCIFY`, as raylib's) loads
   plugins, but must not suspend while the code of a plugin is on the
