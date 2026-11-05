@@ -24,8 +24,8 @@ link options (build and link):
   --compiled      the default (accepted for older scripts)
   --effects MODE  compiled: effect handlers (OCaml 5), c_of_ocaml's
                   double-translation or disabled (default: double
-                  translation when the program performs effects; disabled
-                  with --dynlink)
+                  translation when the program performs effects or with
+                  --cps-stack; disabled with --dynlink otherwise)
   --threads       Thread.create and Domain.spawn (OCaml >= 5.3) start
                   threads: emscripten's pthreads (web workers sharing the
                   memory; in browsers, a cross-origin isolated page), or with
@@ -37,8 +37,8 @@ link options (build and link):
                   (a browser gives it 500 KB to 1 MB); no standalone .wasm
   --cps-stack     compiled: deep recursions go on in CPS, on the heap, in
                   every browser and with a synchronous main (c_of_ocaml's
-                  --cps-stack), for a program about 1.5 times bigger; not
-                  with --dynlink
+                  --cps-stack), for a program about 1.5 times bigger; with
+                  --dynlink, its plugins too (double translation)
   --dynlink       a program loading plugins (Emcc_dynlink of
                   ocaml-emcc.dynlink, see `plugin`), compiled only; its
                   bytecode must be linked with -linkall; implied when the
@@ -77,11 +77,13 @@ step by step (scripts, Makefiles, projects without dune):
   deps PROG.bc [-L DIR]...     build the missing stub libraries of PROG.bc
   doctor PROG.bc [-L DIR]...   stub libraries, primitives, 31-bit literals
   link PROG.bc -o OUT.js [LINK OPTIONS] [-- EMCC-ARGS...]
-  plugin LIB.cma|M.cmo -o OUT.wasm [--main PROG.js] [--effects MODE] [-O FLAG]
+  plugin LIB.cma|M.cmo -o OUT.wasm [--main PROG.js] [--effects MODE]
+         [--cps-stack] [-O FLAG]
                                a plugin (compiled) for a program linked with
                                --dynlink;
                                --main checks that the program exports what
-                               it needs, and gives its effects mode
+                               it needs, and gives its effects mode and
+                               --cps-stack
   env [--cflags|--sysroot]     paths and configuration; --cflags prints the
                                flags to compile C stubs with emcc
 
@@ -284,12 +286,13 @@ let cmd_link args =
   | _ -> die_usage ()
 
 let cmd_plugin args =
-  let effects = ref None in
+  let effects = ref None and cps_stack = ref false in
   let rec go out main opt pos = function
     | "-o" :: f :: rest -> go (Some f) main opt pos rest
     | "--main" :: f :: rest -> go out (Some f) opt pos rest
     | "-O" :: f :: rest -> go out main f pos rest
     | "--effects" :: e :: rest -> effects := Some e; go out main opt pos rest
+    | "--cps-stack" :: rest -> cps_stack := true; go out main opt pos rest
     | x :: rest when not (Str_util.starts_with ~prefix:"-" x) -> go out main opt (x :: pos) rest
     | [] -> (out, main, opt, List.rev pos)
     | x :: _ -> Env.fail "unexpected argument %s" x
@@ -297,7 +300,7 @@ let cmd_plugin args =
   match go None None "-O2" [] args with
   | Some output, main, opt, [ input ] ->
       ensure_setup ();
-      Link.plugin ?effects:!effects ~input ~output ~main ~opt ()
+      Link.plugin ?effects:!effects ~cps_stack:!cps_stack ~input ~output ~main ~opt ()
   | _ -> die_usage ()
 
 (* ----------------------------------------------------------------- build *)

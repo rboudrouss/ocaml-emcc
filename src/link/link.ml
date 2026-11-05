@@ -342,6 +342,15 @@ let stack_bytes s =
   in
   Option.map (fun n -> n * mult) (int_of_string_opt (String.trim num))
 
+(* c_of_ocaml's --cps-stack (a version in CPS of the recursive functions,
+   double translation's), if asked *)
+let cps_stack_flag cooc = function
+  | false -> []
+  | true -> (
+      match Env.output_of cooc [ "--help" ] with
+      | Some h when Str_util.find h "--cps-stack" <> None -> [ "--cps-stack" ]
+      | _ -> Env.fail "--cps-stack: %s does not have it, a newer c_of_ocaml does" cooc)
+
 (* PROG.bc -> PROG.c (c_of_ocaml), compiled with the runtime support of the
    generated code (camlc.h, camlc_runtime.c, whose camlc_main main.c
    calls), to be linked with libcamlrun.a: its interpreter is not used. *)
@@ -361,13 +370,7 @@ let compile_to_c ?(dynlink = false) ?(cps_stack = false) ?effects ~emcc ~flags ~
   let dynlink = if dynlink then [ "--dynlink" ] else [] in
   let effects = match effects with Some e -> [ "--effects"; e ] | None -> [] in
   (* (a version in CPS of the recursive functions, double translation's) *)
-  let cps_stack =
-    if not cps_stack then []
-    else
-      match Env.output_of cooc [ "--help" ] with
-      | Some h when Str_util.find h "--cps-stack" <> None -> [ "--cps-stack" ]
-      | _ -> Env.fail "--cps-stack: %s does not have it, a newer c_of_ocaml does" cooc
-  in
+  let cps_stack = cps_stack_flag cooc cps_stack in
   (* (backtraces when the bytecode has debug events, ocamlc -g: c_of_ocaml's
      default) *)
   Env.run_exn cooc (word_size @ dynlink @ effects @ cps_stack @ [ bc_path; "--split"; c_dir ]);
@@ -847,7 +850,6 @@ let run o =
   if standalone && o.mode <> Embed then
     Env.fail "--preload and --node-fs need the JavaScript glue: not available for a standalone %s" o.output;
   if o.cps_stack && o.compiled then (
-    if o.dynlink then Env.fail "--cps-stack: not with --dynlink (c_of_ocaml compiles plugins without CPS versions)";
     (match o.effects with
     | Some e when e <> "double-translation" ->
         Env.fail "--cps-stack needs double translation (it runs the CPS versions of the functions): not --effects %s" e
@@ -966,9 +968,10 @@ let run o =
                @ (if o.dynlink then [ "-DOCAML_EMCC_DYNLINK" ] else [])
                @ (* (the effects c_of_ocaml compiled the program with, which
                     `plugin --main` reads back) *)
-                 match compiled with
+                 (match compiled with
                  | Some c when c.c_effects = "double-translation" -> [ "-DOCAML_EMCC_DOUBLE_TRANSLATION" ]
-                 | _ -> []) ])
+                 | _ -> [])
+               @ if compiled <> None && o.cps_stack then [ "-DOCAML_EMCC_CPS_STACK" ] else []) ])
   in
   if o.check then (
     let syms = defined_symbols (archives @ user_archives () @ flag_archives @ Lazy.force jsoo_objs @ Lazy.force dynlink_objs) in
@@ -1303,7 +1306,7 @@ let plugin_archives input =
    position-independent code.  With [main] (the program's OUT.js or
    OUT.wasm), the symbols the plugin imports are checked against those the
    program exports. *)
-let plugin ?effects ~input ~output ~main ~opt () =
+let plugin ?effects ?(cps_stack = false) ~input ~output ~main ~opt () =
   if not (Env.toolchain_ready ()) then
     Env.fail "no wasm runtime in %s, run `ocaml-emcc setup` first" (Env.sysroot ());
   check_compiled ();
@@ -1322,6 +1325,19 @@ let plugin ?effects ~input ~output ~main ~opt () =
         Some "double-translation"
     | None, _ -> None
   in
+  (* (with double translation, which c_of_ocaml then chooses) *)
+  let cps_stack =
+    cps_stack
+    || match main_exports with
+       | Some l when List.mem "ocaml_emcc_cps_stack" l ->
+           Env.log "the program is compiled with --cps-stack: so is the plugin";
+           true
+       | _ -> false
+  in
+  (match effects with
+  | Some e when cps_stack && e <> "double-translation" ->
+      Env.fail "--cps-stack needs double translation (it runs the CPS versions of the functions): not --effects %s" e
+  | _ -> ());
   let emcc = Env.emcc () in
   let out_dir = Filename.dirname output in
   let base = Filename.remove_extension (Filename.basename output) in
@@ -1335,7 +1351,7 @@ let plugin ?effects ~input ~output ~main ~opt () =
   Env.log "compiling %s to C (c_of_ocaml)" (Filename.basename input);
   let word_size = if !Env.target = "wasm64" then [ "--word-size"; "64" ] else [] in
   let effects = match effects with Some e -> [ "--effects"; e ] | None -> [] in
-  Env.run_exn cooc (word_size @ effects @ [ input; "--split"; c_dir ]);
+  Env.run_exn cooc (word_size @ effects @ cps_stack_flag cooc cps_stack @ [ input; "--split"; c_dir ]);
   let parts =
     Sys.readdir c_dir |> Array.to_list
     |> List.filter (fun f -> Filename.check_suffix f ".c")

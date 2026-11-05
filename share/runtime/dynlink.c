@@ -36,6 +36,14 @@ EMSCRIPTEN_KEEPALIVE void *ocaml_emcc_tls_base(void) { return __builtin_wasm_tls
 EMSCRIPTEN_KEEPALIVE void ocaml_emcc_double_translation(void) {}
 #endif
 
+#ifdef OCAML_EMCC_CPS_STACK
+/* Exported by a program compiled with --cps-stack: `ocaml-emcc plugin
+   --main` compiles its plugins with it too, their deep recursions going on
+   in CPS (c_of_ocaml then compiles them with double translation, as the
+   program) */
+EMSCRIPTEN_KEEPALIVE void ocaml_emcc_cps_stack(void) {}
+#endif
+
 static void fail_dl(const char *what, const char *file)
 {
   char buf[1024];
