@@ -1,0 +1,6 @@
+plugin threads: 60
+loaded out/p.wasm
+total 1260
+main done
+loaded out/q.wasm
+total 13560
