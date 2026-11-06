@@ -974,7 +974,8 @@ let run o =
                  (match compiled with
                  | Some c when c.c_effects = "double-translation" -> [ "-DOCAML_EMCC_DOUBLE_TRANSLATION" ]
                  | _ -> [])
-               @ if compiled <> None && o.cps_stack then [ "-DOCAML_EMCC_CPS_STACK" ] else []) ])
+               @ (if compiled <> None && o.cps_stack then [ "-DOCAML_EMCC_CPS_STACK" ] else [])
+               @ if o.threads then [ "-DOCAML_EMCC_THREADS" ] else []) ])
   in
   if o.check then (
     let syms = defined_symbols (archives @ user_archives () @ flag_archives @ Lazy.force jsoo_objs @ Lazy.force dynlink_objs) in
@@ -1309,7 +1310,7 @@ let plugin_archives input =
    position-independent code.  With [main] (the program's OUT.js or
    OUT.wasm), the symbols the plugin imports are checked against those the
    program exports. *)
-let plugin ?effects ?(cps_stack = false) ~input ~output ~main ~opt () =
+let plugin ?effects ?(cps_stack = false) ?(threads = false) ~input ~output ~main ~opt () =
   if not (Env.toolchain_ready ()) then
     Env.fail "no wasm runtime in %s, run `ocaml-emcc setup` first" (Env.sysroot ());
   check_compiled ();
@@ -1334,6 +1335,16 @@ let plugin ?effects ?(cps_stack = false) ~input ~output ~main ~opt () =
     || match main_exports with
        | Some l when List.mem "ocaml_emcc_cps_stack" l ->
            Env.log "the program is compiled with --cps-stack: so is the plugin";
+           true
+       | _ -> false
+  in
+  (* a program with threads has a shared memory, which the plugin imports:
+     linked with -pthread *)
+  let threads =
+    threads
+    || match main_exports with
+       | Some l when List.mem "ocaml_emcc_threads" l ->
+           Env.log "the program is linked with --threads: so is the plugin";
            true
        | _ -> false
   in
@@ -1376,7 +1387,8 @@ let plugin ?effects ?(cps_stack = false) ~input ~output ~main ~opt () =
   let archives = plugin_archives input in
   Env.log "linking the plugin %s%s" output
     (if archives = [] then "" else " (with " ^ String.concat " " (List.map Filename.basename archives) ^ ")");
-  Env.run_exn emcc (Env.manifest_flags "ldflags" @ [ opt; "-sSIDE_MODULE=1" ] @ objs @ archives @ [ "-o"; output ]);
+  let threads = if threads then [ "-pthread"; "-Wno-pthreads-mem-growth" ] else [] in
+  Env.run_exn emcc (Env.manifest_flags "ldflags" @ [ opt; "-sSIDE_MODULE=1" ] @ threads @ objs @ archives @ [ "-o"; output ]);
   match (main_wasm, main_exports) with
   | None, _ | _, None -> ()
   | Some wasm, Some exports -> (

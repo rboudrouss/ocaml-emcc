@@ -78,12 +78,12 @@ step by step (scripts, Makefiles, projects without dune):
   doctor PROG.bc [-L DIR]...   stub libraries, primitives, 31-bit literals
   link PROG.bc -o OUT.js [LINK OPTIONS] [-- EMCC-ARGS...]
   plugin LIB.cma|M.cmo -o OUT.wasm [--main PROG.js] [--effects MODE]
-         [--cps-stack] [-O FLAG]
+         [--cps-stack] [--threads] [-O FLAG]
                                a plugin (compiled) for a program linked with
                                --dynlink;
                                --main checks that the program exports what
-                               it needs, and gives its effects mode and
-                               --cps-stack
+                               it needs, and gives its effects mode,
+                               --cps-stack and --threads
   env [--cflags|--sysroot]     paths and configuration; --cflags prints the
                                flags to compile C stubs with emcc
 
@@ -286,13 +286,14 @@ let cmd_link args =
   | _ -> die_usage ()
 
 let cmd_plugin args =
-  let effects = ref None and cps_stack = ref false in
+  let effects = ref None and cps_stack = ref false and threads = ref false in
   let rec go out main opt pos = function
     | "-o" :: f :: rest -> go (Some f) main opt pos rest
     | "--main" :: f :: rest -> go out (Some f) opt pos rest
     | "-O" :: f :: rest -> go out main f pos rest
     | "--effects" :: e :: rest -> effects := Some e; go out main opt pos rest
     | "--cps-stack" :: rest -> cps_stack := true; go out main opt pos rest
+    | "--threads" :: rest -> threads := true; go out main opt pos rest
     | x :: rest when not (Str_util.starts_with ~prefix:"-" x) -> go out main opt (x :: pos) rest
     | [] -> (out, main, opt, List.rev pos)
     | x :: _ -> Env.fail "unexpected argument %s" x
@@ -300,7 +301,7 @@ let cmd_plugin args =
   match go None None "-O2" [] args with
   | Some output, main, opt, [ input ] ->
       ensure_setup ();
-      Link.plugin ?effects:!effects ~cps_stack:!cps_stack ~input ~output ~main ~opt ()
+      Link.plugin ?effects:!effects ~cps_stack:!cps_stack ~threads:!threads ~input ~output ~main ~opt ()
   | _ -> die_usage ()
 
 (* ----------------------------------------------------------------- build *)

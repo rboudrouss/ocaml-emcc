@@ -44,6 +44,13 @@ EMSCRIPTEN_KEEPALIVE void ocaml_emcc_double_translation(void) {}
 EMSCRIPTEN_KEEPALIVE void ocaml_emcc_cps_stack(void) {}
 #endif
 
+#ifdef OCAML_EMCC_THREADS
+/* Exported by a program linked with --threads, whose memory is shared:
+   `ocaml-emcc plugin --main` links its plugins with -pthread, which
+   import it */
+EMSCRIPTEN_KEEPALIVE void ocaml_emcc_threads(void) {}
+#endif
+
 static void fail_dl(const char *what, const char *file)
 {
   char buf[1024];
