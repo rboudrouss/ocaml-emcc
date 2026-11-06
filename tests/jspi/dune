@@ -1,1 +1,1 @@
-(executable (name jp))
+(executable (name jp) (foreign_stubs (language c) (names sleep)))

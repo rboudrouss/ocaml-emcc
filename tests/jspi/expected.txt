@@ -3,3 +3,9 @@ length 200000
 fold_right 300000
 caught Exit
 again 200000
+frame 1
+frame 2
+frame 3
+callback 1
+callback 2
+slept at depth 200000
