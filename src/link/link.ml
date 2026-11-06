@@ -543,7 +543,9 @@ let linked_symbols ~objects ~archives =
    main module even when it does not use them itself (c_of_ocaml --dynlink
    links those its code calls itself in the program) *)
 let plugin_libc =
-  [ "malloc"; "calloc"; "realloc"; "free"; "memcpy"; "memmove"; "memset"; "memcmp"; "strlen"; "strcmp";
+  [ "malloc"; "calloc"; "realloc"; "free"; "memcpy"; "memmove"; "memset"; "memcmp"; "memchr"; "strlen"; "strcmp";
+    "strncmp"; "strcpy"; "strncpy"; "strchr"; "strrchr"; "strstr"; "strdup"; "snprintf"; "sprintf"; "vsnprintf";
+    "printf"; "fprintf"; "puts"; "fputs"; "fflush"; "strtol"; "strtod"; "atoi"; "qsort"; "getenv"; "abort";
     "fmod"; "pow"; "log10"; "round"; "atan2"; "ldexp"; "frexp"; "expm1"; "log1p" ]
 
 (* The symbols a main module (--dynlink) exports for its plugins: those its
