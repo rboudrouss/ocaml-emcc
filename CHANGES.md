@@ -16,7 +16,10 @@
   137 or later, or node 24 with `--experimental-wasm-jspi`. Without JSPI,
   the program says so instead of failing to instantiate. Under `--wasi`,
   the compiled code has no new stacks (it imported emscripten's JavaScript
-  for them, which a WASI host lacks).
+  for them, which a WASI host lacks). It also replaces `-sASYNCIFY` for C
+  that suspends (`emscripten_sleep`, raylib's loop), keeping the tail
+  calls, for a smaller program which may suspend under the code of
+  plugins.
 - `--cps-stack` (`cps-stack: yes`), compiled: the recursive functions get
   a version in continuation-passing style (c_of_ocaml's `--cps-stack`),
   in which a recursion deeper than the stack of a browser goes on, on the
@@ -40,6 +43,8 @@
   (`asin` and `acos` were missing from those `link --dynlink` exported).
 - `--dynlink` is implied when a compiled program (not a standalone
   `.wasm`) links `Emcc_dynlink`.
+- The C of an executable's own `(foreign_stubs ...)` is linked (its
+  primitives raised `Failure "... not implemented"`).
 - Plugins of a program linked with `--threads` load: `plugin --main`
   links them with `-pthread`, for the program's shared memory, as does
   `plugin --threads` (they failed with "could not load dynamic lib").

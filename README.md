@@ -121,12 +121,12 @@ differs.
 | link time | about 1.5 times longer (the generated C is compiled) | |
 | tested | the whole test suite, in CI (OCaml 4.14 and 5.5, wasm32, wasm64, WASI) | in CI, threads, sockets and Jane Street's libraries only |
 | effect handlers (OCaml 5) | yes (c_of_ocaml's double translation, chosen per program, see `--effects`) | yes |
-| plugins (`--dynlink`) | yes | yes, compiled with `--cps-stack` too (see [Plugins](#plugins)) |
+| plugins (`--dynlink`) | yes | no |
 | threads, domains, js_of_ocaml's library, WASI | yes | yes |
 | deep recursion | a 1 GB stack under node by default (millions of nested calls), the engine's 500 KB to 1 MB in browsers (6 000 to 15 000 nested calls), without limit with [`--jspi` or `--cps-stack`](#deep-recursion-in-a-browser) | the interpreter's own stack, as natively |
 | `Printexc.get_callstack` | empty (backtraces of exceptions work) | yes |
 | `Marshal.Closures` | no | yes |
-| with asyncify (`-sASYNCIFY`) | no wasm tail calls, so a long chain of mutually recursive tail calls may overflow (use `--jspi`) | yes |
+| with asyncify (`-sASYNCIFY`) | no wasm tail calls, so a long chain of mutually recursive tail calls may overflow (`--jspi` replaces asyncify) | yes |
 | `--preload` | nothing to preload | the bytecode in a separate `.data` file |
 
 The interpreted mode stays available for what the compiled one cannot do
@@ -155,10 +155,13 @@ expect the compiled mode to be the one fixed first. With an OCaml older than
   [Deep recursion in a browser](#deep-recursion-in-a-browser).
 - **Asyncify**: tail calls are those of WebAssembly, which asyncify does
   not support. With `-sASYNCIFY`, as the raylib recipe links, they become
-  ordinary calls. JSPI (`--jspi`, see [Deep recursion in a
-  browser](#deep-recursion-in-a-browser)) keeps them and gives a
-  smaller build, but needs a browser that supports it, or node 24 with
-  `--experimental-wasm-jspi`.
+  ordinary calls. `--jspi` suspends the same C functions
+  (`emscripten_sleep`, raylib's loop) without asyncify. Tail calls stay,
+  the program is smaller (248 KB instead of 408 KB for a small program
+  that sleeps), and it may suspend while the code of a plugin is on the
+  stack, which asyncify aborts on. It needs a browser with JSPI (see
+  [Deep recursion in a browser](#deep-recursion-in-a-browser)), or node 24
+  with `--experimental-wasm-jspi`.
 - **Effects** performed across a callback from C raise
   `Effect.Unhandled`, as with js_of_ocaml.
 - **Backtraces** work when the bytecode is compiled with `-g`, as dune
@@ -174,7 +177,7 @@ steps, for scripts and Makefiles (see [Without dune](#without-dune)).
 |---------|--------------|
 | `build OUT [--exe DIR/NAME] [LINK OPTIONS] [-- EMCC-ARGS]` | the dune executable named like `OUT` (or `--exe`), its C stubs and those of its dependencies, the link |
 | `link PROG.bc -o OUT [LINK OPTIONS] [-- EMCC-ARGS]` | the link of a bytecode executable built otherwise |
-| `plugin LIB.cma\|M.cmo -o OUT.wasm [--main PROG.js] [--effects MODE] [-O FLAG]` | a [plugin](#plugins), and with `--main`, a check that the program exports what it needs |
+| `plugin LIB.cma\|M.cmo -o OUT.wasm [--main PROG.js] [--effects MODE] [--cps-stack] [--threads] [-O FLAG]` | a [plugin](#plugins), compiled and linked as the program with `--main` (effects, `--cps-stack`, threads), which also checks that the program exports what it needs |
 | `setup [--force]` | the wasm runtime of the switch's compiler (`build` and `link` do it the first time) |
 | `install [--force] RECIPE...` | build [recipes](#c-dependencies) (gmp, project recipes...), again with `--force` |
 | `dune [ARGS]` | `dune build -x TARGET ARGS` (the C stubs compiled with emcc), and their static archives |
@@ -193,11 +196,11 @@ needed.
 |--------|--------------|----------------|
 | `--interpreted` | runs the bytecode on the interpreter | see [Compiled or interpreted](#compiled-or-interpreted) |
 | `--compiled` | the default | accepted for older scripts |
-| `--effects MODE` | effect handlers of the compiled code, `double-translation` or `disabled` | the default (double translation when the program performs effects, disabled with `--dynlink`) is right unless plugins perform effects |
+| `--effects MODE` | effect handlers of the compiled code, `double-translation` or `disabled` | the default (double translation when the program performs effects or with `--cps-stack`, disabled with `--dynlink` otherwise) is right unless plugins perform effects |
 | `--threads` | `Thread.create` and `Domain.spawn` start real threads | a program with threads or domains, see [Threads](#threads) |
 | `--dynlink` | a program loading plugins (implied when it links `Emcc_dynlink`) | see [Plugins](#plugins) |
-| `--jspi` | links with JSPI (`-sJSPI`), with an asynchronous `main` and, compiled, deep recursions on new stacks | deep recursion in browsers that have JSPI, see [Deep recursion in a browser](#deep-recursion-in-a-browser) |
-| `--cps-stack` | compiled, deep recursions go on in CPS on the heap (a bigger program) | deep recursion in every browser, or with a synchronous `main`, see [Deep recursion in a browser](#deep-recursion-in-a-browser) |
+| `--jspi` | links with JSPI (`-sJSPI`), with an asynchronous `main` and, compiled, deep recursions on new stacks | deep recursion in browsers that have JSPI, see [Deep recursion in a browser](#deep-recursion-in-a-browser), or instead of `-sASYNCIFY` for C that suspends (`emscripten_sleep`, raylib's loop), with tail calls, a smaller program and plugins |
+| `--cps-stack` | compiled, deep recursions go on in CPS on the heap (a bigger program), plugins included | deep recursion in every browser, or with a synchronous `main`, see [Deep recursion in a browser](#deep-recursion-in-a-browser) |
 | `--wasi` | `OUT.wasm` for a WASI host | see [WASI](#wasi) |
 | `--wasix` | `--wasi`, with WASIX's sockets | network programs under wasmer |
 | `--node-fs` | the real file system and environment, node only | programs reading files installed with them (dune-site, why3's `share/why3`, frama-c) or the user's files |
@@ -331,9 +334,11 @@ ocaml-emcc build app.js --jspi         # or --cps-stack
 | size of the `.wasm` | about 4 % more | 0 to 10 % more for small numeric programs, about 50 % more with `Printf` or `Format` (61 % for MOPSA, 22 to 36 MB), twice as much C to compile |
 | speed | about 2 % slower on average over c_of_ocaml's benchmarks, up to a third on a plain recursion of integers | 23 of 24 benchmarks within 4 %, the part past the limit 2 to 3 times slower than with JSPI when it does not allocate |
 | recursions still limited by the stack | in callbacks from C or JavaScript | in callbacks from C, through functions with unboxed (float) arguments or results, and tree recursions without frames (`fib`) |
-| plugins (`--dynlink`) | yes | no |
+| plugins (`--dynlink`) | yes, their code goes on new stacks too | yes, the plugins compiled with `--cps-stack` too (see [Plugins](#plugins)) |
+| suspending C (`emscripten_sleep`...) | yes, instead of `-sASYNCIFY` | no |
 
-**Choosing.** `--jspi` costs almost nothing where JSPI exists.
+**Choosing.** `--jspi` costs almost nothing where JSPI exists, and
+replaces `-sASYNCIFY` for C that suspends.
 `--cps-stack` works in every browser and keeps `main` synchronous, for a
 bigger program, and suits a site that Safari or an older Firefox visit, or
 a page that drives the program synchronously. A recursion crossing the
@@ -371,6 +376,9 @@ results, in 1.77 s (1.81 s without it on a large stack, 1.72 s with
   runs a `--jspi` build with `node --experimental-wasm-jspi`.
 - No `--jspi` for a standalone `.wasm` (`--wasi`), as JSPI works through
   the JavaScript glue.
+- The C functions of emscripten that suspend (`emscripten_sleep`) work as
+  with `-sASYNCIFY`, which `--jspi` takes precedence over, also in C
+  calling OCaml back and under the code of plugins.
 
 ### raylib in a browser
 

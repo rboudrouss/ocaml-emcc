@@ -34,7 +34,9 @@ link options (build and link):
                   (Chrome and Edge 137 or later; node 24 with
                   --experimental-wasm-jspi): main is asynchronous, and the
                   compiled code recurses deeply on new stacks of the engine
-                  (a browser gives it 500 KB to 1 MB); no standalone .wasm
+                  (a browser gives it 500 KB to 1 MB); instead of
+                  -sASYNCIFY for C that suspends (emscripten_sleep): tail
+                  calls kept, a smaller program; no standalone .wasm
   --cps-stack     compiled: deep recursions go on in CPS, on the heap, in
                   every browser and with a synchronous main (c_of_ocaml's
                   --cps-stack), for a program about 1.5 times bigger; with
