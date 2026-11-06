@@ -21,6 +21,7 @@
 
 /* printexc.h declares it with CAML_INTERNALS only */
 extern void caml_fatal_uncaught_exception(value exn);
+extern value caml_sys_exit(value);
 
 #ifdef OCAML_EMCC_DYNLINK
 
@@ -97,6 +98,11 @@ CAMLprim value caml_emcc_dynlink_run(value h)
    callbacks call the OCaml continuation (root in a malloc'd cell) with
    Ok handle or Error message. */
 
+/* The loads not finished yet, and whether main returned before them (in a
+   pthread, with threads: see main.c, the last of them then exits) */
+int ocaml_emcc_dynlink_pending = 0;
+int ocaml_emcc_main_returned = 0;
+
 static void resume(void *cell, value result)
 {
   value k = *(value *)cell, r;
@@ -104,6 +110,7 @@ static void resume(void *cell, value result)
   free(cell);
   r = caml_callback_exn(k, result);
   if (Is_exception_result(r)) caml_fatal_uncaught_exception(Extract_exception(r));
+  if (--ocaml_emcc_dynlink_pending == 0 && ocaml_emcc_main_returned) caml_sys_exit(Val_int(0));
 }
 
 static void opened(void *cell, void *h)
@@ -135,6 +142,7 @@ CAMLprim value caml_emcc_dynlink_open_async(value url, value k)
   if (cell == NULL) caml_raise_out_of_memory();
   *cell = k;
   caml_register_generational_global_root(cell);
+  ocaml_emcc_dynlink_pending++;
   emscripten_dlopen(String_val(url), RTLD_NOW | RTLD_LOCAL, cell, opened, failed);
   return Val_unit;
 }

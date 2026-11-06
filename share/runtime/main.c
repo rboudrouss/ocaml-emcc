@@ -27,12 +27,28 @@ extern value caml_sys_exit(value);
 
 #if defined(OCAML_EMCC_COMPILED)
 
+#include <emscripten.h>
+#include <emscripten/threading.h>
+
 extern void camlc_main(char **argv);
+
+/* dynlink.c's, with --dynlink: the plugins Emcc_dynlink.load_url is
+   loading, and set here when main returned before them */
+extern int ocaml_emcc_dynlink_pending __attribute__((weak));
+extern int ocaml_emcc_main_returned __attribute__((weak));
 
 int main(int argc, char **argv)
 {
   (void)argc;
   camlc_main(argv);
+  /* With threads, main runs in a pthread (-sPROXY_TO_PTHREAD), where exit
+     ends the program at once, before the callbacks of load_url.  The
+     thread stays alive instead, and the last callback exits. */
+  if (&ocaml_emcc_dynlink_pending != NULL && ocaml_emcc_dynlink_pending > 0
+      && !emscripten_is_main_runtime_thread()) {
+    ocaml_emcc_main_returned = 1;
+    emscripten_exit_with_live_runtime();
+  }
   caml_sys_exit(Val_int(0));
   return 0;
 }
