@@ -585,8 +585,9 @@ let resolve_libs ~extra_dirs ~auto_deps ~bc_path bc =
          go true)
 
 (* The -l flags of the linked libraries (dune's c_library_flags), recorded
-   by the toolchain's ocamlc in meta/cclibs/<md5 of PROG.bc>: each -lX
-   becomes the wasm libX.a if there is one.  Host flags (-L, -Wl,-rpath...)
+   by the toolchain's ocamlc in meta/cclibs/<md5 of PROG.bc>, with the C
+   objects of the executable (its foreign_stubs): each -lX becomes the
+   wasm libX.a if there is one.  Host flags (-L, -Wl,-rpath...)
    are dropped, so are the libraries emcc provides (libc, libm...), and
    -lstdc++ links as C++.  A library built with `ocamlmklib -custom`
    (stb_image) forces a custom link: its stubs are only named here, not in
@@ -604,7 +605,10 @@ let cclib_flags ~auto_deps ~dirs bc_path =
            if Hashtbl.mem seen f then []
            else (
              Hashtbl.add seen f ();
-             if not (Str_util.starts_with ~prefix:"-l" f) then []
+             (* the executable's own C objects and archives (wasm, compiled
+                in the target's context) *)
+             if (Filename.check_suffix f ".o" || Filename.check_suffix f ".a") && Sys.file_exists f then [ f ]
+             else if not (Str_util.starts_with ~prefix:"-l" f) then []
              else
                let n = String.sub f 2 (String.length f - 2) in
                match n with

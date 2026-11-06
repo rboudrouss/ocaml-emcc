@@ -82,6 +82,13 @@ for a in "$@"; do
     -o) out=$a ;;
     -I) incs="$incs $a" ;;
     -cclib|-ccopt) cclibs="$cclibs $a" ;;
+    *)
+      # the C objects and archives of the executable itself (its
+      # foreign_stubs, compiled with emcc), which the custom link would
+      # have linked
+      case "$a" in
+        *.o|*.a) [ -f "$a" ] && case "$a" in /*) cclibs="$cclibs $a" ;; *) cclibs="$cclibs $PWD/$a" ;; esac ;;
+      esac ;;
   esac
   prev=$a
 done
