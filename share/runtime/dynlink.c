@@ -23,12 +23,14 @@
 extern void caml_fatal_uncaught_exception(value exn);
 extern value caml_sys_exit(value);
 
-#ifdef OCAML_EMCC_DYNLINK
-
+#if defined(OCAML_EMCC_DYNLINK) || defined(OCAML_EMCC_BYTECODE_DLLS)
 /* The TLS block of the main thread: dynlink.js turns the offsets of the
    thread-local variables the program exports into addresses for its
    plugins */
 EMSCRIPTEN_KEEPALIVE void *ocaml_emcc_tls_base(void) { return __builtin_wasm_tls_base(); }
+#endif
+
+#ifdef OCAML_EMCC_DYNLINK
 
 #ifdef OCAML_EMCC_DOUBLE_TRANSLATION
 /* Exported by a program c_of_ocaml compiled with effects (double
@@ -151,11 +153,83 @@ CAMLprim value caml_emcc_dynlink_open_async(value url, value k)
 
 static void no_dynlink(void)
 {
+#ifdef OCAML_EMCC_BYTECODE_DLLS
+  caml_failwith("Emcc_dynlink loads compiled plugins, and the program is interpreted: Dynlink loads bytecode ones");
+#else
   caml_failwith("Emcc_dynlink: the program is not linked for plugins (ocaml-emcc link/build --dynlink)");
+#endif
 }
 
 CAMLprim value caml_emcc_dynlink_loadfile(value path) { (void)path; no_dynlink(); return Val_unit; }
 CAMLprim value caml_emcc_dynlink_run(value h) { (void)h; no_dynlink(); return Val_unit; }
 CAMLprim value caml_emcc_dynlink_open_async(value url, value k) { (void)url; (void)k; no_dynlink(); return Val_unit; }
+
+#endif
+
+#ifdef OCAML_EMCC_BYTECODE_DLLS
+
+/* An interpreted program linked with --dynlink (a main module): the
+   interpreter's Dynlink loads the C of bytecode plugins, the dllX.so their
+   .cma names, which `ocaml-emcc plugin --interpreted` builds as emscripten
+   side modules.  Dynlink finds them in CAML_LD_LIBRARY_PATH, which may
+   name the host's (with --node-fs, an opam switch's stublibs): dlopen
+   (-Wl,--wrap=dlopen) then looks for the wasm one in the directories of
+   $OCAML_EMCC_STUBLIBS, then in the current directory. */
+
+/* Read by `ocaml-emcc plugin --main`: the plugins of an interpreted
+   program are its .cma files and their wasm dllX.so */
+EMSCRIPTEN_KEEPALIVE void ocaml_emcc_interpreted(void) {}
+
+#ifdef OCAML_EMCC_THREADS
+EMSCRIPTEN_KEEPALIVE void ocaml_emcc_threads(void) {}
+#endif
+
+extern void *__real_dlopen(const char *path, int flags);
+extern char *__real_dlerror(void);
+
+static char dl_error[1024];
+
+static int is_wasm(const char *path)
+{
+  unsigned char m[4];
+  FILE *f = fopen(path, "rb");
+  int ok = f != NULL && fread(m, 1, 4, f) == 4 && m[0] == 0 && m[1] == 'a' && m[2] == 's' && m[3] == 'm';
+  if (f != NULL) fclose(f);
+  return ok;
+}
+
+void *__wrap_dlopen(const char *path, int flags)
+{
+  const char *base, *dirs, *d;
+  char buf[4096];
+  if (path == NULL || is_wasm(path)) return __real_dlopen(path, flags);
+  base = strrchr(path, '/');
+  base = base != NULL ? base + 1 : path;
+  dirs = getenv("OCAML_EMCC_STUBLIBS");
+  for (d = dirs; d != NULL && *d != 0;) {
+    const char *e = strchr(d, ':');
+    size_t n = e != NULL ? (size_t)(e - d) : strlen(d);
+    if (n > 0) {
+      snprintf(buf, sizeof buf, "%.*s/%s", (int)n, d, base);
+      if (is_wasm(buf)) return __real_dlopen(buf, flags);
+    }
+    d = e != NULL ? e + 1 : NULL;
+  }
+  if (is_wasm(base)) return __real_dlopen(base, flags);
+  snprintf(dl_error, sizeof dl_error,
+           "%s, and no wasm %s in $OCAML_EMCC_STUBLIBS nor the current directory "
+           "(`ocaml-emcc plugin --interpreted LIB.cma` builds it)",
+           access(path, R_OK) == 0 ? "not wasm" : "not found", base);
+  return NULL;
+}
+
+char *__wrap_dlerror(void)
+{
+  static char last[sizeof dl_error];
+  if (dl_error[0] == 0) return __real_dlerror();
+  memcpy(last, dl_error, sizeof last);
+  dl_error[0] = 0;
+  return last;
+}
 
 #endif

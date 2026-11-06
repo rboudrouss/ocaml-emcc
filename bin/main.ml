@@ -86,6 +86,10 @@ step by step (scripts, Makefiles, projects without dune):
                                --main checks that the program exports what
                                it needs, and gives its effects mode,
                                --cps-stack and --threads
+  plugin --interpreted LIB.cma [-o DIR] [--main PROG.js]
+                               the stubs of a bytecode plugin, DIR/dllX.so
+                               (wasm), for the Dynlink of a program linked
+                               with --interpreted --dynlink (--main: implied)
   env [--cflags|--sysroot]     paths and configuration; --cflags prints the
                                flags to compile C stubs with emcc
 
@@ -288,7 +292,7 @@ let cmd_link args =
   | _ -> die_usage ()
 
 let cmd_plugin args =
-  let effects = ref None and cps_stack = ref false and threads = ref false in
+  let effects = ref None and cps_stack = ref false and threads = ref false and interpreted = ref false in
   let rec go out main opt pos = function
     | "-o" :: f :: rest -> go (Some f) main opt pos rest
     | "--main" :: f :: rest -> go out (Some f) opt pos rest
@@ -296,14 +300,16 @@ let cmd_plugin args =
     | "--effects" :: e :: rest -> effects := Some e; go out main opt pos rest
     | "--cps-stack" :: rest -> cps_stack := true; go out main opt pos rest
     | "--threads" :: rest -> threads := true; go out main opt pos rest
+    | "--interpreted" :: rest -> interpreted := true; go out main opt pos rest
     | x :: rest when not (Str_util.starts_with ~prefix:"-" x) -> go out main opt (x :: pos) rest
     | [] -> (out, main, opt, List.rev pos)
     | x :: _ -> Env.fail "unexpected argument %s" x
   in
   match go None None "-O2" [] args with
-  | Some output, main, opt, [ input ] ->
+  | output, main, opt, [ input ] when output <> None || !interpreted || main <> None ->
       ensure_setup ();
-      Link.plugin ?effects:!effects ~cps_stack:!cps_stack ~threads:!threads ~input ~output ~main ~opt ()
+      Link.plugin ?effects:!effects ~cps_stack:!cps_stack ~threads:!threads ~interpreted:!interpreted ~input
+        ~output:(Option.value output ~default:"") ~main ~opt ()
   | _ -> die_usage ()
 
 (* ----------------------------------------------------------------- build *)

@@ -879,7 +879,6 @@ let run o =
   if standalone && o.jspi then
     Env.fail "--jspi (JSPI) suspends the wasm code through the JavaScript glue: link OUT.js or OUT.html, not a standalone %s" o.output;
   if o.compiled then check_compiled ();
-  if o.dynlink && not o.compiled then Env.fail "--dynlink: plugins need the compiled mode (not --interpreted)";
   if o.dynlink && standalone then Env.fail "--dynlink: plugins are loaded by the JavaScript glue: link OUT.js, not a standalone .wasm";
   if o.threads then check_threads ~standalone o;
   (* (compiled, c_of_ocaml warns of them itself) *)
@@ -899,6 +898,9 @@ let run o =
   if not (standalone || o.compiled) then Bytecode.write ~drop:[ "DLLS"; "DLPT" ] bc bc_out;
   (* 2. primitive table *)
   let prims = Bytecode.primitives bc in
+  (* (interpreted: the C of bytecode plugins, loaded by Dynlink) *)
+  if (not o.compiled) && (not o.dynlink) && (not standalone) && List.mem "caml_dynlink_open_lib" prims then
+    Env.log "note: Dynlink loads bytecode plugins; those with C stubs need --dynlink";
   let arities = Bytecode.call_arities bc in
   let prims_src = Filename.concat work "prims.c" in
   (* 3. libraries *)
@@ -979,7 +981,8 @@ let run o =
          [ runtime_object ~emcc ~lib_syms ~work "dynlink"
              ~flags:
                (Env.manifest_flags "cflags" @ [ o.opt; "-I" ^ Env.sysroot_file "lib/ocaml" ]
-               @ (if o.dynlink then [ "-DOCAML_EMCC_DYNLINK" ] else [])
+               @ (if o.dynlink && o.compiled then [ "-DOCAML_EMCC_DYNLINK" ] else [])
+               @ (if o.dynlink && not o.compiled then [ "-DOCAML_EMCC_BYTECODE_DLLS" ] else [])
                @ (* (the effects c_of_ocaml compiled the program with, which
                     `plugin --main` reads back) *)
                  (match compiled with
@@ -1166,6 +1169,8 @@ let run o =
     if not o.dynlink then []
     else
       [ "-sMAIN_MODULE=2"; "-sEXPORTED_FUNCTIONS=@" ^ exports_file ]
+      @ (* the wasm dllX.so of bytecode plugins (dynlink.c) *)
+      (if o.compiled then [] else [ "-Wl,--wrap=dlopen"; "-Wl,--wrap=dlerror" ])
       @ (* the thread-local variables of the program for its plugins
            (emscripten relocates them itself with threads) *)
       if o.threads then []
@@ -1226,6 +1231,8 @@ let run o =
     let exports =
       main_exports ~objects:(program_objs @ exported) ~exported
         ~archives:(archives @ user_archives () @ flag_archives @ emscripten_system_libs ())
+      (* (renamed by --wrap, interpreted) *)
+      |> List.filter (fun s -> o.compiled || not (s = "dlopen" || s = "dlerror"))
     in
     Env.log "--dynlink: a main module exporting %d symbols for its plugins" (List.length exports);
     write_file exports_file
@@ -1296,24 +1303,112 @@ let cma_c_libs input =
 (* Their wasm archives, compiled as position-independent code (as all the
    C of the sysroot, Toolchain.compile_flags), linked into the plugin:
    built when missing, as for a program. *)
+let find_or_build_archive ~dirs ~input n =
+  (* (wasm ones only: next to a .cma of the host's are the host's) *)
+  let found () =
+    Compat.find_map (fun d -> match Deps.find_lib [ d ] n with Some a when Archive.is_wasm a -> Some a | _ -> None) dirs
+  in
+  match found () with
+  | Some a -> Some a
+  | None -> (
+      (match Deps.owner_of_dll n with
+      | Some pkg ->
+          Env.log "lib%s.a missing, building it from opam package %s" n pkg;
+          Deps.obtain pkg n
+      | None -> ( match Deps.lib_recipe n with Some r -> Deps.install_recipe r | None -> ()));
+      match found () with
+      | Some a -> Some a
+      | None ->
+          Env.log "note: %s asks for -l%s, no wasm lib%s.a found: ignored" (Filename.basename input) n n;
+          None)
+
 let plugin_archives input =
   let dirs = [ Filename.dirname input; Env.sysroot_file "lib" ] in
-  cma_c_libs input
-  |> List.filter_map (fun n ->
-         let found () = Deps.find_lib dirs n in
-         match found () with
-         | Some a -> Some a
-         | None -> (
-             (match Deps.owner_of_dll n with
-             | Some pkg ->
-                 Env.log "lib%s.a missing, building it from opam package %s" n pkg;
-                 Deps.obtain pkg n
-             | None -> ( match Deps.lib_recipe n with Some r -> Deps.install_recipe r | None -> ()));
-             match found () with
-             | Some a -> Some a
-             | None ->
-                 Env.log "note: %s asks for -l%s, no wasm lib%s.a found: ignored" (Filename.basename input) n n;
-                 None))
+  List.filter_map (find_or_build_archive ~dirs ~input) (cma_c_libs input)
+
+(* The symbols the side module OUTPUT imports are exported by the program
+   WASM (EXPORTS), or by the module itself (the GOT entries of its own
+   functions whose address it takes, its C) *)
+let check_imports ~wasm ~exports output =
+  let exported = Hashtbl.create 4096 in
+  List.iter (fun s -> Hashtbl.replace exported s ()) (exports @ Wasm.exports output);
+  let missing =
+    Wasm.imports output
+    |> List.filter_map (fun (m, f) ->
+           if (m = "env" || m = "GOT.mem" || m = "GOT.func") && not (Str_util.starts_with ~prefix:"__" f || f = "memory")
+              && not (Hashtbl.mem exported f)
+           then Some f
+           else None)
+    |> List.sort_uniq compare
+  in
+  match missing with
+  | [] -> Env.log "%s: every symbol it imports is exported by %s" output wasm
+  | l ->
+      Env.fail
+        "%s imports %d symbol(s) that %s does not export: %s\n\
+        \  The C a plugin calls is in the plugin (the libraries its .cma names) or in the\n\
+        \  program, linked with --dynlink (and -linkall)." output (List.length l) wasm (String.concat " " l)
+
+(* The libraries of the stubs a .cma loads (-dllib -lX, its DLLS for
+   Dynlink), as ocamlobjinfo reports them *)
+let cma_dllibs input =
+  match Env.output_of (Filename.concat (Env.host_bin ()) "ocamlobjinfo") [ input ] with
+  | None -> []
+  | Some out ->
+      let field = "Extra dynamically-loaded libraries:" in
+      String.split_on_char '\n' out
+      |> Compat.concat_map (fun l ->
+             if Str_util.starts_with ~prefix:field l then
+               Str_util.words (String.sub l (String.length field) (String.length l - String.length field))
+             else [])
+      |> List.filter_map (fun w ->
+             if Str_util.starts_with ~prefix:"-l" w then Some (String.sub w 2 (String.length w - 2))
+             else if Str_util.starts_with ~prefix:"dll" w then
+               Some (Filename.remove_extension (String.sub w 3 (String.length w - 3)))
+             else None)
+      |> List.filter (fun n -> not (List.mem_assoc n runtime_libs))
+      |> List.sort_uniq compare
+
+(* LIB.cma -> DIR/dllX.so for each library of stubs it loads: an emscripten
+   side module of the wasm libX.a (all of it, as Dynlink looks its
+   primitives up by name) and of the other C libraries the .cma names,
+   which the interpreter's Dynlink loads in a program linked with
+   --interpreted --dynlink (see dynlink.c).  The .cma itself is the
+   plugin, as for ocamlrun. *)
+let bytecode_plugin ?(threads = false) ~input ~out_dir ~main ~opt () =
+  if not (Env.toolchain_ready ()) then
+    Env.fail "no wasm runtime in %s, run `ocaml-emcc setup` first" (Env.sysroot ());
+  if not (Filename.check_suffix input ".cma" || Filename.check_suffix input ".cmo") then
+    Env.fail "plugin: %s is not a .cma or .cmo file" input;
+  if not (Sys.file_exists input) then Env.fail "plugin: %s: no such file" input;
+  let main_wasm = Option.map (fun m -> if Filename.check_suffix m ".js" then Filename.chop_suffix m ".js" ^ ".wasm" else m) main in
+  let main_exports = Option.map Wasm.exports main_wasm in
+  let threads = threads || match main_exports with Some l -> List.mem "ocaml_emcc_threads" l | None -> false in
+  let dllibs = if Filename.check_suffix input ".cma" then cma_dllibs input else [] in
+  if dllibs = [] then Env.log "%s has no C stubs: Dynlink loads it as it is" (Filename.basename input)
+  else (
+    mkdir_p out_dir;
+    let dirs = [ Filename.dirname input; Env.sysroot_file "lib" ] in
+    let archive n =
+      match find_or_build_archive ~dirs ~input n with
+      | Some a -> a
+      | None -> Env.fail "plugin: no wasm lib%s.a for the stubs of %s" n (Filename.basename input)
+    in
+    let others = List.filter (fun a -> not (List.exists (fun n -> Filename.basename a = "lib" ^ n ^ ".a") dllibs)) (plugin_archives input) in
+    let emcc = Env.emcc () in
+    let threads = if threads then [ "-pthread"; "-Wno-pthreads-mem-growth" ] else [] in
+    List.iter
+      (fun n ->
+        let output = Filename.concat out_dir ("dll" ^ n ^ ".so") in
+        Env.log "linking %s (wasm, for the interpreter's Dynlink)" output;
+        Env.run_exn emcc
+          (Env.manifest_flags "ldflags" @ [ opt; "-sSIDE_MODULE=1" ] @ threads
+          @ [ "-Wl,--whole-archive"; archive n; "-Wl,--no-whole-archive" ]
+          @ others @ [ "-o"; output ]);
+        match (main_wasm, main_exports) with
+        | Some wasm, Some exports -> check_imports ~wasm ~exports output
+        | _ -> ())
+      dllibs)
 
 (* FILE.cma or FILE.cmo -> an emscripten side module, loaded by a program
    linked with --dynlink (Emcc_dynlink): c_of_ocaml compiles it to C that
@@ -1321,7 +1416,23 @@ let plugin_archives input =
    position-independent code.  With [main] (the program's OUT.js or
    OUT.wasm), the symbols the plugin imports are checked against those the
    program exports. *)
-let plugin ?effects ?(cps_stack = false) ?(threads = false) ~input ~output ~main ~opt () =
+let rec plugin ?effects ?(cps_stack = false) ?(threads = false) ?(interpreted = false) ~input ~output ~main ~opt () =
+  (* (an interpreted program: its plugins are bytecode, and their stubs
+     dllX.so) *)
+  let main_is_interpreted () =
+    match main with
+    | Some m ->
+        let w = if Filename.check_suffix m ".js" then Filename.chop_suffix m ".js" ^ ".wasm" else m in
+        Sys.file_exists w && List.mem "ocaml_emcc_interpreted" (Wasm.exports w)
+    | None -> false
+  in
+  if interpreted || main_is_interpreted () then (
+    if not interpreted then Env.log "the program is interpreted: the plugin is the bytecode, with its stubs as wasm dllX.so";
+    bytecode_plugin ~threads ~input ~out_dir:(if output = "" then "." else output) ~main ~opt ())
+  else plugin_compiled ?effects ~cps_stack ~threads ~input ~output ~main ~opt ()
+
+and plugin_compiled ?effects ~cps_stack ~threads ~input ~output ~main ~opt () =
+  if output = "" then Env.fail "plugin: -o OUT.wasm missing";
   if not (Env.toolchain_ready ()) then
     Env.fail "no wasm runtime in %s, run `ocaml-emcc setup` first" (Env.sysroot ());
   check_compiled ();
@@ -1401,25 +1512,5 @@ let plugin ?effects ?(cps_stack = false) ?(threads = false) ~input ~output ~main
   let threads = if threads then [ "-pthread"; "-Wno-pthreads-mem-growth" ] else [] in
   Env.run_exn emcc (Env.manifest_flags "ldflags" @ [ opt; "-sSIDE_MODULE=1" ] @ threads @ objs @ archives @ [ "-o"; output ]);
   match (main_wasm, main_exports) with
-  | None, _ | _, None -> ()
-  | Some wasm, Some exports -> (
-      (* (or by the plugin itself: the GOT entries of its own functions
-         whose address it takes, its C) *)
-      let exported = Hashtbl.create 4096 in
-      List.iter (fun s -> Hashtbl.replace exported s ()) (exports @ Wasm.exports output);
-      let missing =
-        Wasm.imports output
-        |> List.filter_map (fun (m, f) ->
-               if (m = "env" || m = "GOT.mem" || m = "GOT.func") && not (Str_util.starts_with ~prefix:"__" f || f = "memory")
-                  && not (Hashtbl.mem exported f)
-               then Some f
-               else None)
-        |> List.sort_uniq compare
-      in
-      match missing with
-      | [] -> Env.log "%s: every symbol it imports is exported by %s" output wasm
-      | l ->
-          Env.fail
-            "%s imports %d symbol(s) that %s does not export: %s\n\
-            \  The C a plugin calls is in the plugin (the libraries its .cma names) or in the\n\
-            \  program, linked with --compiled --dynlink (and -linkall)." output (List.length l) wasm (String.concat " " l))
+  | Some wasm, Some exports -> check_imports ~wasm ~exports output
+  | _ -> ()
