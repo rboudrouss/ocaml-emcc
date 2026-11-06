@@ -110,12 +110,12 @@ jobs:
         run: |
           case ${{ matrix.target }} in wasi) args=--wasi ;; *) args="--target ${{ matrix.target }}" ;; esac
           opam exec -- bash -c "SWITCH=\$(opam var prefix) tests/run.sh $args"
-      # the runtime's threads and sockets, interpreted too
-      - name: tests/run.sh --interpreted threads sockets (${{ matrix.target }})
+      # the runtime's threads and sockets, interpreted too, and Dynlink's plugins
+      - name: tests/run.sh --interpreted threads sockets dynbyte (${{ matrix.target }})
         run: |
           case ${{ matrix.target }} in wasi) args=--wasi ;; *) args="--target ${{ matrix.target }}" ;; esac
           args="$args --interpreted"
-          opam exec -- bash -c "SWITCH=\$(opam var prefix) tests/run.sh $args threads domains threadsweb lwtthreads sockets"
+          opam exec -- bash -c "SWITCH=\$(opam var prefix) tests/run.sh $args threads domains threadsweb lwtthreads sockets dynbyte"
       # (cancelled: a timeout)
       - if: failure() || cancelled()
         uses: actions/upload-artifact@v7

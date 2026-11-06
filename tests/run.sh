@@ -98,6 +98,7 @@ mccs      | mc       |            | mccs                        | wasm32 wasm64 
 dynlink   | main     |            | compiled                    | wasm32 wasm64      |
 dyneffects | main    |            | compiled ocaml>=5           | wasm32 wasm64      |
 dyncps    | main     |            | compiled cps-stack-dynlink  | wasm32 wasm64      |
+dynbyte   | main     |            | interpreted                 | wasm32 wasm64      |
 dynthreads | main    |            | compiled                    | wasm32 wasm64      |
 dynweb    | main     |            | compiled playwright         | wasm32 wasm64      |
 jsoo      | js       |            | js_of_ocaml-ppx             | wasm32 wasm64      |
@@ -124,8 +125,7 @@ threadsockets | ts   |            | wasmer                      | wasi          
 # before ctypes was rebuilt for wasm32 (as yaml's are), were not tried since.
 # depgraph needs its package installed: opam install ./tests/depgraph/pkg
 # dynlink, dyneffects, dyncps, dynthreads and dynweb (plugins) are for the
-# compiled mode only.  dynthreads is not for wasm64, where emscripten's
-# dynamic linker aborts with threads.
+# compiled mode only, dynbyte (Dynlink's) for the interpreted one.
 # threads and domains (--threads) under --wasi need a wasmtime with
 # wasi-threads ($WASMTIME_THREADS, <= 46); threadsweb runs threads in
 # Chromium, as jsdom.  Compiled: c_of_ocaml 69880cea or later.

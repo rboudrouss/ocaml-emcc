@@ -1,0 +1,12 @@
+loaded a.cmo
+loaded b.cma
+a.cmo: The module `A' is already loaded (either by the main program or a previously-dynlinked library)
+r.cmo: execution of module initializers in the shared library failed: Failure("boom")
+loaded cst.cma
+loaded str.cma
+loaded u.cmo
+nodll.cma: cannot open its C, no wasm dllX.so
+a:X
+b:xx
+cst:42<7>
+u:y
