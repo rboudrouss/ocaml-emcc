@@ -865,6 +865,11 @@ let run o =
            (if o.cps_stack then "--cps-stack" else "--jspi") o.stack_size
      | _ -> ());
   if o.cps_stack && not o.compiled then Env.log "note: --cps-stack is for the compiled mode: ignored (interpreted)";
+  (* (emscripten's dynamic linker, reloading the plugins in each thread) *)
+  if o.dynlink && o.threads && o.jspi && not o.wasi then
+    Env.log "warning: --dynlink --threads --jspi: a thread started after a plugin is loaded fails (emscripten loads the plugins in it outside of JSPI: SuspendError)";
+  if o.dynlink && o.threads && !Env.target = "wasm64" && not o.wasi then
+    Env.log "warning: --dynlink --threads on wasm64: emscripten's dynamic linker may abort a load (table index is out of bounds)";
   if standalone && o.jspi then
     Env.fail "--jspi (JSPI) suspends the wasm code through the JavaScript glue: link OUT.js or OUT.html, not a standalone %s" o.output;
   if o.compiled then check_compiled ();
