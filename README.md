@@ -121,7 +121,7 @@ differs.
 | link time | about 1.5 times longer (the generated C is compiled) | |
 | tested | the whole test suite, in CI (OCaml 4.14 and 5.5, wasm32, wasm64, WASI) | in CI, threads, sockets and Jane Street's libraries only |
 | effect handlers (OCaml 5) | yes (c_of_ocaml's double translation, chosen per program, see `--effects`) | yes |
-| plugins (`--dynlink`) | yes | no |
+| plugins | `Emcc_dynlink` (`ocaml-emcc plugin`) | OCaml's `Dynlink`, of bytecode (see [Plugins](#plugins)) |
 | threads, domains, js_of_ocaml's library, WASI | yes | yes |
 | deep recursion | a 1 GB stack under node by default (millions of nested calls), the engine's 500 KB to 1 MB in browsers (6 000 to 15 000 nested calls), without limit with [`--jspi` or `--cps-stack`](#deep-recursion-in-a-browser) | the interpreter's own stack, as natively |
 | `Printexc.get_callstack` | empty (backtraces of exceptions work) | yes |
@@ -131,7 +131,8 @@ differs.
 
 The interpreted mode stays available for what the compiled one cannot do
 (OCaml before 4.14, `Marshal.Closures`, `Printexc.get_callstack`, very deep
-recursion in callbacks from C), or when c_of_ocaml fails on a program.
+recursion in callbacks from C, bytecode plugins loaded by `Dynlink`), or
+when c_of_ocaml fails on a program.
 It is not the default any more and is less tested. Report what breaks, but
 expect the compiled mode to be the one fixed first. With an OCaml older than
 4.14, `build` and `link` interpret, and say so. `interpreted: yes` in
@@ -178,6 +179,7 @@ steps, for scripts and Makefiles (see [Without dune](#without-dune)).
 | `build OUT [--exe DIR/NAME] [LINK OPTIONS] [-- EMCC-ARGS]` | the dune executable named like `OUT` (or `--exe`), its C stubs and those of its dependencies, the link |
 | `link PROG.bc -o OUT [LINK OPTIONS] [-- EMCC-ARGS]` | the link of a bytecode executable built otherwise |
 | `plugin LIB.cma\|M.cmo -o OUT.wasm [--main PROG.js] [--effects MODE] [--cps-stack] [--threads] [-O FLAG]` | a [plugin](#plugins), compiled and linked as the program with `--main` (effects, `--cps-stack`, threads), which also checks that the program exports what it needs |
+| `plugin --interpreted LIB.cma [-o DIR] [--main PROG.js]` | the C stubs of a bytecode plugin, `DIR/dllX.so` in wasm, for an interpreted program's `Dynlink` (implied by `--main` when the program is interpreted) |
 | `setup [--force]` | the wasm runtime of the switch's compiler (`build` and `link` do it the first time) |
 | `install [--force] RECIPE...` | build [recipes](#c-dependencies) (gmp, project recipes...), again with `--force` |
 | `dune [ARGS]` | `dune build -x TARGET ARGS` (the C stubs compiled with emcc), and their static archives |
@@ -198,7 +200,7 @@ needed.
 | `--compiled` | the default | accepted for older scripts |
 | `--effects MODE` | effect handlers of the compiled code, `double-translation` or `disabled` | the default (double translation when the program performs effects or with `--cps-stack`, disabled with `--dynlink` otherwise) is right unless plugins perform effects |
 | `--threads` | `Thread.create` and `Domain.spawn` start real threads | a program with threads or domains, see [Threads](#threads) |
-| `--dynlink` | a program loading plugins (implied when it links `Emcc_dynlink`) | see [Plugins](#plugins) |
+| `--dynlink` | a program loading plugins (implied when it links `Emcc_dynlink`), interpreted, the C of its bytecode plugins | see [Plugins](#plugins) |
 | `--jspi` | links with JSPI (`-sJSPI`), with an asynchronous `main` and, compiled, deep recursions on new stacks | deep recursion in browsers that have JSPI, see [Deep recursion in a browser](#deep-recursion-in-a-browser), or instead of `-sASYNCIFY` for C that suspends (`emscripten_sleep`, raylib's loop), with tail calls, a smaller program and plugins |
 | `--cps-stack` | compiled, deep recursions go on in CPS on the heap (a bigger program), plugins included | deep recursion in every browser, or with a synchronous `main`, see [Deep recursion in a browser](#deep-recursion-in-a-browser) |
 | `--wasi` | `OUT.wasm` for a WASI host | see [WASI](#wasi) |
@@ -234,6 +236,7 @@ needed.
 | `OCAML_EMCC_LDFLAGS` | build | more emcc link flags |
 | `OCAML_EMCC_EXTRA_CFLAGS` | build | more C flags for the stubs and recipes |
 | `OCAML_EMCC_STACK_MB` | run, node, compiled | the stack of the program, in MB (default 1024, `0` for node's main thread) |
+| `OCAML_EMCC_STUBLIBS` | run, interpreted, `--dynlink` | the directories (`:`-separated) of the wasm `dllX.so` of bytecode plugins, before the current one |
 | `OCAML_EMCC_CPUS` | run, WASI | `Domain.recommended_domain_count` (default 4) |
 | `OCAMLRUNPARAM` | run | as natively (`d=N` sets the number of domains), read with `--node-fs` and under WASI only, as elsewhere the program does not see the process's environment |
 
@@ -704,11 +707,37 @@ below.)
   thread started after a plugin is loaded fails (`SuspendError`). On
   wasm64, a load may abort (`table index is out of bounds`, the fifth
   plugin of `tests/dynlink`).
-- Compiled mode only (not `--interpreted`).
+- `Emcc_dynlink` is for the compiled mode, an interpreted program loads
+  bytecode (see below).
 - A program linked with asyncify (`-sASYNCIFY`, as raylib's) loads
   plugins, but must not suspend while the code of a plugin is on the
   stack, as asyncify only instruments the program. JSPI (`--jspi`) has no
   such limit.
+
+**Interpreted.** An interpreted program loads bytecode plugins, `.cmo`
+and `.cma` files, with OCaml's `Dynlink`, as `ocamlrun` does
+(`tests/dynbyte`). Plugins written in OCaml only need nothing more. Those with C
+stubs of their own (the `dllX.so` their `.cma` names) need the program
+linked with `--dynlink`, a main module exporting the runtime and the C
+it links, and their stubs built as wasm side modules.
+
+```sh
+ocaml-emcc build app.js --interpreted --dynlink
+ocaml-emcc plugin cst.cma --main app.js -o stublibs   # stublibs/dllcst.so, from the wasm libcst.a
+```
+
+- `plugin --interpreted` (or `--main` naming an interpreted program)
+  links each `dllX.so` of the `.cma` from its wasm `libX.a`, found next to
+  the `.cma` or in the sysroot, and built when missing, as for a program.
+  The `.cma` itself is the plugin. `str.cma` loads that way in a program
+  that does not link `Str`.
+- `Dynlink` looks for `dllX.so` in `CAML_LD_LIBRARY_PATH`, which may name
+  the host's (with `--node-fs`, those of the opam switch). The program
+  then loads the wasm one of `$OCAML_EMCC_STUBLIBS` or the current
+  directory instead, and says so when there is none. In a browser, put
+  them in emscripten's file system (`--preload-file`).
+- The C a plugin calls and does not link (libc's functions the program
+  does not use) is missing, which `--main` checks.
 
 ## Threads
 

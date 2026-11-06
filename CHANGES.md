@@ -45,6 +45,17 @@
   `.wasm`) links `Emcc_dynlink`.
 - The C of an executable's own `(foreign_stubs ...)` is linked (its
   primitives raised `Failure "... not implemented"`).
+- A program with plugins exports the usual C functions of libc
+  (`snprintf`, `strchr`, `qsort`...) even when it does not call them, as
+  the C of its plugins may (which C the program links depends on its
+  primitives).
+- Interpreted, `--dynlink` loads the C stubs of bytecode plugins (OCaml's
+  `Dynlink`, of a `.cma` naming a `dllX.so`), which `plugin --interpreted
+  LIB.cma -o DIR` builds as wasm side modules (`--main` naming an
+  interpreted program implies it). A host `dllX.so` that `Dynlink` finds
+  first gives way to the wasm one of `$OCAML_EMCC_STUBLIBS` or the current
+  directory. `link` notes that Dynlink's plugins with C need
+  `--dynlink`.
 - Plugins of a program linked with `--threads` load: `plugin --main`
   links them with `-pthread`, for the program's shared memory, as does
   `plugin --threads` (they failed with "could not load dynamic lib").
