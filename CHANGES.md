@@ -40,6 +40,14 @@
   (`asin` and `acos` were missing from those `link --dynlink` exported).
 - `--dynlink` is implied when a compiled program (not a standalone
   `.wasm`) links `Emcc_dynlink`.
+- Plugins of a program linked with `--threads` load: `plugin --main`
+  links them with `-pthread`, for the program's shared memory, as does
+  `plugin --threads` (they failed with "could not load dynamic lib").
+  The callback of `Emcc_dynlink.load_url` runs after `main` in such a
+  program (`main` running in a pthread, the program exited first).
+  `link` warns about the limits of emscripten's dynamic linker with
+  threads: with `--jspi`, a thread started after a plugin is loaded
+  fails, and on wasm64 a load may abort.
 - `--node-fs`, compiled: `Sys.chdir` changes the current directory, which
   relative paths then follow (node's worker thread running the program
   cannot change the process's: chdir did nothing, Rocq found none of its

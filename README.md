@@ -687,6 +687,15 @@ below.)
   the program's functions it calls not. The sizes add up: `-linkall`,
   double translation, then the CPS versions (about 60 % more than double
   translation alone for MOPSA).
+- With `--threads`, `plugin --main` links a plugin for the program's
+  shared memory, as does `plugin --threads`. The program's threads and
+  the plugin's run the code of the plugins, and the callback of
+  `load_url` runs after `main` (`tests/dynthreads`). Two limits of
+  emscripten's dynamic linker, which loads the plugins again in each
+  thread, remain, and ocaml-emcc warns about them. With `--jspi`, a
+  thread started after a plugin is loaded fails (`SuspendError`). On
+  wasm64, a load may abort (`table index is out of bounds`, the fifth
+  plugin of `tests/dynlink`).
 - Compiled mode only (not `--interpreted`).
 - A program linked with asyncify (`-sASYNCIFY`, as raylib's) loads
   plugins, but must not suspend while the code of a plugin is on the
