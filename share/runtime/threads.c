@@ -23,6 +23,7 @@
 #include <errno.h>
 #include <poll.h>
 #include <stdatomic.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <sys/select.h>
 #include <time.h>
@@ -33,8 +34,10 @@
 
 EM_JS_DEPS(ocaml_emcc_threads, "$cleanupThread");
 
-/* (wasm64: the pointer arrives as a BigInt) */
-EM_JS(void, ocaml_emcc_cleanup_thread, (void *thread), { cleanupThread(Number(thread)); });
+/* The address as a double: a pointer arrives in an EM_JS as a signed i32
+   (negative above 2 GB: an unknown thread, whose worker never came back)
+   or, on wasm64, a BigInt */
+EM_JS(void, ocaml_emcc_cleanup_thread, (double thread), { cleanupThread(thread); });
 
 /* A detached thread asks it while exiting, on its stack, in the block
    cleanupThread frees: the main thread can run the request before
@@ -49,7 +52,7 @@ static void cleanup_on_main(void *arg) {
   struct cleanup *c = arg;
   while (!atomic_load(&c->queued)) {
   }
-  ocaml_emcc_cleanup_thread(c->thread);
+  ocaml_emcc_cleanup_thread((double)(uintptr_t)c->thread);
   free(c);
 }
 
