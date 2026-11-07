@@ -83,6 +83,7 @@ cpsstack  | cs       |            | cps-stack                   | wasm32 wasm64 
 argon2    | ar       |            | argon2                      | wasm32 wasm64      |
 expat     | ex       |            | expat                       | wasm32 wasm64      |
 lmdb      | lm       |            | lmdb                        | wasm32 wasm64      |
+mapfile   | mf       |            | interpreted                 | wasm32 wasm64 wasi |
 glpk      | gl       |            | glpk                        | wasm32 wasm64      |
 fftw3     | ff       |            | fftw3                       | wasm32 wasm64      |
 secp      | sc       |            | secp256k1-internal          | wasm32 wasm64      |
