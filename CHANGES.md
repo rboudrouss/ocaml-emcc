@@ -68,6 +68,12 @@
   part of the table: looked up as a function, it got a slot in the
   table of one thread only, and on wasm64 the next loads aborted
   ("table index is out of bounds").
+- Domains, interpreted: the interpreter's state for its re-entries (see
+  the `ocaml` recipe) is per thread. Shared, two domains entering the
+  interpreter at the same time could take the other's, a rare crash
+  (memory access out of bounds, a few runs in a thousand of
+  `tests/domains`). (Sysroots built before note the change: `ocaml-emcc
+  install --force ocaml`.)
 - js_of_ocaml with `--threads`: a thread other than the main one calling
   JavaScript raises `Failure` (the program crashed: JavaScript values
   belong to the main thread), the GC of another thread releases
