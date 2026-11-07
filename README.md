@@ -142,6 +142,10 @@ expect the compiled mode to be the one fixed first. With an OCaml older than
 
 - **Speed**: there is little to gain when the program spends its time in
   C stubs (digestif's hash functions...).
+- **Small functions**: c_of_ocaml pads the module with small functions
+  (a few percent of its size) because V8 cuts the inlining budget of a
+  module that has few of them. This only helps V8 (node, Chrome), so
+  `--wasi` turns it off (c_of_ocaml's `--disable small-functions`).
 - **Stack depth**: the compiled code runs on the stack of the wasm engine,
   whereas the interpreter has a stack of its own. Under node, the program
   therefore runs in a worker thread with a stack of `$OCAML_EMCC_STACK_MB`
