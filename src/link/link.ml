@@ -351,10 +351,20 @@ let cps_stack_flag cooc = function
       | Some h when Str_util.find h "--cps-stack" <> None -> [ "--cps-stack" ]
       | _ -> Env.fail "--cps-stack: %s does not have it, a newer c_of_ocaml does" cooc)
 
+(* c_of_ocaml pads the module with small functions (its small-functions
+   option) so that V8 gives the module its full inlining budget, which it
+   cuts when few of its functions are small.  For a WASI host (wasmtime...),
+   only a larger module: disabled with --wasi, if this c_of_ocaml has the
+   option (an unknown one fails) *)
+let small_functions_flag cooc ~wasi =
+  if wasi && Env.capture cooc [ "--disable"; "small-functions"; "--version" ] <> None then
+    [ "--disable"; "small-functions" ]
+  else []
+
 (* PROG.bc -> PROG.c (c_of_ocaml), compiled with the runtime support of the
    generated code (camlc.h, camlc_runtime.c, whose camlc_main main.c
    calls), to be linked with libcamlrun.a: its interpreter is not used. *)
-let compile_to_c ?(dynlink = false) ?(cps_stack = false) ?effects ~emcc ~flags ~tail_calls ~work ~base bc_path =
+let compile_to_c ?(dynlink = false) ?(cps_stack = false) ?(wasi = false) ?effects ~emcc ~flags ~tail_calls ~work ~base bc_path =
   let cooc = c_of_ocaml () in
   let support = Filename.concat work "c_of_ocaml" in
   if not (Sys.file_exists support) then Unix.mkdir support 0o755;
@@ -373,7 +383,8 @@ let compile_to_c ?(dynlink = false) ?(cps_stack = false) ?effects ~emcc ~flags ~
   let cps_stack = cps_stack_flag cooc cps_stack in
   (* (backtraces when the bytecode has debug events, ocamlc -g: c_of_ocaml's
      default) *)
-  Env.run_exn cooc (word_size @ dynlink @ effects @ cps_stack @ [ bc_path; "--split"; c_dir ]);
+  let small_functions = small_functions_flag cooc ~wasi in
+  Env.run_exn cooc (word_size @ dynlink @ effects @ cps_stack @ small_functions @ [ bc_path; "--split"; c_dir ]);
   let parts =
     Sys.readdir c_dir |> Array.to_list
     |> List.filter (fun f -> Filename.check_suffix f ".c")
@@ -967,7 +978,7 @@ let run o =
       let asyncify f = Str_util.starts_with ~prefix:"-sASYNCIFY" f && f <> "-sASYNCIFY=0" in
       let tail_calls = List.exists jspi all || not (List.exists asyncify all) in
       if not tail_calls then Env.log "asyncify: compiled without wasm tail calls";
-      Some (compile_to_c ~dynlink:o.dynlink ~cps_stack:o.cps_stack ?effects:o.effects ~emcc ~flags:(cflags @ [ o.opt ] @ inc) ~tail_calls ~work ~base o.bc))
+      Some (compile_to_c ~dynlink:o.dynlink ~cps_stack:o.cps_stack ~wasi:o.wasi ?effects:o.effects ~emcc ~flags:(cflags @ [ o.opt ] @ inc) ~tail_calls ~work ~base o.bc))
     else None
   in
   let dynlink_objs =

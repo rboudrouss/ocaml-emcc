@@ -92,6 +92,9 @@
 - `--wasi`: files can be mapped (`Unix.map_file`, `mmap`), as with
   emscripten's glue: a copy, written back by `msync` and `munmap` when
   shared and writable (it failed with ENOSYS).
+- `--wasi`, compiled: c_of_ocaml's small functions padding the module,
+  which only V8's inlining heuristic needs, are left out (`--disable
+  small-functions`, when c_of_ocaml has it): a smaller module.
 - js_of_ocaml, compiled: the property and method names of the program
   (its literals) are decoded once, which halves the cost of a property
   access (120 to 65 ns) or a method call (280 to 140 ns).
