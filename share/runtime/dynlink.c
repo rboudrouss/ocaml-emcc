@@ -65,7 +65,9 @@ static void fail_dl(const char *what, const char *file)
 /* Runs the plugin: called from OCaml, as camlc_plugin_init must be */
 static value run(void *h, const char *file)
 {
-  value (*init)(void) = (value (*)(void))dlsym(h, "camlc_plugin_init");
+  /* (the entry's address, plugin_entry.c; a plugin built before has none) */
+  value (*const *entry)(void) = (value (*const *)(void))dlsym(h, "ocaml_emcc_plugin_entry");
+  value (*init)(void) = entry != NULL ? *entry : (value (*)(void))dlsym(h, "camlc_plugin_init");
   if (init == NULL) {
     char buf[1024];
     snprintf(buf, sizeof buf,

@@ -874,8 +874,6 @@ let run o =
   (* (emscripten's dynamic linker, reloading the plugins in each thread) *)
   if o.dynlink && o.threads && o.jspi && not o.wasi then
     Env.log "warning: --dynlink --threads --jspi: a thread started after a plugin is loaded fails (emscripten loads the plugins in it outside of JSPI: SuspendError)";
-  if o.dynlink && o.threads && !Env.target = "wasm64" && not o.wasi then
-    Env.log "warning: --dynlink --threads on wasm64: emscripten's dynamic linker may abort a load (table index is out of bounds)";
   if standalone && o.jspi then
     Env.fail "--jspi (JSPI) suspends the wasm code through the JavaScript glue: link OUT.js or OUT.html, not a standalone %s" o.output;
   if o.compiled then check_compiled ();
@@ -1514,6 +1512,9 @@ and plugin_compiled ?effects ~cps_stack ~threads ~input ~output ~main ~opt () =
         o)
       parts
   in
+  let entry = Filename.concat c_dir "plugin_entry.o" in
+  Env.run_exn emcc (flags @ [ "-c"; Filename.concat (Env.share ()) "runtime/plugin_entry.c"; "-o"; entry ]);
+  let objs = objs @ [ entry ] in
   let archives = plugin_archives input in
   Env.log "linking the plugin %s%s" output
     (if archives = [] then "" else " (with " ^ String.concat " " (List.map Filename.basename archives) ^ ")");
