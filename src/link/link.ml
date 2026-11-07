@@ -871,9 +871,6 @@ let run o =
            (if o.cps_stack then "--cps-stack" else "--jspi") o.stack_size
      | _ -> ());
   if o.cps_stack && not o.compiled then Env.log "note: --cps-stack is for the compiled mode: ignored (interpreted)";
-  (* (emscripten's dynamic linker, reloading the plugins in each thread) *)
-  if o.dynlink && o.threads && o.jspi && not o.wasi then
-    Env.log "warning: --dynlink --threads --jspi: a thread started after a plugin is loaded fails (emscripten loads the plugins in it outside of JSPI: SuspendError)";
   if standalone && o.jspi then
     Env.fail "--jspi (JSPI) suspends the wasm code through the JavaScript glue: link OUT.js or OUT.html, not a standalone %s" o.output;
   if o.compiled then check_compiled ();
@@ -1172,8 +1169,12 @@ let run o =
       (if o.compiled then [] else [ "-Wl,--wrap=dlopen"; "-Wl,--wrap=dlerror" ])
       @ (* the thread-local variables of the program for its plugins
            (emscripten relocates them itself with threads) *)
-      if o.threads then []
-      else [ "--js-library"; Filename.concat (Env.share ()) "runtime/dynlink.js"; "-sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE=$ocamlEmccTlsExports" ]
+      (if o.threads then []
+       else [ "--js-library"; Filename.concat (Env.share ()) "runtime/dynlink.js"; "-sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE=$ocamlEmccTlsExports" ])
+      @ (* (the plugins loaded by the threads that start after them) *)
+      if o.threads && o.jspi then
+        [ "--js-library"; Filename.concat (Env.share ()) "runtime/dynlink_jspi.js"; "-sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE=$ocamlEmccDlopenSync" ]
+      else []
   in
   let defaults =
     if o.dynlink then List.filter (fun f -> not (Str_util.starts_with ~prefix:"-sEXPORTED_FUNCTIONS=" f)) defaults
