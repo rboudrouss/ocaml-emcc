@@ -1,14 +1,16 @@
 # SQLite (conf-sqlite3), compiled from the amalgamation (sqlite3.c) of the
-# autoconf tarball, without running its configure.  Single-threaded;
-# extension loading is compiled in (for the API) but fails at run time: a
-# static wasm program has no dlopen.
+# autoconf tarball, without running its configure.  Thread-safe (sqlite's
+# default, SQLITE_THREADSAFE=1: its locks, for programs with threads, whose
+# stubs release the runtime around queries).  Extension loading is compiled
+# in (for the API) but fails at run time: a static wasm program has no
+# dlopen.
 
 SOURCE=system:sqlite3
 HEADER=sqlite3.h
 VERSION_MACROS=SQLITE_VERSION
 SQLITE_SITE=${SQLITE_SITE:-https://sqlite.org}
 # the options of the usual distribution builds; a project recipe may change them
-SQLITE_CFLAGS=${SQLITE_CFLAGS:-"-DSQLITE_THREADSAFE=0 -DSQLITE_ENABLE_FTS3 -DSQLITE_ENABLE_FTS3_PARENTHESIS -DSQLITE_ENABLE_FTS4 -DSQLITE_ENABLE_FTS5 -DSQLITE_ENABLE_RTREE -DSQLITE_ENABLE_GEOPOLY -DSQLITE_ENABLE_MATH_FUNCTIONS -DSQLITE_ENABLE_COLUMN_METADATA -DSQLITE_ENABLE_DBSTAT_VTAB -DSQLITE_SECURE_DELETE"}
+SQLITE_CFLAGS=${SQLITE_CFLAGS:-"-DSQLITE_THREADSAFE=1 -DSQLITE_ENABLE_FTS3 -DSQLITE_ENABLE_FTS3_PARENTHESIS -DSQLITE_ENABLE_FTS4 -DSQLITE_ENABLE_FTS5 -DSQLITE_ENABLE_RTREE -DSQLITE_ENABLE_GEOPOLY -DSQLITE_ENABLE_MATH_FUNCTIONS -DSQLITE_ENABLE_COLUMN_METADATA -DSQLITE_ENABLE_DBSTAT_VTAB -DSQLITE_SECURE_DELETE"}
 
 # Tarballs are named after the version number (3.46.1 -> 3460100) and stored
 # by year: both come from the release chronology.
