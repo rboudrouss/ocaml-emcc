@@ -11,4 +11,5 @@ tests/*/*ocaml-emcc
 *.a
 *.bc
 *.o
+*.so
 tests/versions-opam*.log
