@@ -100,6 +100,7 @@ dyneffects | main    |            | compiled ocaml>=5           | wasm32 wasm64 
 dyncps    | main     |            | compiled cps-stack-dynlink  | wasm32 wasm64      |
 dynbyte   | main     |            | interpreted                 | wasm32 wasm64      |
 dynthreads | main    |            | compiled                    | wasm32 wasm64      |
+dynjspi   | main     |            | compiled                    | wasm32 wasm64      |
 dynweb    | main     |            | compiled playwright         | wasm32 wasm64      |
 jsoo      | js       |            | js_of_ocaml-ppx             | wasm32 wasm64      |
 jsprims   | jp       |            | js_of_ocaml                 | wasm32 wasm64      |

@@ -60,6 +60,7 @@ stopped, and its test fails.
 | `jsoo`      | js_of_ocaml's library and ppx under node: properties, methods, strings, numbers, arrays, callbacks, OCaml values and exceptions through JavaScript, JavaScript errors, typed arrays, timers and promises after the main program |
 | `jsprims`   | primitives implemented in a JavaScript file (`js-files:` in `ocaml-emcc.conf`) |
 | `jsdom`     | a web page in headless Chromium (`check.mjs`, playwright): DOM, an event handler, `Js.export` |
+| `dynjspi`   | `dynthreads` with `--jspi` (`jspi: yes`): threads started after a plugin is loaded, a plugin loaded by `load_url` |
 | `jspi`      | `--jspi` (`jspi: yes`): recursions 200 000 calls deep (plain, allocating, `List.fold_right`, an exception crossing them) on node's main thread, whose 984 KB stack is that of browsers: compiled, they go on JSPI's new stacks (node 24 with `--experimental-wasm-jspi`). And `emscripten_sleep` without asyncify, in a loop, in C calling OCaml back, under such a recursion (the executable's own `foreign_stubs`) |
 | `cpsstack`  | the recursions of `jspi` with `--cps-stack` (`cps-stack: yes`), without JSPI: compiled, they go on in CPS, on the heap (skipped when c_of_ocaml has no `--cps-stack`) |
 | `localtime` | the local time zone's file (`/etc/localtime`, or that of `$TZ`) gives the offsets of `Unix.localtime` |
