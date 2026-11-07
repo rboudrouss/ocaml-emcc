@@ -15,11 +15,12 @@ addToLibrary({
   $ocamlEmccDlopenSync__postset:
     'if (ENVIRONMENT_IS_PTHREAD) { __dlopen_js = ocamlEmccDlopenSync; __emscripten_dlsync_threads.isAsync = false; }',
   $ocamlEmccDlopenSync: (handle) => {
-    var h = dlopenInternal(Number(handle), { loadAsync: false });
+    // (without the conversion of emscripten's pointer arguments: a signed
+    // i32 on wasm32, a BigInt on wasm64)
 #if MEMORY64
-    return BigInt(h);
+    return BigInt(dlopenInternal(Number(handle), { loadAsync: false }));
 #else
-    return h;
+    return dlopenInternal(handle >>> 0, { loadAsync: false });
 #endif
   },
 });
