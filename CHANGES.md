@@ -78,7 +78,11 @@
   freed once the thread no longer uses it. With `--wasi`, a detached
   thread (OCaml's threads and domains) freed it itself while still
   running on it; with emscripten's glue, the main thread could free it
-  while the thread was still asking it to.
+  while the thread was still asking it to. A thread whose memory is above
+  2 GB (wasm32) is given back too: its address, read as negative, was
+  that of no thread ("Cannot read properties of undefined (reading
+  'pthread_ptr')", then memory corruption, in programs starting and ending
+  many domains).
 - js_of_ocaml with `--threads`: a thread other than the main one calling
   JavaScript raises `Failure` (the program crashed: JavaScript values
   belong to the main thread), the GC of another thread releases
