@@ -105,6 +105,8 @@ jsoo      | js       |            | js_of_ocaml-ppx             | wasm32 wasm64 
 jsprims   | jp       |            | js_of_ocaml                 | wasm32 wasm64      |
 jsdom     | page     |            | js_of_ocaml-ppx playwright  | wasm32 wasm64      |
 sysjs     | sj       |            | js_of_ocaml                 | wasm32 wasm64      |
+jsthreads | jt       |            | js_of_ocaml                 | wasm32 wasm64      |
+jsthreadsweb | jt     |            | js_of_ocaml playwright      | wasm32 wasm64      |
 localtime | tz       |            |                             | wasm32 wasm64      |
 core      | cr       |            | core                        | wasm32 wasm64 wasi |
 async     | as       |            | async core_unix             | wasm32 wasm64 wasi |

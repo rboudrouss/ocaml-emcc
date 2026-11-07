@@ -68,6 +68,8 @@ stopped, and its test fails.
 | `asyncthreads` | async with `--threads`: `In_thread.run` jobs in threads, at once |
 | `asyncssl`  | async_ssl: a TLS 1.3 handshake between a server and its client over pipes, a self-signed certificate, data both ways (not under `--wasi`, interpreted: ctypes-foreign's libffi calls JavaScript) |
 | `sysjs`     | `Sys_js`: `stderr` and `stdin` redirected to functions, `create_file`, a mounted path giving files on demand (its `expected.txt` is js_of_ocaml's output) |
+| `jsthreads` | js_of_ocaml with `--threads`: a thread calling JavaScript gets `Failure`, the GC of another thread finalizes JavaScript values, a thread going on once main returned, with a timer's callbacks |
+| `jsthreadsweb` | `jsthreads` in headless Chromium, on a cross-origin isolated page |
 | `threads`   | `--threads`: Thread, Mutex, Condition, Event, `Thread.delay`, exceptions and `Thread.exit` in threads (node, WASI) |
 | `domains`   | `Domain.spawn` in parallel (OCaml 5.3+): Atomic, a mutex shared by domains, collections while they allocate, `Domain.DLS`, a thread in a domain |
 | `threadsweb` | `threads` in headless Chromium, on a cross-origin isolated page |
@@ -85,7 +87,7 @@ core_unix, async and async_ssl, whose libraries are rebuilt for the target
 `lwtsockets` and `threadsockets` run in wasmer (`$WASMER`, or in `PATH`),
 skipped without it.
 
-`jsdom`, `dynweb` and `threadsweb` need playwright and its Chromium (`npm i playwright`,
+`jsdom`, `dynweb`, `threadsweb` and `jsthreadsweb` need playwright and its Chromium (`npm i playwright`,
 `npx playwright install chromium-headless-shell`), found through
 `PLAYWRIGHT_DIR` (the directory of its `node_modules`) and
 `PLAYWRIGHT_BROWSERS_PATH`; it is skipped otherwise.

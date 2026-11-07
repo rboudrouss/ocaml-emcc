@@ -1,0 +1,6 @@
+main: MAIN
+thread: js_of_ocaml: JavaScript is only reachable from the main thread of the program
+main again: AFTER THE COLLECTIONS
+main returns
+callback: the thread made its 3 steps, AFTER MAIN
+done
