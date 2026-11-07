@@ -13,6 +13,9 @@
 #include <limits.h>
 #include <sys/stat.h>
 #include <emscripten.h>
+#include <emscripten/threading.h>
+#include <emscripten/proxying.h>
+#include <pthread.h>
 #include <caml/mlvalues.h>
 #include <caml/memory.h>
 #include <caml/alloc.h>
@@ -73,11 +76,29 @@ extern void ocaml_js_mount(double p, int len, int ft, double fx);
 static double ret_slot;
 static struct { int32_t tag, pad; double x; } out_slot;
 static int initialized;
+static pthread_t main_thread;
+
+/* (below: OCaml run from JavaScript gets the runtime back if it was
+   released) */
+int ocaml_emcc_js_runtime_enter(void);
+void ocaml_emcc_js_runtime_exit(int was_blocking);
+
+/* JavaScript values are those of the main thread (the page's): the
+   JavaScript of the other threads (workers) has none of them.  So only the
+   main thread calls JavaScript; the others work in OCaml, and go through
+   it (a Mutex, an Event...). */
+static void main_thread_only(void)
+{
+  if (!emscripten_is_main_runtime_thread())
+    caml_failwith("js_of_ocaml: JavaScript is only reachable from the main thread of the program");
+}
 
 static void init(void)
 {
+  main_thread_only();
   if (initialized) return;
   initialized = 1;
+  main_thread = pthread_self();
   ocaml_js_init(ADDR(&ret_slot), ADDR(&out_slot), (int)(8 * sizeof(value)));
 }
 
@@ -92,7 +113,16 @@ static int handle_of(value v)
   return h < 0 ? -h : h;
 }
 
-static void js_finalize(value v) { if (Handle_val(v) > 0) ocaml_js_free(Handle_val(v)); }
+static void free_on_main(void *h) { ocaml_js_free((int)(intptr_t)h); }
+
+/* (the GC of another thread may finalize it: the main thread releases it) */
+static void js_finalize(value v)
+{
+  int h = Handle_val(v);
+  if (h <= 0) return;
+  if (emscripten_is_main_runtime_thread()) ocaml_js_free(h);
+  else emscripten_proxy_async(emscripten_proxy_get_system_queue(), main_thread, free_on_main, (void *)(intptr_t)h);
+}
 
 static int js_compare(value a, value b)
 {
@@ -144,7 +174,10 @@ static double new_cell(value v)
 EMSCRIPTEN_KEEPALIVE void ocaml_emcc_js_release(double cell)
 {
   value *c = (value *)(uintptr_t)cell;
+  /* (called by a FinalizationRegistry, once main returned) */
+  int was = ocaml_emcc_js_runtime_enter();
   caml_remove_generational_global_root(c);
+  ocaml_emcc_js_runtime_exit(was);
   free(c);
 }
 
@@ -156,6 +189,7 @@ static int is_js(value v)
 /* The pair (tag, x) of an OCaml value given to JavaScript. */
 static void to_js(value v, int *t, double *x)
 {
+  main_thread_only();
   if (Is_long(v)) { *t = 0; *x = (double)Long_val(v); }
   else if (is_js(v)) { *t = handle_of(v); *x = 0; }
   else if (Tag_val(v) == Double_tag) { *t = 0; *x = Double_val(v); }
@@ -547,9 +581,26 @@ CAMLprim value caml_jsoo_runtime_value(value s) { return js_eval(s, 2); }
    _unsafe ones take as many arguments as the function: its arity is known
    in compiled mode (Closinfo), not for the bytecode, whose closures have
    arity 0 there: they then take those given, as wrap_callback. */
+static void track_blocking(void);
+static int callbacks;
+
+/* Called by main (main.c) once the program returned: with callbacks, the
+   program goes on in them, and the other threads too, the main thread
+   giving them the runtime between callbacks.  1: main then returns to the
+   event loop (the program, then, ends when JavaScript is done, or by exit
+   in a callback). */
+EMSCRIPTEN_KEEPALIVE int ocaml_emcc_js_main_returned(void)
+{
+  if (!(callbacks && emscripten_has_threading_support() && emscripten_is_main_runtime_thread())) return 0;
+  track_blocking();
+  caml_enter_blocking_section_no_pending();
+  return 1;
+}
+
 static value wrap(int kind, int arity, value f)
 {
   init();
+  callbacks = 1;
 #ifdef Arity_closinfo
   if ((kind == 3 || kind == 7) && Is_block(f) && (Tag_val(f) == Closure_tag || Tag_val(f) == Infix_tag)) {
     int a = (int)Arity_closinfo(Closinfo_val(f));
@@ -572,7 +623,7 @@ CAMLprim value caml_js_wrap_meth_callback_unsafe(value f) { return wrap(7, 0, f)
 /* Called by a function of ocaml_js_wrap with its n arguments (got with
    ocaml_js_cb_arg): 0, with the result in out_slot, or 1 for an
    exception (its root in out_slot). */
-EMSCRIPTEN_KEEPALIVE int ocaml_emcc_js_callback(double cell, int kind, int n)
+static int run_callback(double cell, int kind, int n)
 {
   CAMLparam0();
   CAMLlocal3(f, a, res);
@@ -608,6 +659,15 @@ EMSCRIPTEN_KEEPALIVE int ocaml_emcc_js_callback(double cell, int kind, int n)
     out_slot.x = x;
   }
   CAMLreturnT(int, 0);
+}
+
+/* (once main returned, OCaml runs from the event loop: with the runtime
+   back, see ocaml_emcc_js_main_returned) */
+EMSCRIPTEN_KEEPALIVE int ocaml_emcc_js_callback(double cell, int kind, int n)
+{
+  int was = ocaml_emcc_js_runtime_enter(), r = run_callback(cell, kind, n);
+  ocaml_emcc_js_runtime_exit(was);
+  return r;
 }
 
 /* ------------------------------------------------------ errors */
@@ -659,6 +719,7 @@ CAMLprim value caml_js_get_console(value unit)
 CAMLprim value debugger(value unit)
 {
   (void)unit;
+  main_thread_only();
   ocaml_js_debugger();
   return Val_unit;
 }

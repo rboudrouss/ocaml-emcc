@@ -32,6 +32,10 @@ extern value caml_sys_exit(value);
 
 extern void camlc_main(char **argv);
 
+/* jsoo.c's, with js_of_ocaml's primitives: 1 when callbacks and other
+   threads go on, main then returning to the event loop */
+extern int ocaml_emcc_js_main_returned(void) __attribute__((weak));
+
 /* dynlink.c's, with --dynlink: the plugins Emcc_dynlink.load_url is
    loading, and set here when main returned before them */
 extern int ocaml_emcc_dynlink_pending __attribute__((weak));
@@ -41,6 +45,7 @@ int main(int argc, char **argv)
 {
   (void)argc;
   camlc_main(argv);
+  if (&ocaml_emcc_js_main_returned != NULL && ocaml_emcc_js_main_returned()) emscripten_exit_with_live_runtime();
   /* With threads, main runs in a pthread (-sPROXY_TO_PTHREAD), where exit
      ends the program at once, before the callbacks of load_url.  The
      thread stays alive instead, and the last callback exits. */
@@ -88,6 +93,8 @@ int main(int argc, char **argv)
 
 #else
 
+#include <emscripten.h>
+
 #ifndef OCAML_EMCC_BYTECODE
 #define OCAML_EMCC_BYTECODE "/ocaml/main.bc"
 #endif
@@ -96,11 +103,15 @@ int main(int argc, char **argv)
    real file system, see `ocaml-emcc link --node-fs`). */
 static const char *ocaml_emcc_bytecode = OCAML_EMCC_BYTECODE;
 
+/* jsoo.c's (see the compiled main) */
+extern int ocaml_emcc_js_main_returned(void) __attribute__((weak));
+
 int main(int argc, char **argv)
 {
   (void)argc;
   if (ocaml_emcc_bytecode) argv[0] = (char *)ocaml_emcc_bytecode;
   caml_main(argv);
+  if (&ocaml_emcc_js_main_returned != NULL && ocaml_emcc_js_main_returned()) emscripten_exit_with_live_runtime();
   caml_sys_exit(Val_int(0));
   return 0;
 }
