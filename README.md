@@ -702,12 +702,10 @@ below.)
 - With `--threads`, `plugin --main` links a plugin for the program's
   shared memory, as does `plugin --threads`. The program's threads and
   the plugin's run the code of the plugins, and the callback of
-  `load_url` runs after `main` (`tests/dynthreads`). Two limits of
+  `load_url` runs after `main` (`tests/dynthreads`). A limit of
   emscripten's dynamic linker, which loads the plugins again in each
-  thread, remain, and ocaml-emcc warns about them. With `--jspi`, a
-  thread started after a plugin is loaded fails (`SuspendError`). On
-  wasm64, a load may abort (`table index is out of bounds`, the fifth
-  plugin of `tests/dynlink`).
+  thread, remains, and ocaml-emcc warns about it: with `--jspi`, a thread
+  started after a plugin is loaded fails (`SuspendError`).
 - `Emcc_dynlink` is for the compiled mode, an interpreted program loads
   bytecode (see below).
 - A program linked with asyncify (`-sASYNCIFY`, as raylib's) loads

@@ -61,9 +61,12 @@
   `plugin --threads` (they failed with "could not load dynamic lib").
   The callback of `Emcc_dynlink.load_url` runs after `main` in such a
   program (`main` running in a pthread, the program exited first).
-  `link` warns about the limits of emscripten's dynamic linker with
+  `link` warns about a limit of emscripten's dynamic linker with
   threads: with `--jspi`, a thread started after a plugin is loaded
-  fails, and on wasm64 a load may abort.
+  fails. A plugin's entry is read as data, its address in the plugin's
+  part of the table: looked up as a function, it got a slot in the
+  table of one thread only, and on wasm64 the next loads aborted
+  ("table index is out of bounds").
 - js_of_ocaml with `--threads`: a thread other than the main one calling
   JavaScript raises `Failure` (the program crashed: JavaScript values
   belong to the main thread), the GC of another thread releases
