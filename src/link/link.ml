@@ -898,8 +898,9 @@ let run o =
   if not (standalone || o.compiled) then Bytecode.write ~drop:[ "DLLS"; "DLPT" ] bc bc_out;
   (* 2. primitive table *)
   let prims = Bytecode.primitives bc in
-  (* (interpreted: the C of bytecode plugins, loaded by Dynlink) *)
-  if (not o.compiled) && (not o.dynlink) && (not standalone) && List.mem "caml_dynlink_open_lib" prims then
+  (* (interpreted: the C of bytecode plugins, loaded by Dynlink.  PRIM names
+     every primitive of the runtime: look for the module) *)
+  if (not o.compiled) && (not o.dynlink) && (not standalone) && List.mem_assoc "Dynlink" (Bytecode.crcs bc) then
     Env.log "note: Dynlink loads bytecode plugins; those with C stubs need --dynlink";
   let arities = Bytecode.call_arities bc in
   let prims_src = Filename.concat work "prims.c" in
