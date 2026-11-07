@@ -34,8 +34,9 @@ an exception.
 +  struct caml__roots_block * initial_local_roots;
 +};
 +
-+/* read by the interpreter when it starts */
-+static struct reentry * caml_emcc_reentry;
++/* read by the interpreter when it starts (one per thread: domains run
++   at the same time) */
++static _Thread_local struct reentry * caml_emcc_reentry;
 +
 +static __attribute__((noinline)) value interpreter(code_t prog,
 +                                                   asize_t prog_size);

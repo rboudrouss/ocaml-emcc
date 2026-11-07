@@ -38,8 +38,9 @@ called for an exception.
 +  intnat trap_sp_off;
 +};
 +
-+/* read by the interpreter when it starts */
-+static struct reentry * caml_emcc_reentry;
++/* read by the interpreter when it starts (one per thread: domains run
++   at the same time) */
++static _Thread_local struct reentry * caml_emcc_reentry;
 +
 +#if OCAML_VERSION_MINOR >= 2
 +#define Interpreter caml_bytecode_interpreter
