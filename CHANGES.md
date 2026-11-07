@@ -74,6 +74,11 @@
   (memory access out of bounds, a few runs in a thousand of
   `tests/domains`). (Sysroots built before note the change: `ocaml-emcc
   install --force ocaml`.)
+- `--threads`: the memory of a thread that ends (its stack, its TLS) is
+  freed once the thread no longer uses it. With `--wasi`, a detached
+  thread (OCaml's threads and domains) freed it itself while still
+  running on it; with emscripten's glue, the main thread could free it
+  while the thread was still asking it to.
 - js_of_ocaml with `--threads`: a thread other than the main one calling
   JavaScript raises `Failure` (the program crashed: JavaScript values
   belong to the main thread), the GC of another thread releases
