@@ -22,6 +22,7 @@
 
 #include <errno.h>
 #include <poll.h>
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <sys/select.h>
 #include <time.h>
@@ -35,11 +36,30 @@ EM_JS_DEPS(ocaml_emcc_threads, "$cleanupThread");
 /* (wasm64: the pointer arrives as a BigInt) */
 EM_JS(void, ocaml_emcc_cleanup_thread, (void *thread), { cleanupThread(Number(thread)); });
 
-static void cleanup_on_main(void *thread) { ocaml_emcc_cleanup_thread(thread); }
+/* A detached thread asks it while exiting, on its stack, in the block
+   cleanupThread frees: the main thread can run the request before
+   emscripten_proxy_async returns, which still writes on that stack.  It
+   waits for the end of the call before freeing. */
+struct cleanup {
+  void *thread;
+  atomic_int queued;
+};
+
+static void cleanup_on_main(void *arg) {
+  struct cleanup *c = arg;
+  while (!atomic_load(&c->queued)) {
+  }
+  ocaml_emcc_cleanup_thread(c->thread);
+  free(c);
+}
 
 EMSCRIPTEN_KEEPALIVE void ocaml_emcc_thread_cleanup_async(void *thread) {
-  emscripten_proxy_async(emscripten_proxy_get_system_queue(), emscripten_main_runtime_thread_id(), cleanup_on_main,
-                         thread);
+  struct cleanup *c = malloc(sizeof *c);
+  if (!c) return;
+  c->thread = thread;
+  atomic_init(&c->queued, 0);
+  emscripten_proxy_async(emscripten_proxy_get_system_queue(), emscripten_main_runtime_thread_id(), cleanup_on_main, c);
+  atomic_store(&c->queued, 1);
 }
 
 static void run_queued_calls(void) {
