@@ -126,14 +126,13 @@ differs.
 | threads, domains, js_of_ocaml's library, WASI | yes | yes |
 | deep recursion | a 1 GB stack under node by default (millions of nested calls), the engine's 500 KB to 1 MB in browsers (6 000 to 15 000 nested calls), without limit with [`--jspi` or `--cps-stack`](#deep-recursion-in-a-browser) | the interpreter's own stack, as natively |
 | `Printexc.get_callstack` | empty (backtraces of exceptions work) | yes |
-| `Marshal.Closures` | no | yes |
-| with asyncify (`-sASYNCIFY`) | no wasm tail calls, so a long chain of mutually recursive tail calls may overflow (`--jspi` replaces asyncify) | yes |
+| with asyncify (`-sASYNCIFY`) | the compiled code's tail calls, those of WebAssembly, collide with asyncify, which does not support them: they become ordinary calls, so a long chain of mutually recursive tail calls may overflow (`--jspi` replaces asyncify) | yes |
 | `--preload` | nothing to preload | the bytecode in a separate `.data` file |
 
 The interpreted mode stays available for what the compiled one cannot do
-(OCaml before 4.14, `Marshal.Closures`, `Printexc.get_callstack`, very deep
-recursion in callbacks from C, bytecode plugins loaded by `Dynlink`), or
-when c_of_ocaml fails on a program.
+(OCaml before 4.14, `Printexc.get_callstack`, very deep recursion in
+callbacks from C, bytecode plugins loaded by `Dynlink`), or when
+c_of_ocaml fails on a program.
 It is not the default any more and is less tested. Report what breaks, but
 expect the compiled mode to be the one fixed first. With an OCaml older than
 4.14, `build` and `link` interpret, and say so. `interpreted: yes` in
