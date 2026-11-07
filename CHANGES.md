@@ -64,6 +64,12 @@
   `link` warns about the limits of emscripten's dynamic linker with
   threads: with `--jspi`, a thread started after a plugin is loaded
   fails, and on wasm64 a load may abort.
+- js_of_ocaml with `--threads`: a thread other than the main one calling
+  JavaScript raises `Failure` (the program crashed: JavaScript values
+  belong to the main thread), the GC of another thread releases
+  JavaScript values on the main thread, and once `main` returned, the
+  other threads go on between the callbacks (they waited forever, `main`
+  kept the runtime).
 - `--node-fs`, compiled: `Sys.chdir` changes the current directory, which
   relative paths then follow (node's worker thread running the program
   cannot change the process's: chdir did nothing, Rocq found none of its

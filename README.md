@@ -783,6 +783,11 @@ program (emscripten's pthreads).
   event loop. A program waiting for more threads than that at once blocks
   forever. That thread waits by spinning, and runs the other threads' file
   operations only when it waits.
+- JavaScript values belong to that main thread, as the page does. The
+  other threads work in OCaml and pass their results through it (a
+  `Mutex`, an `Event`...). A call to JavaScript from one of them raises
+  `Failure` (`tests/jsthreads`, `tests/jsthreadsweb`). Once main returned,
+  the other threads go on between the callbacks.
 - Compiled, under node, every thread gets the large stack of the main one
   (`$OCAML_EMCC_STACK_MB`).
 
