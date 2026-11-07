@@ -1185,3 +1185,61 @@ int _emscripten_system(const char *command)
 {
   return command ? -ENOSYS : 0;
 }
+
+/* ------------------------------------------------------- file mappings */
+
+/* emscripten maps files with its JavaScript (_mmap_js...), which WASI has
+   not: a mapping is a copy of the file, read when it is mapped, and that
+   of a shared writable mapping is written back by msync and munmap, as
+   emscripten's own does (LMDB writes through its map, MDB_WRITEMAP).  (Its
+   libc keeps the list of mappings, and frees this memory.) */
+
+#include <sys/mman.h>
+#include <emscripten/heap.h>
+
+int _mmap_js(size_t len, int prot, int flags, int fd, off_t off, int *allocated, void **addr)
+{
+  (void)prot; (void)flags;
+  /* (page-aligned, as emscripten's: munmap gets the address of the page,
+     Unix.map_file's finalizer rounds it down) */
+  char *p = emscripten_builtin_memalign(65536, len > 0 ? len : 1);
+  size_t done = 0;
+  if (p == NULL) return -ENOMEM;
+  while (done < len) {
+    ssize_t n = pread(fd, p + done, len - done, off + (off_t)done);
+    if (n < 0) { int e = errno; emscripten_builtin_free(p); return -e; }
+    if (n == 0) break;
+    done += (size_t)n;
+  }
+  memset(p + done, 0, len - done);
+  *allocated = 1;
+  *addr = p;
+  return 0;
+}
+
+/* (the part within the file: a mapping does not grow it) */
+static int write_back(void *addr, size_t len, int prot, int flags, int fd, off_t off)
+{
+  struct stat st;
+  size_t n, done = 0;
+  if (!(flags & MAP_SHARED) || !(prot & PROT_WRITE)) return 0;
+  if (fstat(fd, &st) != 0) return -errno;
+  if (st.st_size <= off) return 0;
+  n = (size_t)(st.st_size - off) < len ? (size_t)(st.st_size - off) : len;
+  while (done < n) {
+    ssize_t w = pwrite(fd, (char *)addr + done, n - done, off + (off_t)done);
+    if (w < 0) return -errno;
+    done += (size_t)w;
+  }
+  return 0;
+}
+
+int _munmap_js(void *addr, size_t len, int prot, int flags, int fd, off_t off)
+{
+  return write_back(addr, len, prot, flags, fd, off);
+}
+
+int _msync_js(void *addr, size_t len, int prot, int flags, int fd, off_t off)
+{
+  return write_back(addr, len, prot, flags, fd, off);
+}
