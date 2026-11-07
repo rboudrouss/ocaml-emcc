@@ -71,6 +71,7 @@ addToLibrary({
       J.outAddr = outAddr;
       if (bits == 64) { J.intMin = Number.MIN_SAFE_INTEGER; J.intMax = Number.MAX_SAFE_INTEGER; }
       J.utf8 = new TextDecoder('utf-8');
+      J.statics = new Map();
       J.OcamlValue = class OcamlValue { constructor(cell) { this.cell = cell; } };
       J.OcamlExn = class OcamlExn extends Error {
         constructor(cell, msg) { super(msg); this.name = 'OCamlException'; this.cell = cell; }
@@ -136,7 +137,16 @@ addToLibrary({
     },
 
     key(t, x, len) {
-      return t == -2 ? ocamlJs.decode(x, len) : ocamlJs.val(t, x);
+      return t == -2 ? ocamlJs.decode(x, len) : t == -6 ? ocamlJs.decodeStatic(x, len) : ocamlJs.val(t, x);
+    },
+
+    // the strings of the program's static data (see Is_static_string),
+    // by address (a Map, set by init)
+    statics: null,
+    decodeStatic(p, len) {
+      var J = ocamlJs, s = J.statics.get(p);
+      if (s === undefined) { s = J.decode(p, len); J.statics.set(p, s); }
+      return s;
     },
 
     // UTF-8 at p: short ASCII strings (property names) without TextDecoder,
@@ -297,8 +307,10 @@ addToLibrary({
 
   // a string from UTF-8 (or Latin-1) bytes
   ocaml_js_string__deps: ['$ocamlJs'],
-  ocaml_js_string: (p, len, latin1) => {
-    if (!latin1) return ocamlJs.handle(ocamlJs.decode(p, len));
+  // (flags: 1 Latin-1, else UTF-8; 2 a static string)
+  ocaml_js_string: (p, len, flags) => {
+    if (flags == 2) return ocamlJs.handle(ocamlJs.decodeStatic(p, len));
+    if (!(flags & 1)) return ocamlJs.handle(ocamlJs.decode(p, len));
     var s = '';
     for (var i = 0; i < len; i += 8192)
       s += String.fromCharCode.apply(null, HEAPU8.subarray(p + i, p + Math.min(len, i + 8192)));

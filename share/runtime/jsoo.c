@@ -47,7 +47,7 @@ extern int ocaml_js_truthy(int t, double x);
 extern double ocaml_js_number(int t, double x);
 extern int ocaml_js_int32(int t, double x);
 extern int ocaml_js_float(double d);
-extern int ocaml_js_string(double p, int len, int latin1);
+extern int ocaml_js_string(double p, int len, int flags);
 extern int ocaml_js_string_length(int t, double x, int latin1);
 extern void ocaml_js_string_copy(double p);
 extern int ocaml_js_eval(double p, int len, int kind);
@@ -242,12 +242,20 @@ static void raise_js(int r)
 
 #define RESULT(call) of_js(call)
 
-/* A property name: an OCaml string as itself, any other value converted
-   by JavaScript. */
+/* A string of the program's static data (a literal of compiled code),
+   which never moves nor changes: jsoo.js keeps its JavaScript string,
+   instead of decoding it at each call (half the cost of a property
+   access).  (Below them, the main stack holds no OCaml value.) */
+extern unsigned char __heap_base;
+#define Is_static_string(s) ((uintptr_t)String_val(s) < (uintptr_t)&__heap_base)
+
+/* A property name: an OCaml string as itself (-6: a static one), any
+   other value converted by JavaScript. */
 #define KEY(k)                                                         \
   int k##_t; double k##_x, k##_l = 0;                                  \
   if (Is_block(k) && Tag_val(k) == String_tag) {                       \
-    k##_t = -2; k##_x = ADDR(String_val(k)); k##_l = caml_string_length(k); \
+    k##_t = Is_static_string(k) ? -6 : -2;                             \
+    k##_x = ADDR(String_val(k)); k##_l = caml_string_length(k);        \
   } else to_js(k, &k##_t, &k##_x)
 #define KEYV(k) k##_t, k##_x, k##_l
 
@@ -461,7 +469,8 @@ CAMLprim value caml_js_to_nativeint(value v)
 static value js_string(value s, int latin1)
 {
   init();
-  return RESULT(ocaml_js_string(ADDR(String_val(s)), (int)caml_string_length(s), latin1));
+  return RESULT(ocaml_js_string(ADDR(String_val(s)), (int)caml_string_length(s),
+                                latin1 | (Is_static_string(s) ? 2 : 0)));
 }
 
 CAMLprim value caml_jsstring_of_string(value s) { return js_string(s, 0); }
