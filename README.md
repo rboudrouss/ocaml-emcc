@@ -552,7 +552,9 @@ GC. Code written for wasm_of_ocaml works unchanged.
 
 **Differences with js_of_ocaml.**
 
-- Each call goes from wasm to JavaScript and back, 0.1 to 0.5 µs.
+- Each call goes from wasm to JavaScript and back: about 65 ns to read a
+  property and 140 ns to call a method, compiled (the property names of
+  the code are decoded once), 110 and 280 ns interpreted.
 - `==` between two JavaScript values is physical equality of the OCaml
   blocks, false for two handles on the same object. `Js.equals` and
   `Js.strict_equals` compare the objects (as `Js.Opt` does).

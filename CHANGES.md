@@ -73,6 +73,9 @@
   JavaScript values on the main thread, and once `main` returned, the
   other threads go on between the callbacks (they waited forever, `main`
   kept the runtime).
+- js_of_ocaml, compiled: the property and method names of the program
+  (its literals) are decoded once, which halves the cost of a property
+  access (120 to 65 ns) or a method call (280 to 140 ns).
 - The sqlite3 and openblas recipes are thread-safe (`SQLITE_THREADSAFE=1`,
   sqlite's default, and openblas's `USE_LOCKING`): with `--threads`,
   threads using them at the same time no longer share their state
