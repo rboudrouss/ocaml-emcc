@@ -59,7 +59,8 @@ them (`--keep-build-dir` or `OPAMKEEPBUILDDIR=true` when installing).
 Everything it builds (the runtime, C libraries, rebuilt packages) lives in
 `$OPAM_SWITCH_PREFIX/emcc-sysroot/` and goes away with the switch.
 
-c_of_ocaml is not in opam yet. Build it in the switch of your project:
+c_of_ocaml is not in opam, it is installed apart, like emscripten. Build it
+in the switch of your project:
 
 ```sh
 git clone --depth 1 https://github.com/rboudrouss/C_of_ocaml.git && cd C_of_ocaml
