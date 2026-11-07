@@ -35,30 +35,38 @@ extern void _emscripten_thread_free_data(pthread_t);
 
 __attribute__((import_module("wasi"), import_name("thread-spawn"))) int32_t ocaml_emcc_thread_spawn(int32_t arg);
 
-/* What wasi_thread_start gets: the top of the thread's stack comes first */
+/* What wasi_thread_start gets: the top of the thread's stack comes first.
+   It lasts as long as the thread: unlike the thread's block (its stack,
+   TLS), which the joining thread may free while it returns. */
 struct start {
   void *stack_top;
   size_t stack_size;
   pthread_t thread;
   void *(*fn)(void *);
   void *arg;
+  /* An exited detached thread (a zombie) cannot free its own block while
+     running on it: the next thread created or joined does, once `done` */
+  int detached;
+  atomic_int done;
+  struct start *next;
 };
+static _Atomic(struct start *) zombies;
 
-/* The exited threads whose memory is still to be freed (detached ones
-   cannot free their own stack while running on it), a list linked through
-   their start block */
-struct zombie {
-  struct zombie *next;
-  pthread_t thread;
-};
-static _Atomic(struct zombie *) zombies;
+static void push_zombie(struct start *z) {
+  z->next = atomic_load(&zombies);
+  while (!atomic_compare_exchange_weak(&zombies, &z->next, z)) {
+  }
+}
 
 static void free_zombies(void) {
-  struct zombie *z = atomic_exchange(&zombies, NULL);
+  struct start *z = atomic_exchange(&zombies, NULL);
   while (z) {
-    struct zombie *next = z->next;
-    _emscripten_thread_free_data(z->thread);
-    free(z);
+    struct start *next = z->next;
+    if (atomic_load(&z->done)) {
+      _emscripten_thread_free_data(z->thread);
+      free(z);
+    } else
+      push_zombie(z);
     z = next;
   }
 }
@@ -81,6 +89,8 @@ int __pthread_create_js(pthread_t thread, const pthread_attr_t *attr, void *(*fn
   s->thread = thread;
   s->fn = fn;
   s->arg = arg;
+  s->detached = 0;
+  atomic_init(&s->done, 0);
   if (ocaml_emcc_thread_spawn((int32_t)(intptr_t)s) < 0) {
     free(s);
     return EAGAIN;
@@ -90,21 +100,23 @@ int __pthread_create_js(pthread_t thread, const pthread_attr_t *attr, void *(*fn
 
 /* pthread_exit unwinds to the start of the thread */
 static _Thread_local jmp_buf *thread_exit;
+static _Thread_local struct start *start;
 
 __attribute__((used)) void ocaml_emcc_thread_start(int32_t tid, struct start *s) {
   (void)tid;
-  pthread_t thread = s->thread;
-  void *(*fn)(void *) = s->fn;
-  void *arg = s->arg;
   emscripten_stack_set_limits(s->stack_top, (char *)s->stack_top - s->stack_size);
-  free(s);
-  _emscripten_thread_init(thread, 0, 0, 1, 0, 0);
+  _emscripten_thread_init(s->thread, 0, 0, 1, 0, 0);
   _emscripten_tls_init();
+  start = s;
   jmp_buf buf;
   if (!setjmp(buf)) {
     thread_exit = &buf;
-    _emscripten_thread_exit(fn(arg));
+    _emscripten_thread_exit(s->fn(s->arg));
   }
+  if (s->detached)
+    atomic_store(&s->done, 1);
+  else
+    free(s);
 }
 
 /* wasi_thread_start(tid, start): the stack pointer first, before any C
@@ -140,19 +152,16 @@ void _emscripten_init_main_thread_js(pthread_t main) {
 }
 
 /* A thread that can be freed: joined (by the joining thread), or detached
-   and exiting (itself) */
+   and exiting (itself, whose pthread_self() _emscripten_thread_exit has
+   already cleared) */
 void _emscripten_thread_cleanup(pthread_t thread) {
-  if (thread != pthread_self()) {
+  if (pthread_self()) {
     free_zombies();
     _emscripten_thread_free_data(thread);
     return;
   }
-  struct zombie *z = malloc(sizeof *z);
-  if (!z) return;
-  z->thread = thread;
-  z->next = atomic_load(&zombies);
-  while (!atomic_compare_exchange_weak(&zombies, &z->next, z)) {
-  }
+  start->detached = 1;
+  push_zombie(start);
 }
 
 /* The mailboxes (messages to a thread, used to proxy calls to the main
