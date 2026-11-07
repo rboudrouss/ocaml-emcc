@@ -827,6 +827,11 @@ wasm64](#wasm32-or-wasm64)):
   its name in `/usr/share/zoneinfo`). Under node it is the host's (and
   that of `$TZ`). In browsers, it is made from the browser's time zone,
   exact from 1970 to 2037.
+- **File mappings** (`Unix.map_file`, `mmap`) are copies of the file, with
+  emscripten's glue and under `--wasi`. A shared writable one is written
+  back to the file by `msync` and `munmap`, the finalizer of the bigarray
+  (`tests/mapfile`): its writes do not show in the file before, nor the
+  file's writes in it.
 - **Floating-point rounding modes** do not exist in wasm. Only
   round-to-nearest is available, so code that switches to directed rounding
   (`fesetround`) loses that guarantee.

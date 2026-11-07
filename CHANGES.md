@@ -74,6 +74,9 @@
   JavaScript values on the main thread, and once `main` returned, the
   other threads go on between the callbacks (they waited forever, `main`
   kept the runtime).
+- `--wasi`: files can be mapped (`Unix.map_file`, `mmap`), as with
+  emscripten's glue: a copy, written back by `msync` and `munmap` when
+  shared and writable (it failed with ENOSYS).
 - js_of_ocaml, compiled: the property and method names of the program
   (its literals) are decoded once, which halves the cost of a property
   access (120 to 65 ns) or a method call (280 to 140 ns).
