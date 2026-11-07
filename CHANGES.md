@@ -61,9 +61,10 @@
   `plugin --threads` (they failed with "could not load dynamic lib").
   The callback of `Emcc_dynlink.load_url` runs after `main` in such a
   program (`main` running in a pthread, the program exited first).
-  `link` warns about a limit of emscripten's dynamic linker with
-  threads: with `--jspi`, a thread started after a plugin is loaded
-  fails. A plugin's entry is read as data, its address in the plugin's
+  With `--jspi`, the threads other than the main one load the plugins
+  synchronously (a thread started after a plugin is loaded failed:
+  `SuspendError`, emscripten's loads suspending outside of JSPI). A
+  plugin's entry is read as data, its address in the plugin's
   part of the table: looked up as a function, it got a slot in the
   table of one thread only, and on wasm64 the next loads aborted
   ("table index is out of bounds").
