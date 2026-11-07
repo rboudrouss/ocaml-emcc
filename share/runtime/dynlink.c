@@ -198,24 +198,44 @@ static int is_wasm(const char *path)
   return ok;
 }
 
-void *__wrap_dlopen(const char *path, int flags)
+/* NAME in $OCAML_EMCC_STUBLIBS or the current directory, if wasm. */
+static void *open_wasm(const char *name, int flags)
 {
-  const char *base, *dirs, *d;
+  const char *dirs, *d;
   char buf[4096];
-  if (path == NULL || is_wasm(path)) return __real_dlopen(path, flags);
-  base = strrchr(path, '/');
-  base = base != NULL ? base + 1 : path;
   dirs = getenv("OCAML_EMCC_STUBLIBS");
   for (d = dirs; d != NULL && *d != 0;) {
     const char *e = strchr(d, ':');
     size_t n = e != NULL ? (size_t)(e - d) : strlen(d);
     if (n > 0) {
-      snprintf(buf, sizeof buf, "%.*s/%s", (int)n, d, base);
+      snprintf(buf, sizeof buf, "%.*s/%s", (int)n, d, name);
       if (is_wasm(buf)) return __real_dlopen(buf, flags);
     }
     d = e != NULL ? e + 1 : NULL;
   }
-  if (is_wasm(base)) return __real_dlopen(base, flags);
+  if (is_wasm(name)) return __real_dlopen(name, flags);
+  return NULL;
+}
+
+void *__wrap_dlopen(const char *path, int flags)
+{
+  const char *base;
+  char stem[1024], name[1040];
+  char *dash;
+  void *h;
+  if (path == NULL || is_wasm(path)) return __real_dlopen(path, flags);
+  base = strrchr(path, '/');
+  base = base != NULL ? base + 1 : path;
+  if ((h = open_wasm(base, flags)) != NULL) return h;
+  /* OCaml 5.5 asks for dllNAME-<target>-<bytecode-runtime-id>.so, `plugin`
+     builds dllNAME.so: drop the suffix, a word at a time. */
+  snprintf(stem, sizeof stem, "%s", base);
+  if (strlen(stem) > 3 && strcmp(stem + strlen(stem) - 3, ".so") == 0) stem[strlen(stem) - 3] = 0;
+  while ((dash = strrchr(stem, '-')) != NULL && dash > stem + 3) {
+    *dash = 0;
+    snprintf(name, sizeof name, "%s.so", stem);
+    if ((h = open_wasm(name, flags)) != NULL) return h;
+  }
   snprintf(dl_error, sizeof dl_error,
            "%s, and no wasm %s in $OCAML_EMCC_STUBLIBS nor the current directory "
            "(`ocaml-emcc plugin --interpreted LIB.cma` builds it)",

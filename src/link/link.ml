@@ -1280,6 +1280,14 @@ let run o =
 
 (* The C libraries a .cma names (-cclib -lX, -dllib -lX: its stubs, the
    libraries they use), as ocamlobjinfo reports them. *)
+(* OCaml 5.5 names the stub libraries of its own libraries
+   "dllNAMEbyt-<target>-<bytecode-runtime-id>" (expanded when loaded); their
+   archive is libNAMEbyt.a. *)
+let lib_of_objinfo w =
+  let w = if Filename.check_suffix w ".so" then Filename.chop_suffix w ".so" else w in
+  let suffix = "-<target>-<bytecode-runtime-id>" in
+  if Filename.check_suffix w suffix then Filename.chop_suffix w suffix else w
+
 let cma_c_libs input =
   if not (Filename.check_suffix input ".cma") then []
   else
@@ -1293,8 +1301,8 @@ let cma_c_libs input =
                | None -> []
                | Some f -> Str_util.words (String.sub l (String.length f) (String.length l - String.length f)))
         |> List.filter_map (fun w ->
-               if Str_util.starts_with ~prefix:"-l" w then Some (String.sub w 2 (String.length w - 2))
-               else if Str_util.starts_with ~prefix:"dll" w then Some (String.sub w 3 (String.length w - 3))
+               if Str_util.starts_with ~prefix:"-l" w then Some (lib_of_objinfo (String.sub w 2 (String.length w - 2)))
+               else if Str_util.starts_with ~prefix:"dll" w then Some (lib_of_objinfo (String.sub w 3 (String.length w - 3)))
                else None)
         |> List.filter (fun n ->
                not (List.mem n [ "m"; "c"; "dl"; "rt"; "pthread" ] || List.mem n Deps.compiler_libs || List.mem_assoc n runtime_libs))
@@ -1362,9 +1370,8 @@ let cma_dllibs input =
                Str_util.words (String.sub l (String.length field) (String.length l - String.length field))
              else [])
       |> List.filter_map (fun w ->
-             if Str_util.starts_with ~prefix:"-l" w then Some (String.sub w 2 (String.length w - 2))
-             else if Str_util.starts_with ~prefix:"dll" w then
-               Some (Filename.remove_extension (String.sub w 3 (String.length w - 3)))
+             if Str_util.starts_with ~prefix:"-l" w then Some (lib_of_objinfo (String.sub w 2 (String.length w - 2)))
+             else if Str_util.starts_with ~prefix:"dll" w then Some (lib_of_objinfo (String.sub w 3 (String.length w - 3)))
              else None)
       |> List.filter (fun n -> not (List.mem_assoc n runtime_libs))
       |> List.sort_uniq compare
