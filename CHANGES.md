@@ -73,10 +73,11 @@
   JavaScript values on the main thread, and once `main` returned, the
   other threads go on between the callbacks (they waited forever, `main`
   kept the runtime).
-- The sqlite3 recipe is thread-safe (`SQLITE_THREADSAFE=1`, sqlite's
-  default): with `--threads`, threads querying their own databases at the
-  same time no longer share its state unprotected. (Sysroots built before
-  note the change: `ocaml-emcc install --force sqlite3`.)
+- The sqlite3 and openblas recipes are thread-safe (`SQLITE_THREADSAFE=1`,
+  sqlite's default, and openblas's `USE_LOCKING`): with `--threads`,
+  threads using them at the same time no longer share their state
+  unprotected. (Sysroots built before note the change: `ocaml-emcc
+  install --force sqlite3 openblas`.)
 - `--node-fs`, compiled: `Sys.chdir` changes the current directory, which
   relative paths then follow (node's worker thread running the program
   cannot change the process's: chdir did nothing, Rocq found none of its

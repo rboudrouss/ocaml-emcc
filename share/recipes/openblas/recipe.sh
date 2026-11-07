@@ -2,7 +2,8 @@
 # translation (C_LAPACK: no Fortran compiler), for blas and lapack users too
 # (-lblas, -llapack...).  Generic C kernels: its RISCV64_GENERIC target, as
 # Pyodide does, whose -march/-mabi flags clang refuses for wasm and are
-# dropped.  No threads.
+# dropped.  No threads of its own, but locks (USE_LOCKING) for programs
+# calling it from several threads.
 # Its subroutines (returning nothing in Fortran) are void in its BLAS, int or
 # void in its own LAPACK functions (getrf, potrf..., not as in its lapack.h)
 # and in the C translation of LAPACK, int in xerbla: harmless natively, but
@@ -28,7 +29,7 @@ build() {
     "$EMCC" > emcc-generic
   chmod +x emcc-generic
   set -- HOSTCC=cc CC="$PWD/emcc-generic" AR="$EMAR" RANLIB="$EMSDK_BIN/emranlib" TARGET=RISCV64_GENERIC \
-    BINARY=$binary NOFORTRAN=1 C_LAPACK=1 USE_THREAD=0 USE_LOCKING=0 NO_SHARED=1 DYNAMIC_ARCH=0 \
+    BINARY=$binary NOFORTRAN=1 C_LAPACK=1 USE_THREAD=0 USE_LOCKING=1 NO_SHARED=1 DYNAMIC_ARCH=0 \
     NO_AFFINITY=1 CFLAGS="$CFLAGS -Wno-return-mismatch" PREFIX="$SYSROOT"
   local own="getf2|getrf|laswp|getrs|gesv|potf2|potrf|potri|potrs|lauu2|lauum|trti2|trtri|trtrs|laed3"
   find lapack-netlib/SRC lapack-netlib/TESTING/MATGEN -name '*.c' -exec sed -i -E \
