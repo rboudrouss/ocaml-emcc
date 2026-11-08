@@ -81,6 +81,7 @@ snappy    | sn       |            | snappy                      | wasm32 wasm64 
 jspi      | jp       |            |                             | wasm32 wasm64      |
 cpsstack  | cs       |            | cps-stack                   | wasm32 wasm64      |
 cpsasync  | ca       |            | cps-stack-asyncify          | wasm32 wasm64      |
+notailcalls | nt     |            | cps-stack-asyncify          | wasm32 wasm64      |
 argon2    | ar       |            | argon2                      | wasm32 wasm64      |
 expat     | ex       |            | expat                       | wasm32 wasm64      |
 lmdb      | lm       |            | lmdb                        | wasm32 wasm64      |
@@ -199,6 +200,12 @@ while IFS='|' read -r name target args pkgs targets differ; do
       $TO "$NODE" check.mjs out > out/wasm.txt 2> out/wasm.err || echo "exit=$?" >> out/wasm.txt
     else
       run "$js" $args > out/wasm.txt 2> out/wasm.err || echo "exit=$?" >> out/wasm.txt
+    fi
+    # without wasm tail calls (tail-calls: no): none left in the module
+    # (binaryen's wasm-dis, from emsdk)
+    if grep -qs '^tail-calls: *no' ocaml-emcc.conf; then
+      n=$("$(dirname "$(command -v emcc)")/../bin/wasm-dis" "${js%.*}.wasm" | grep -c return_call)
+      [ "$n" = 0 ] || echo "$n return_call" >> out/wasm.txt
     fi
   ) > "$name/out.log" 2>&1
   if [ -n "$differ" ]; then filt() { grep -Ev "$differ" "$1"; }; else filt() { cat "$1"; }; fi
