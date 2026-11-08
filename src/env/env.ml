@@ -32,15 +32,28 @@ let spawn ?cwd prog args env inp out err =
   Fun.protect ~finally:(fun () -> Sys.chdir here)
     (fun () -> Unix.create_process_env prog (Array.of_list (prog :: args)) env inp out err)
 
+(* dune, one at a time between the ocaml-emcc processes of the machine
+   (dune refuses to build while another holds the build directory: links
+   of the same project running at the same time) *)
+let one_dune prog f =
+  if Filename.basename prog <> "dune" then f ()
+  else
+    let fd = Unix.openfile (Filename.concat (Filename.get_temp_dir_name ()) "ocaml-emcc-dune.lock") [ Unix.O_RDWR; Unix.O_CREAT ] 0o666 in
+    let rec lock () = try Unix.lockf fd Unix.F_LOCK 0 with Unix.Unix_error (Unix.EINTR, _, _) -> lock () in
+    lock ();
+    Fun.protect ~finally:(fun () -> Unix.close fd) f
+
 let run ?env ?cwd ?(out = Unix.stdout) prog args =
   if !verbose then log "%s" (Compat.quote_command prog args);
   let env = merged_env env in
+  one_dune prog @@ fun () ->
   let pid = spawn ?cwd prog args env Unix.stdin out Unix.stderr in
   match snd (Unix.waitpid [] pid) with Unix.WEXITED c -> c | _ -> 255
 
 (* Like [run], its stdout and stderr written to [file] *)
 let run_logged ?env ?cwd file prog args =
   if !verbose then log "%s > %s" (Compat.quote_command prog args) file;
+  one_dune prog @@ fun () ->
   let fd = Unix.openfile file [ Unix.O_WRONLY; Unix.O_CREAT; Unix.O_TRUNC ] 0o644 in
   let pid = spawn ?cwd prog args (merged_env env) Unix.stdin fd fd in
   Unix.close fd;
@@ -50,10 +63,13 @@ let run_logged ?env ?cwd file prog args =
 let run_capture_stderr ?env prog args =
   if !verbose then log "%s" (Compat.quote_command prog args);
   let tmp = Filename.temp_file "ocaml-emcc" ".err" in
-  let fd = Unix.openfile tmp [ Unix.O_WRONLY; Unix.O_TRUNC ] 0o600 in
-  let pid = Unix.create_process_env prog (Array.of_list (prog :: args)) (merged_env env) Unix.stdin Unix.stdout fd in
-  Unix.close fd;
-  let code = match snd (Unix.waitpid [] pid) with Unix.WEXITED c -> c | _ -> 255 in
+  let code =
+    one_dune prog @@ fun () ->
+    let fd = Unix.openfile tmp [ Unix.O_WRONLY; Unix.O_TRUNC ] 0o600 in
+    let pid = Unix.create_process_env prog (Array.of_list (prog :: args)) (merged_env env) Unix.stdin Unix.stdout fd in
+    Unix.close fd;
+    match snd (Unix.waitpid [] pid) with Unix.WEXITED c -> c | _ -> 255
+  in
   let err = Compat.read_file tmp in
   Sys.remove tmp;
   (code, err)
@@ -117,6 +133,7 @@ let which prog =
 (* (before OCaml 4.12, open_process_args_in does not search PATH) *)
 let output_of prog args =
   let exe = if String.contains prog '/' then prog else Option.value (which prog) ~default:prog in
+  one_dune prog @@ fun () ->
   let ic = Unix.open_process_args_in exe (Array.of_list (prog :: args)) in
   let s = Compat.input_all ic in
   match Unix.close_process_in ic with

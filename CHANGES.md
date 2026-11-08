@@ -43,6 +43,10 @@
 - Compiled mode compiles the parts of the C in parallel, the biggest
   first, `$OCAML_EMCC_JOBS` at a time (default: the number of
   processors).
+- The dune commands of several ocaml-emcc running at the same time take
+  turns (a lock in the temporary directory) instead of failing ("Another
+  Dune instance is currently running"): the links of a project can run in
+  parallel.
 - Compiled mode leaves to c_of_ocaml what is about the code, and keeps
   here what is about emscripten; it needs a c_of_ocaml with a manifest
   (`--manifest`) and `camlc_main`. The primitives the code calls and the

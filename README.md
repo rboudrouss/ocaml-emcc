@@ -170,7 +170,11 @@ differs.
   ocaml-emcc compiles those that changed in parallel, the biggest first,
   `$OCAML_EMCC_JOBS` at a time (default: the number of processors). The
   C of a big program (Rocq's coq-lsp, 165 parts) then compiles in a few
-  minutes on 16 cores instead of more than ten.
+  minutes on 16 cores instead of more than ten. Several ocaml-emcc of a
+  project can run at the same time (the links of two programs, or of the
+  same one for node and for the web, each in its own work directory):
+  their dune commands take turns (a lock in the temporary directory),
+  dune refusing to build while another holds `_build`.
 - **Asyncify**: Asyncify do not support WebAssembly tail calls.
   With `-sASYNCIFY`, as the raylib recipe links, ocaml-emcc turns them
   off by default, as `--no-tail-calls` does: they become ordinary calls,
