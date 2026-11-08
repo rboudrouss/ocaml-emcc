@@ -632,7 +632,7 @@ ocaml-emcc plugin editor.cma -o editor.wasm --main app.js
 - `--dynlink` links the program as an emscripten main module. It exports
   the C symbols plugins import (the runtime, and the stubs and C
   libraries the program links). Its compilation units are kept whole and
-  registered by name, which makes the program bigger (1.2 MB for
+  registered by name, which makes the program bigger (1.6 MB for
   `tests/dynlink`, with the whole standard library).
 
 **Limitations.**
@@ -650,7 +650,7 @@ ocaml-emcc plugin editor.cma -o editor.wasm --main app.js
   none needs `--effects double-translation` for plugins that do, as they
   may perform them through any of its functions (`List.iter`...), which
   must then have their CPS version. That doubles the size of the program
-  (1.4 to 2.8 MB for `tests/dynlink`), though its speed hardly changes.
+  (3.3 MB for `tests/dyneffects`), though its speed hardly changes.
   `plugin` refuses a plugin performing effects for a program without
   effect handlers (or without `--main`), unless `--effects disabled`
   (its effects then raise `Effect.Unhandled`), and a plugin built in the
