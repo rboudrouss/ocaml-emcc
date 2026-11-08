@@ -29,6 +29,10 @@
   have double translation. Not with `--effects` other than
   `double-translation`. A C stack under 1 MB (`--stack-size`) gets a
   warning, with `--jspi` too.
+- Compiled with `-sASYNCIFY`: asyncify saves the stack in 1 MB
+  (`-sASYNCIFY_STACK_SIZE=1048576`, unless given) rather than 4 KB, which
+  suspending under some hundred frames exceeded. Only `-sASYNCIFY` itself
+  turns off the tail calls, not its other settings (`-sASYNCIFY_IMPORTS`).
 - Compiled mode leaves to c_of_ocaml what is about the code, and keeps
   here what is about emscripten; it needs a c_of_ocaml with a manifest
   (`--manifest`) and `camlc_main`. The primitives the code calls and the

@@ -971,14 +971,16 @@ let run o =
   let main_o = Filename.concat work "main.o" and prims_o = Filename.concat work "prims.o" in
   (* Same flags as the runtime (target, longjmp flavour...). *)
   let cflags = Env.manifest_flags "cflags" and ldflags = Env.manifest_flags "ldflags" in
+  (* asyncify (-sASYNCIFY, not its other settings), unless JSPI (-sJSPI, or
+     the older -sASYNCIFY=2), which takes precedence over it *)
+  let asyncify =
+    let all = ldflags @ flags_of_libs @ o.emcc_flags in
+    List.exists (fun f -> f = "-sASYNCIFY" || f = "-sASYNCIFY=1") all && not (List.exists jspi_flag all)
+  in
   let compiled =
     if o.compiled then (
-      (* JSPI (-sJSPI, or the older -sASYNCIFY=2) supports them, and takes
-         precedence over asyncify *)
-      let all = ldflags @ flags_of_libs @ o.emcc_flags in
-      let jspi = jspi_flag in
-      let asyncify f = Str_util.starts_with ~prefix:"-sASYNCIFY" f && f <> "-sASYNCIFY=0" in
-      let tail_calls = List.exists jspi all || not (List.exists asyncify all) in
+      (* (JSPI supports them) *)
+      let tail_calls = not asyncify in
       if not tail_calls then Env.log "asyncify: compiled without wasm tail calls";
       let c = compile_to_c ~dynlink:o.dynlink ~cps_stack:o.cps_stack ~wasi:o.wasi ?effects:o.effects ~emcc ~flags:(cflags @ [ o.opt ] @ inc) ~tail_calls ~work ~base o.bc in
       if o.dynlink && o.effects = None && (not o.cps_stack) && c.c_effects = "double-translation" then
@@ -1094,6 +1096,10 @@ let run o =
       (if !Env.target = "wasm64" then "-sMAXIMUM_MEMORY=16GB" else "-sMAXIMUM_MEMORY=4GB");
     ]
     @ initial_heap ~threads:o.threads ~bc_size:(Unix.stat o.bc).Unix.st_size o.emcc_flags
+    (* asyncify saves the stack of the engine when C suspends, in 4 KB by
+       default, which a few hundred frames of the compiled code exceed
+       (the user's setting comes after) *)
+    @ (if asyncify && compiled <> None then [ "-sASYNCIFY_STACK_SIZE=1048576" ] else [])
     @ [
       "-sSTACK_SIZE=" ^ o.stack_size;
       (* not allowed (implied) for a standalone .wasm *)
