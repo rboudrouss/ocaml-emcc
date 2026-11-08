@@ -1,0 +1,1 @@
+(executable (name ca) (foreign_stubs (language c) (names sleep)))

@@ -80,6 +80,7 @@ extunix   | eu       |            | extunix                     | wasm32 wasm64 
 snappy    | sn       |            | snappy                      | wasm32 wasm64      |
 jspi      | jp       |            |                             | wasm32 wasm64      |
 cpsstack  | cs       |            | cps-stack                   | wasm32 wasm64      |
+cpsasync  | ca       |            | cps-stack-asyncify          | wasm32 wasm64      |
 argon2    | ar       |            | argon2                      | wasm32 wasm64      |
 expat     | ex       |            | expat                       | wasm32 wasm64      |
 lmdb      | lm       |            | lmdb                        | wasm32 wasm64      |
@@ -148,6 +149,9 @@ has_pkg() {
     wasi-threads) [ $WASI = no ] || { [ -n "$WASMTIME_THREADS" ] && [ "$("$WASMTIME_THREADS" --version | sed 's/^wasmtime \([0-9]*\).*/\1/')" -le 46 ]; } ;;
     playwright) [ -n "${PLAYWRIGHT_DIR:-}" ] && [ -d "$PLAYWRIGHT_DIR/node_modules/playwright" ] ;;
     cps-stack) "${OCAML_EMCC_C_OF_OCAML:-c_of_ocaml}" --help 2>/dev/null | grep -q -- --cps-stack ;;
+    # (the c_of_ocaml before camlc_cps_bounce_direct overflows the stack
+    # without tail calls)
+    cps-stack-asyncify) has_pkg cps-stack && grep -qs camlc_cps_bounce_direct "$(command -v "${OCAML_EMCC_C_OF_OCAML:-c_of_ocaml}")" ;;
     # (the c_of_ocaml before 45c785ea refuses --cps-stack with --dynlink)
     cps-stack-dynlink) has_pkg cps-stack && ! grep -qs 'not supported with --dynlink and for plugins' "$(command -v "${OCAML_EMCC_C_OF_OCAML:-c_of_ocaml}")" ;;
     ocaml\>=*) [ "$(printf '%s\n' "${1#ocaml>=}" "$(ocamlc -vnum)" | sort -V | head -1)" = "${1#ocaml>=}" ] ;;

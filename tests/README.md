@@ -63,6 +63,7 @@ stopped, and its test fails.
 | `dynjspi`   | `dynthreads` with `--jspi` (`jspi: yes`): threads started after a plugin is loaded, a plugin loaded by `load_url` |
 | `jspi`      | `--jspi` (`jspi: yes`): recursions 200 000 calls deep (plain, allocating, `List.fold_right`, an exception crossing them) on node's main thread, whose 984 KB stack is that of browsers: compiled, they go on JSPI's new stacks (node 24 with `--experimental-wasm-jspi`). And `emscripten_sleep` without asyncify, in a loop, in C calling OCaml back, under such a recursion (the executable's own `foreign_stubs`) |
 | `cpsstack`  | the recursions of `jspi` with `--cps-stack` (`cps-stack: yes`), without JSPI: compiled, they go on in CPS, on the heap (skipped when c_of_ocaml has no `--cps-stack`) |
+| `cpsasync`  | `jspi` with `--cps-stack` and `-sASYNCIFY` (`link-flags:`) instead of JSPI: the recursions go on in CPS without wasm tail calls, and asyncify suspends `emscripten_sleep`, under them too (skipped when c_of_ocaml overflows the stack without tail calls) |
 | `mapfile`   | `Unix.map_file`: a shared writable mapping written back to the file once collected, a longer one growing the file, a read-only one (interpreted, where collections are timely; also under `--wasi`) |
 | `localtime` | the local time zone's file (`/etc/localtime`, or that of `$TZ`) gives the offsets of `Unix.localtime` |
 | `core`      | core: `Int63` (an `int64` on wasm32), times, maps, bin_prot, sexps, dates, the local time zone |

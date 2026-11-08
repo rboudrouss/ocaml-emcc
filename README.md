@@ -344,6 +344,13 @@ ocaml-emcc build app.js --jspi         # or --cps-stack
   emscripten that suspend (`emscripten_sleep`) work as with asyncify, also
   in C calling OCaml back.
 
+**With `--cps-stack` and `-sASYNCIFY`.** Asyncify compiles without wasm
+tail calls, so the returns of the CPS code bounce on c_of_ocaml's
+trampoline as well: the recursions stay limited by memory only, and C
+suspends under them (`tests/cpsasync`). ocaml-emcc gives asyncify 1 MB
+for the stack it saves while C suspends (`-sASYNCIFY_STACK_SIZE`, 4 KB by
+default, which some hundred frames of compiled code exceed).
+
 ### raylib in a browser
 
 A game using [raylib-ocaml](https://github.com/tjammer/raylib-ocaml) builds

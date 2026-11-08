@@ -28,7 +28,9 @@
   (`plugin --main` follows the program, or `plugin --cps-stack`), and all
   have double translation. Not with `--effects` other than
   `double-translation`. A C stack under 1 MB (`--stack-size`) gets a
-  warning, with `--jspi` too.
+  warning, with `--jspi` too. It works with `-sASYNCIFY` (no wasm tail
+  calls), C suspending under a deep recursion, with a c_of_ocaml whose
+  returns to the continuations bounce on the trampoline.
 - Compiled with `-sASYNCIFY`: asyncify saves the stack in 1 MB
   (`-sASYNCIFY_STACK_SIZE=1048576`, unless given) rather than 4 KB, which
   suspending under some hundred frames exceeded. Only `-sASYNCIFY` itself
