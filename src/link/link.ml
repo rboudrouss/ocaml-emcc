@@ -42,6 +42,7 @@ type opts = {
   threads : bool;  (** Thread.create and Domain.spawn start threads (shared memory) *)
   jspi : bool;  (** JSPI (-sJSPI): an asynchronous main; compiled, deep recursions on new stacks *)
   cps_stack : bool;  (** compiled: deep recursions go on in CPS, on the heap (c_of_ocaml's --cps-stack) *)
+  tail_calls : bool;  (** compiled: wasm tail calls (emcc's -mtail-call), unless --no-tail-calls or asyncify *)
 }
 
 (* C prototype of a primitive as the interpreter calls it. *)
@@ -332,6 +333,7 @@ type compiled = {
   c_prims : string list;
   c_arities : (int, int) Hashtbl.t;  (** arities by index in [c_prims] *)
   c_effects : string;  (** c_of_ocaml's choice: disabled or double-translation *)
+  c_tail_calls : bool;  (** compiled with wasm tail calls (-mtail-call) *)
 }
 
 (* A size of emcc's settings (-sSTACK_SIZE=8MB): bytes, or KB, MB, GB *)
@@ -426,7 +428,7 @@ let compile_to_c ?(dynlink = false) ?(cps_stack = false) ?(wasi = false) ?effect
   let m = read_manifest (Filename.concat c_dir "manifest") in
   let c_arities = Hashtbl.create 64 in
   List.iteri (fun i (_, a) -> Hashtbl.replace c_arities i a) m.prims;
-  { c_objs; support_obj; cc; c_prims = List.map fst m.prims; c_arities; c_effects = m.effects }
+  { c_objs; support_obj; cc; c_prims = List.map fst m.prims; c_arities; c_effects = m.effects; c_tail_calls = tail_calls }
 
 let rec mkdir_p d =
   if not (Sys.file_exists d) then (
@@ -884,6 +886,7 @@ let run o =
            (if o.cps_stack then "--cps-stack" else "--jspi") o.stack_size
      | _ -> ());
   if o.cps_stack && not o.compiled then Env.log "note: --cps-stack is for the compiled mode: ignored (interpreted)";
+  if (not o.tail_calls) && not o.compiled then Env.log "note: --no-tail-calls is for the compiled mode: ignored (interpreted)";
   if standalone && o.jspi then
     Env.fail "--jspi (JSPI) suspends the wasm code through the JavaScript glue: link OUT.js or OUT.html, not a standalone %s" o.output;
   if o.compiled then check_compiled ();
@@ -980,8 +983,8 @@ let run o =
   let compiled =
     if o.compiled then (
       (* (JSPI supports them) *)
-      let tail_calls = not asyncify in
-      if not tail_calls then Env.log "asyncify: compiled without wasm tail calls";
+      let tail_calls = o.tail_calls && not asyncify in
+      if asyncify && o.tail_calls then Env.log "asyncify: compiled without wasm tail calls";
       let c = compile_to_c ~dynlink:o.dynlink ~cps_stack:o.cps_stack ~wasi:o.wasi ?effects:o.effects ~emcc ~flags:(cflags @ [ o.opt ] @ inc) ~tail_calls ~work ~base o.bc in
       if o.dynlink && o.effects = None && (not o.cps_stack) && c.c_effects = "double-translation" then
         Env.log "the program performs effects: compiled with double translation, as its plugins will be";
@@ -1003,6 +1006,7 @@ let run o =
                  | Some c when c.c_effects = "double-translation" -> [ "-DOCAML_EMCC_DOUBLE_TRANSLATION" ]
                  | _ -> [])
                @ (if compiled <> None && o.cps_stack then [ "-DOCAML_EMCC_CPS_STACK" ] else [])
+               @ (match compiled with Some c when not c.c_tail_calls -> [ "-DOCAML_EMCC_NO_TAIL_CALLS" ] | _ -> [])
                @ if o.threads then [ "-DOCAML_EMCC_THREADS" ] else []) ])
   in
   if o.check then (
@@ -1445,7 +1449,7 @@ let bytecode_plugin ?(threads = false) ~input ~out_dir ~main ~opt () =
    position-independent code.  With [main] (the program's OUT.js or
    OUT.wasm), the symbols the plugin imports are checked against those the
    program exports. *)
-let rec plugin ?effects ?(cps_stack = false) ?(threads = false) ?(interpreted = false) ~input ~output ~main ~opt () =
+let rec plugin ?effects ?(cps_stack = false) ?(threads = false) ?(tail_calls = true) ?(interpreted = false) ~input ~output ~main ~opt () =
   (* (an interpreted program: its plugins are bytecode, and their stubs
      dllX.so) *)
   let main_is_interpreted () =
@@ -1458,9 +1462,9 @@ let rec plugin ?effects ?(cps_stack = false) ?(threads = false) ?(interpreted = 
   if interpreted || main_is_interpreted () then (
     if not interpreted then Env.log "the program is interpreted: the plugin is the bytecode, with its stubs as wasm dllX.so";
     bytecode_plugin ~threads ~input ~out_dir:(if output = "" then "." else output) ~main ~opt ())
-  else plugin_compiled ?effects ~cps_stack ~threads ~input ~output ~main ~opt ()
+  else plugin_compiled ?effects ~cps_stack ~threads ~tail_calls ~input ~output ~main ~opt ()
 
-and plugin_compiled ?effects ~cps_stack ~threads ~input ~output ~main ~opt () =
+and plugin_compiled ?effects ~cps_stack ~threads ~tail_calls ~input ~output ~main ~opt () =
   if output = "" then Env.fail "plugin: -o OUT.wasm missing";
   if not (Env.toolchain_ready ()) then
     Env.fail "no wasm runtime in %s, run `ocaml-emcc setup` first" (Env.sysroot ());
@@ -1498,6 +1502,16 @@ and plugin_compiled ?effects ~cps_stack ~threads ~input ~output ~main ~opt () =
            Env.log "the program is linked with --threads: so is the plugin";
            true
        | _ -> false
+  in
+  (* a program compiled without wasm tail calls (--no-tail-calls, asyncify)
+     runs where they may be missing: so is the plugin *)
+  let tail_calls =
+    tail_calls
+    && match main_exports with
+       | Some l when List.mem "ocaml_emcc_no_tail_calls" l ->
+           Env.log "the program is compiled without wasm tail calls: so is the plugin";
+           false
+       | _ -> true
   in
   (match effects with
   | Some e when cps_stack && e <> "double-translation" ->
@@ -1539,7 +1553,8 @@ and plugin_compiled ?effects ~cps_stack ~threads ~input ~output ~main ~opt () =
   in
   let flags =
     Env.manifest_flags "cflags"
-    @ [ opt; "-fPIC"; "-mtail-call"; "-I" ^ support; "-I" ^ Env.sysroot_file "lib/ocaml" ]
+    @ [ opt; "-fPIC" ] @ (if tail_calls then [ "-mtail-call" ] else [])
+    @ [ "-I" ^ support; "-I" ^ Env.sysroot_file "lib/ocaml" ]
   in
   let objs =
     List.map

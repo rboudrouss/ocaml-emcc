@@ -126,7 +126,7 @@ differs.
 | threads, domains, js_of_ocaml's library, WASI | yes | yes |
 | deep recursion | the engine's stack: 1 GB under node, 500 KB to 1 MB in browsers, without limit with [`--jspi` or `--cps-stack`](#deep-recursion-in-a-browser) | the interpreter's own stack, as natively |
 | `Printexc.get_callstack` | empty (backtraces of exceptions work) | yes |
-| with asyncify (`-sASYNCIFY`) | tail calls become ordinary calls (see below) | yes |
+| with asyncify (`-sASYNCIFY`) | without wasm tail calls by default, as `--no-tail-calls` (see below) | yes |
 | `--preload` | nothing to preload | the bytecode in a separate `.data` file |
 
 
@@ -149,12 +149,21 @@ differs.
   functions loop in constant stack, as natively. Engines have them since
   Chrome 112, Firefox 121, Safari 18.2 and node 20 (wasmer with
   `--enable-tail-call`), and older ones do not load the module. They do
-  not change the speed: without them (asyncify) the Ocsigen benchmarks
-  run as fast, `--cps-stack` too.
+  not change the speed: without them the Ocsigen benchmarks run as fast,
+  `--cps-stack` too.
+- **`--no-tail-calls`** (`tail-calls: no`) compiles without them, and is
+  only for the older browsers that lack them (Safari before 18.2, Firefox
+  before 121, Chrome before 112). Tail calls then become ordinary calls,
+  so a long loop of tail calls (mutually recursive functions, a loop
+  through closures) may overflow the stack. Those browsers have no JSPI
+  either, and a stack of 500 KB to 1 MB: a program recursing deeply will
+  probably need `--cps-stack` too (see [Deep recursion in a
+  browser](#deep-recursion-in-a-browser)). The plugins of such a program
+  follow it (`plugin --main`, or `plugin --no-tail-calls`).
 - **Asyncify**: Asyncify do not support WebAssembly tail calls.
-  With `-sASYNCIFY`, as the raylib recipe links, they become
-  ordinary calls, so a long chain of mutually recursive tail calls may
-  overflow. You might need to use `--cps-stack` (or `--jspi` instead of Asyncify), see [Deep recursion in a
+  With `-sASYNCIFY`, as the raylib recipe links, ocaml-emcc turns them
+  off by default, as `--no-tail-calls` does: they become ordinary calls,
+  so a long chain of mutually recursive tail calls may overflow. You might need to use `--cps-stack` (or `--jspi` instead of Asyncify), see [Deep recursion in a
   browser](#deep-recursion-in-a-browser).
 - **Effects** performed across a callback from C raise
   `Effect.Unhandled`.
@@ -171,7 +180,7 @@ steps, for scripts and Makefiles (see [Without dune](#without-dune)).
 |---------|--------------|
 | `build OUT [--exe DIR/NAME] [LINK OPTIONS] [-- EMCC-ARGS]` | the dune executable named like `OUT` (or `--exe`), its C stubs and those of its dependencies, the link |
 | `link PROG.bc -o OUT [LINK OPTIONS] [-- EMCC-ARGS]` | the link of a bytecode executable built otherwise |
-| `plugin LIB.cma\|M.cmo -o OUT.wasm [--main PROG.js] [--effects MODE] [--cps-stack] [--threads] [-O FLAG]` | a [plugin](#plugins), compiled and linked as the program with `--main` (effects, `--cps-stack`, threads), which also checks that the program exports what it needs |
+| `plugin LIB.cma\|M.cmo -o OUT.wasm [--main PROG.js] [--effects MODE] [--cps-stack] [--threads] [--no-tail-calls] [-O FLAG]` | a [plugin](#plugins), compiled and linked as the program with `--main` (effects, `--cps-stack`, threads, tail calls), which also checks that the program exports what it needs |
 | `plugin --interpreted LIB.cma [-o DIR] [--main PROG.js]` | the C stubs of a bytecode plugin, `DIR/dllX.so` in wasm, for an interpreted program's `Dynlink` (implied by `--main` when the program is interpreted) |
 | `setup [--force]` | the wasm runtime of the switch's compiler (`build` and `link` do it the first time) |
 | `install [--force] RECIPE...` | build [recipes](#c-dependencies) (gmp, project recipes...), again with `--force` |
@@ -196,6 +205,7 @@ needed.
 | `--dynlink` | a program loading plugins (implied when it links `Emcc_dynlink`) | see [Plugins](#plugins) |
 | `--jspi` | links with JSPI (`-sJSPI`), with an asynchronous `main` and, compiled, deep recursions on new stacks | deep recursion in browsers that have JSPI, or instead of `-sASYNCIFY`, see [Deep recursion in a browser](#deep-recursion-in-a-browser) |
 | `--cps-stack` | compiled, deep recursions go on in CPS on the heap (a bigger program) | deep recursion in every browser, see [Deep recursion in a browser](#deep-recursion-in-a-browser) |
+| `--no-tail-calls` | compiled without wasm tail calls (implied by `-sASYNCIFY`) | only for browsers without them (Safari < 18.2, Firefox < 121, Chrome < 112), with `--cps-stack` for deep recursions, see [The compiled mode](#the-compiled-mode) |
 | `--wasi` | `OUT.wasm` for a WASI host | see [WASI](#wasi) |
 | `--wasix` | `--wasi`, with WASIX's sockets | network programs under wasmer |
 | `--node-fs` | the real file system and environment, node only | programs reading files installed with them (dune-site, why3's `share/why3`, frama-c) or the user's files |
@@ -249,6 +259,7 @@ directory upwards. Every field is optional.
 | `threads:` | link with `--threads` | `threads: yes` |
 | `jspi:` | link with `--jspi` | `jspi: yes` |
 | `cps-stack:` | link with `--cps-stack` | `cps-stack: yes` |
+| `tail-calls:` | `no`: link with `--no-tail-calls` | `tail-calls: no` |
 | `wasix:` | `--wasi` links with `--wasix` | `wasix: yes` |
 | `interpreted:` | link with `--interpreted` (`--compiled` overrides it) | `interpreted: yes` |
 

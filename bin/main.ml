@@ -43,6 +43,11 @@ link options (build and link):
                   every browser and with a synchronous main (c_of_ocaml's
                   --cps-stack), for a program about 1.5 times bigger; with
                   --dynlink, its plugins too (double translation)
+  --no-tail-calls compiled: without wasm tail calls, only for the browsers
+                  that lack them (Safari < 18.2, Firefox < 121, Chrome <
+                  112); long loops of tail calls may then overflow the
+                  stack, and those browsers need --cps-stack for deep
+                  recursions (implied by -sASYNCIFY; its plugins follow)
   --dynlink       a program loading plugins (Emcc_dynlink of
                   ocaml-emcc.dynlink, see `plugin`), compiled only; its
                   bytecode must be linked with -linkall; implied when the
@@ -82,12 +87,12 @@ step by step (scripts, Makefiles, projects without dune):
   doctor PROG.bc [-L DIR]...   stub libraries, primitives, 31-bit literals
   link PROG.bc -o OUT.js [LINK OPTIONS] [-- EMCC-ARGS...]
   plugin LIB.cma|M.cmo -o OUT.wasm [--main PROG.js] [--effects MODE]
-         [--cps-stack] [--threads] [-O FLAG]
+         [--cps-stack] [--threads] [--no-tail-calls] [-O FLAG]
                                a plugin (compiled) for a program linked with
                                --dynlink;
                                --main checks that the program exports what
                                it needs, and gives its effects mode,
-                               --cps-stack and --threads
+                               --cps-stack, --threads and --no-tail-calls
   plugin --interpreted LIB.cma [-o DIR] [--main PROG.js]
                                the stubs of a bytecode plugin, DIR/dllX.so
                                (wasm), for the Dynlink of a program linked
@@ -223,6 +228,7 @@ let default_link_opts : Link.opts =
     opt = "-O2"; stack_size = "8MB"; auto_deps = true; check = true; wasi = false; wasix = false;
     compiled = true;
     missing_prims = true; js_files = []; dynlink = false; effects = None; threads = false; jspi = false; cps_stack = false;
+    tail_calls = true;
   }
 
 (* --compiled or --interpreted, when given *)
@@ -249,6 +255,7 @@ let parse_link_opts ?(extra = fun _ -> None) args =
     | "--threads" :: rest -> go { o with threads = true } pos rest
     | "--jspi" :: rest -> go { o with jspi = true } pos rest
     | "--cps-stack" :: rest -> go { o with cps_stack = true } pos rest
+    | "--no-tail-calls" :: rest -> go { o with tail_calls = false } pos rest
     | "--effects" :: e :: rest -> go { o with effects = Some e } pos rest
     | "--no-missing-primitives" :: rest -> go { o with missing_prims = false } pos rest
     | "--emcc-flag" :: f :: rest -> go { o with emcc_flags = o.emcc_flags @ [ f ] } pos rest
@@ -282,6 +289,7 @@ let with_config_flags (o : Link.opts) =
     | None -> true
   in
   { o with emcc_flags = p.link_flags @ env_flags @ o.emcc_flags; js_files = p.js_files @ o.js_files; threads = o.threads || p.threads; jspi = o.jspi || p.jspi; cps_stack = o.cps_stack || p.cps_stack;
+    tail_calls = o.tail_calls && not p.no_tail_calls;
     wasix = o.wasix || (o.wasi && p.wasix); compiled }
 
 let cmd_link args =
@@ -294,7 +302,7 @@ let cmd_link args =
   | _ -> die_usage ()
 
 let cmd_plugin args =
-  let effects = ref None and cps_stack = ref false and threads = ref false and interpreted = ref false in
+  let effects = ref None and cps_stack = ref false and threads = ref false and tail_calls = ref true and interpreted = ref false in
   let rec go out main opt pos = function
     | "-o" :: f :: rest -> go (Some f) main opt pos rest
     | "--main" :: f :: rest -> go out (Some f) opt pos rest
@@ -302,6 +310,7 @@ let cmd_plugin args =
     | "--effects" :: e :: rest -> effects := Some e; go out main opt pos rest
     | "--cps-stack" :: rest -> cps_stack := true; go out main opt pos rest
     | "--threads" :: rest -> threads := true; go out main opt pos rest
+    | "--no-tail-calls" :: rest -> tail_calls := false; go out main opt pos rest
     | "--interpreted" :: rest -> interpreted := true; go out main opt pos rest
     | x :: rest when not (Str_util.starts_with ~prefix:"-" x) -> go out main opt (x :: pos) rest
     | [] -> (out, main, opt, List.rev pos)
@@ -310,7 +319,7 @@ let cmd_plugin args =
   match go None None "-O2" [] args with
   | output, main, opt, [ input ] when output <> None || !interpreted || main <> None ->
       ensure_setup ();
-      Link.plugin ?effects:!effects ~cps_stack:!cps_stack ~threads:!threads ~interpreted:!interpreted ~input
+      Link.plugin ?effects:!effects ~cps_stack:!cps_stack ~threads:!threads ~tail_calls:!tail_calls ~interpreted:!interpreted ~input
         ~output:(Option.value output ~default:"") ~main ~opt ()
   | _ -> die_usage ()
 

@@ -11,6 +11,7 @@
      threads: yes                    link with --threads
      jspi: yes                       link with --jspi
      cps-stack: yes                  link with --cps-stack
+     tail-calls: no                  link with --no-tail-calls
      wasix: yes                      --wasi links with --wasix (sockets)
      interpreted: yes                link with --interpreted
 
@@ -28,11 +29,12 @@ type t = {
   threads : bool;
   jspi : bool;
   cps_stack : bool;
+  no_tail_calls : bool;
   wasix : bool;
   interpreted : bool;
 }
 
-let empty = { dir = None; target = None; recipes = []; requires = []; link_flags = []; js_files = []; cflags = []; threads = false; jspi = false; cps_stack = false; wasix = false; interpreted = false }
+let empty = { dir = None; target = None; recipes = []; requires = []; link_flags = []; js_files = []; cflags = []; threads = false; jspi = false; cps_stack = false; no_tail_calls = false; wasix = false; interpreted = false }
 
 let rec find_up dir names =
   match List.find_opt (fun n -> Sys.file_exists (Filename.concat dir n)) names with
@@ -68,7 +70,8 @@ let load () =
       let kv = parse_file (Filename.concat dir name) in
       let get k = List.filter_map (fun (k', v) -> if k = k' then Some v else None) kv in
       let words k = Compat.concat_map Str_util.words (get k) in
-      let yes k = List.mem (match get k with [] -> "" | l -> List.nth l (List.length l - 1)) [ "yes"; "true" ] in
+      let last k = match get k with [] -> "" | l -> List.nth l (List.length l - 1) in
+      let yes k = List.mem (last k) [ "yes"; "true" ] in
       let recipes = List.map (absolute dir) (words "recipes") in
       {
         dir = Some dir;
@@ -81,6 +84,7 @@ let load () =
         threads = yes "threads";
         jspi = yes "jspi";
         cps_stack = yes "cps-stack";
+        no_tail_calls = List.mem (last "tail-calls") [ "no"; "false" ];
         wasix = yes "wasix";
         interpreted = yes "interpreted";
       }

@@ -47,6 +47,13 @@ EMSCRIPTEN_KEEPALIVE void ocaml_emcc_double_translation(void) {}
 EMSCRIPTEN_KEEPALIVE void ocaml_emcc_cps_stack(void) {}
 #endif
 
+#ifdef OCAML_EMCC_NO_TAIL_CALLS
+/* Exported by a program compiled without wasm tail calls (--no-tail-calls,
+   asyncify): `ocaml-emcc plugin --main` compiles its plugins without them
+   too, for the engines that lack them */
+EMSCRIPTEN_KEEPALIVE void ocaml_emcc_no_tail_calls(void) {}
+#endif
+
 #ifdef OCAML_EMCC_THREADS
 /* Exported by a program linked with --threads, whose memory is shared:
    `ocaml-emcc plugin --main` links its plugins with -pthread, which
