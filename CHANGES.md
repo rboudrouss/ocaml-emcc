@@ -41,6 +41,11 @@
   `share/runtime/jspi.c`, linked with `--jspi` only. The C functions the
   code of plugins calls are linked in the program by c_of_ocaml
   (`asin` and `acos` were missing from those `link --dynlink` exported).
+- Effect handlers with `--dynlink`: a program whose own code performs
+  effects is compiled with them (double translation) without `--effects`,
+  instead of raising `Effect.Unhandled` (c_of_ocaml 3456533a), and
+  `plugin` refuses a plugin performing effects for a program without
+  them, or without `--main`, unless `--effects disabled`.
 - `--dynlink` is implied when a compiled program (not a standalone
   `.wasm`) links `Emcc_dynlink`.
 - The C of an executable's own `(foreign_stubs ...)` is linked (its

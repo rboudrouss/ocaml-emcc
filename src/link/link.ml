@@ -299,9 +299,10 @@ let threads_flags ~wasi ~proxy_to_pthread =
 
 (* c_of_ocaml's manifest of the C code (DIR/manifest with --split, see its
    README): the primitives the code calls, with the arity of their calls
-   (-1: an array and its length), and the effect handlers of the program.
-   Unknown keys are ignored. *)
-type manifest = { prims : (string * int) list; effects : string }
+   (-1: an array and its length), the effect handlers of the program, and
+   whether its code performs effects (out of its dead code, older
+   c_of_ocaml: None). Unknown keys are ignored. *)
+type manifest = { prims : (string * int) list; effects : string; uses_effects : bool option }
 
 let read_manifest file =
   if not (Sys.file_exists file) then
@@ -315,8 +316,9 @@ let read_manifest file =
             | Some a -> { m with prims = (name, a) :: m.prims }
             | None -> Env.fail "%s: bad line %S" file l)
         | [ "effects"; e ] -> { m with effects = e }
+        | [ "uses_effects"; b ] -> { m with uses_effects = bool_of_string_opt b }
         | _ -> m)
-      { prims = []; effects = "disabled" }
+      { prims = []; effects = "disabled"; uses_effects = None }
       (String.split_on_char '\n' (Compat.read_file file))
   in
   { m with prims = List.rev m.prims }
@@ -978,7 +980,10 @@ let run o =
       let asyncify f = Str_util.starts_with ~prefix:"-sASYNCIFY" f && f <> "-sASYNCIFY=0" in
       let tail_calls = List.exists jspi all || not (List.exists asyncify all) in
       if not tail_calls then Env.log "asyncify: compiled without wasm tail calls";
-      Some (compile_to_c ~dynlink:o.dynlink ~cps_stack:o.cps_stack ~wasi:o.wasi ?effects:o.effects ~emcc ~flags:(cflags @ [ o.opt ] @ inc) ~tail_calls ~work ~base o.bc))
+      let c = compile_to_c ~dynlink:o.dynlink ~cps_stack:o.cps_stack ~wasi:o.wasi ?effects:o.effects ~emcc ~flags:(cflags @ [ o.opt ] @ inc) ~tail_calls ~work ~base o.bc in
+      if o.dynlink && o.effects = None && (not o.cps_stack) && c.c_effects = "double-translation" then
+        Env.log "the program performs effects: compiled with double translation, as its plugins will be";
+      Some c)
     else None
   in
   let dynlink_objs =
@@ -1506,6 +1511,20 @@ and plugin_compiled ?effects ~cps_stack ~threads ~input ~output ~main ~opt () =
   let word_size = if !Env.target = "wasm64" then [ "--word-size"; "64" ] else [] in
   let effects = match effects with Some e -> [ "--effects"; e ] | None -> [] in
   Env.run_exn cooc (word_size @ effects @ cps_stack_flag cooc cps_stack @ [ input; "--split"; c_dir ]);
+  (* a plugin performing effects without effect handlers would raise
+     Effect.Unhandled when it runs: refused, unless --effects disabled asked
+     for it *)
+  (let m = read_manifest (Filename.concat c_dir "manifest") in
+   if m.uses_effects = Some true && m.effects = "disabled" && effects = [] then
+     match main with
+     | Some p ->
+         Env.fail
+           "%s performs effects, but %s is compiled without effect handlers (it performs none itself): link it with --effects double-translation, its plugins then follow (or --effects disabled for the plugin, whose effects then raise Effect.Unhandled)"
+           input p
+     | None ->
+         Env.fail
+           "%s performs effects: build it with --main PROG.js, a program compiled with effect handlers, or with --effects double-translation (or --effects disabled, its effects then raise Effect.Unhandled)"
+           input);
   let parts =
     Sys.readdir c_dir |> Array.to_list
     |> List.filter (fun f -> Filename.check_suffix f ".c")
