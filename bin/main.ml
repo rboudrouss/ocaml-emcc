@@ -24,8 +24,10 @@ link options (build and link):
   --compiled      the default (accepted for older scripts)
   --effects MODE  compiled: effect handlers (OCaml 5), c_of_ocaml's
                   double-translation or disabled (default: double
-                  translation when the program performs effects or with
-                  --cps-stack; disabled with --dynlink otherwise)
+                  translation when the program performs effects,
+                  out of its dead code, or with --cps-stack; a --dynlink
+                  program performing none needs double-translation for
+                  plugins that do)
   --threads       Thread.create and Domain.spawn (OCaml >= 5.3) start
                   threads: emscripten's pthreads (web workers sharing the
                   memory; in browsers, a cross-origin isolated page), or with
