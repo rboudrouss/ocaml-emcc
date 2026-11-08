@@ -148,7 +148,9 @@ differs.
   (`return_call`, emcc's `-mtail-call`), so that mutually recursive
   functions loop in constant stack, as natively. Engines have them since
   Chrome 112, Firefox 121, Safari 18.2 and node 20 (wasmer with
-  `--enable-tail-call`), and older ones do not load the module.
+  `--enable-tail-call`), and older ones do not load the module. They do
+  not change the speed: without them (asyncify) the Ocsigen benchmarks
+  run as fast, `--cps-stack` too.
 - **Asyncify**: Asyncify do not support WebAssembly tail calls.
   With `-sASYNCIFY`, as the raylib recipe links, they become
   ordinary calls, so a long chain of mutually recursive tail calls may
