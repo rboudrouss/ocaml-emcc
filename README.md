@@ -30,9 +30,26 @@ tested (see
 ```sh
 opam install ocaml-emcc             # or opam pin add ocaml-emcc git+https://github.com/rboudrouss/ocaml-emcc.git
 source /path/to/emsdk/emsdk_env.sh  # emcc in PATH
-export OCAML_EMCC_C_OF_OCAML=/path/to/c_of_ocaml.exe   # or c_of_ocaml in PATH, see below
+```
 
-ocaml-emcc build main.js            # in your dune project
+The compiled mode, the default, also needs
+[c_of_ocaml](https://github.com/rboudrouss/C_of_ocaml), which is not in
+opam: it is installed apart, like emscripten. Build it in the switch of
+your project, and give it to ocaml-emcc with `$OCAML_EMCC_C_OF_OCAML` (or
+put `c_of_ocaml` in `PATH`). Only `--interpreted` does without it.
+
+```sh
+git clone --depth 1 https://github.com/rboudrouss/C_of_ocaml.git && cd C_of_ocaml
+opam pin add -n -y ppx_devtools-optcomp.dev "git+https://github.com/ocsigen/ppx_devtools.git#f62719d5087fa8d7f2bd0616c1fa91fd660eb27e"
+opam install -y --deps-only ./js_of_ocaml-compiler.opam
+dune build --profile release compiler/bin-c_of_ocaml/c_of_ocaml.exe
+export OCAML_EMCC_C_OF_OCAML=$PWD/_build/default/compiler/bin-c_of_ocaml/c_of_ocaml.exe
+```
+
+Then, in your dune project:
+
+```sh
+ocaml-emcc build main.js
 node main.js                        # or load main.js in a web page
 ```
 
@@ -48,7 +65,7 @@ with emcc, compiles the program to C, and writes `main.js` and
 |------|---------|-------|
 | opam switch | OCaml 4.14 or later (4.x or 5.x) | interpreted only with 4.08 to 4.13 |
 | [emsdk](https://emscripten.org/docs/getting_started/downloads.html) | tested with 6.0.11 | `emcc` in `PATH`, 4.0 or later for standalone `.wasm` outputs |
-| c_of_ocaml | its `master` | in `PATH` or `$OCAML_EMCC_C_OF_OCAML`, not needed with `--interpreted` |
+| c_of_ocaml | its `master` | see [Quick start](#quick-start), not needed with `--interpreted` |
 | dune | 3.11 or later | except for projects built [without dune](#without-dune) |
 | node | the one of emsdk works | to run `.js` outputs, 24 or later for wasm64 |
 
@@ -58,17 +75,6 @@ access, a version still in the opam repository), unless the switch kept
 them (`--keep-build-dir` or `OPAMKEEPBUILDDIR=true` when installing).
 Everything it builds (the runtime, C libraries, rebuilt packages) lives in
 `$OPAM_SWITCH_PREFIX/emcc-sysroot/` and goes away with the switch.
-
-c_of_ocaml is not in opam, it is installed apart, like emscripten. Build it
-in the switch of your project:
-
-```sh
-git clone --depth 1 https://github.com/rboudrouss/C_of_ocaml.git && cd C_of_ocaml
-opam pin add -n -y ppx_devtools-optcomp.dev "git+https://github.com/ocsigen/ppx_devtools.git#f62719d5087fa8d7f2bd0616c1fa91fd660eb27e"
-opam install -y --deps-only ./js_of_ocaml-compiler.opam
-dune build --profile release compiler/bin-c_of_ocaml/c_of_ocaml.exe
-export OCAML_EMCC_C_OF_OCAML=$PWD/_build/default/compiler/bin-c_of_ocaml/c_of_ocaml.exe
-```
 
 ## What works where
 
