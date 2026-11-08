@@ -144,10 +144,16 @@ differs.
   the main thread and saves about 40 ms at startup). Running out of it is
   an uncaught `Stack_overflow`. For browsers, see [Deep recursion in a
   browser](#deep-recursion-in-a-browser).
+- **Tail calls**: OCaml's tail calls are WebAssembly tail calls
+  (`return_call`, emcc's `-mtail-call`), so that mutually recursive
+  functions loop in constant stack, as natively. Engines have them since
+  Chrome 112, Firefox 121, Safari 18.2 and node 20 (wasmer with
+  `--enable-tail-call`), and older ones do not load the module.
 - **Asyncify**: Asyncify do not support WebAssembly tail calls.
   With `-sASYNCIFY`, as the raylib recipe links, they become
   ordinary calls, so a long chain of mutually recursive tail calls may
-  overflow. Use `--jspi` if you encounter problems.
+  overflow. You might need to use `--cps-stack` (or `--jspi` instead of Asyncify), see [Deep recursion in a
+  browser](#deep-recursion-in-a-browser).
 - **Effects** performed across a callback from C raise
   `Effect.Unhandled`.
 - **Backtraces** work when the bytecode is compiled with `-g`, as dune
@@ -376,15 +382,12 @@ ocaml-emcc build game.html            # emscripten's page, with a canvas
 - The `raylib` recipe builds the raylib that the package vendors for
   raylib's `PLATFORM_WEB`, with emscripten's GLFW (`-sUSE_GLFW=3`) and
   WebGL. The window is the page's canvas (`Module.canvas` in a page of
-  your own). There is no window under node. raylib-ocaml's master after 2.3.0
-  does it itself for a wasm target, the recipe patches the releases
-  before.
+  your own). There is no window under node.
 - `window_should_close` gives the browser a frame (`emscripten_sleep`),
   which the recipe links with `-sASYNCIFY` for, or `--jspi` (see
   [Asyncify](#the-compiled-mode)).
 - emcc warns that ASYNCIFY is not compatible with `-fwasm-exceptions`, but
-  OCaml exceptions work, raised from OCaml or from C, and leaving the
-  loop.
+  OCaml exceptions work.
 
 ### WASI
 
@@ -396,8 +399,7 @@ wasmtime run -W exceptions=y --dir . main.wasm arg1 arg2
 `--wasi` is wasm32 only, as no host runs wasm64 WASI modules.
 
 **Hosts.** The host must implement the standard exception handling
-instructions (exnref), as wasmtime 50 and node 22 do. OCaml raises
-exceptions from C with `longjmp`, which uses them.
+instructions (exnref), as wasmtime 50 and node 22 do.
 
 | host | command |
 |------|---------|
@@ -490,30 +492,6 @@ let () =
 JavaScript values follow the conventions of wasm_of_ocaml, in a table on
 the JavaScript side and a custom block on the OCaml side, released by the
 GC. Code written for wasm_of_ocaml works unchanged.
-
-- A JavaScript number that is an integer (31 bits on wasm32, 53 on wasm64)
-  is an OCaml `int`, and an `int` given to JavaScript is a number. Other
-  numbers are JavaScript values, converted with `Js.float_of_number` and
-  `Js.number_of_float` (an OCaml float given to JavaScript is a number
-  too).
-- Strings are converted (`Js.string`, `Js.to_string`), in UTF-8.
-- Any other OCaml value given to JavaScript is an opaque object, and comes
-  back as the same OCaml value.
-- `Js.wrap_callback` and the other callbacks make JavaScript functions.
-  Once the main program is done, the program keeps running them (event
-  handlers, timers, promises), as with js_of_ocaml. Under node, the
-  process then ends when nothing is left to run. `exit` in a callback ends
-  it.
-- A JavaScript exception is `Js_error.Exn` in OCaml when it is an `Error`,
-  else `Failure`. An OCaml exception crossing JavaScript (raised in a
-  callback) comes back as itself.
-- `Js.export` sets a global of the page (`module.exports` under node).
-- `Js.Unsafe.js_expr` and the like evaluate their string when called, in
-  the global scope.
-- `Sys_js.set_channel_flusher` and `set_channel_filler` redirect a channel
-  to an OCaml function (`stdout` to the page, for instance), and
-  `Sys_js.mount` gives the files under a path on demand, in emscripten's
-  file system (`create_file` and `read_file` use it too).
 
 **Differences with js_of_ocaml.**
 
