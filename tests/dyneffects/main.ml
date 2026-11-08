@@ -1,5 +1,5 @@
-(* Plugins and effects: the program is compiled with --effects
-   double-translation, its plugins follow (ocaml-emcc plugin --main) *)
+(* Plugins and effects: the program performs effects, so is compiled with
+   double translation, its plugins follow (ocaml-emcc plugin --main) *)
 let load f =
   match Emcc_dynlink.loadfile f with
   | () -> Printf.printf "loaded %s\n%!" f
