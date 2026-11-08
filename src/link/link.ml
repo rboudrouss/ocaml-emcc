@@ -407,23 +407,26 @@ let compile_to_c ?(dynlink = false) ?(cps_stack = false) ?(wasi = false) ?effect
   (* (started by main.c) *)
   Env.run_exn emcc (flags @ [ "-DCAMLC_NO_MAIN"; "-c"; Filename.concat support "camlc_runtime.c"; "-o"; support_obj ]);
   (* c_of_ocaml does not rewrite the parts left unchanged: they are not
-     compiled again if their flags are the same (PART.flags) *)
+     compiled again if their flags are the same (PART.flags). The others
+     are compiled in parallel ($OCAML_EMCC_JOBS at a time, default the
+     number of processors), the biggest first *)
   let cc extra =
-    List.iter2
-      (fun c o ->
-        let args = flags @ extra @ [ "-c"; c; "-o"; o ] in
-        let stamp = Filename.chop_suffix c ".c" ^ ".flags" in
-        let key = String.concat "\n" (emcc :: args) in
-        let up_to_date =
-          Sys.file_exists o && Sys.file_exists stamp
-          && (Unix.stat o).Unix.st_mtime >= (Unix.stat c).Unix.st_mtime
-          && Compat.read_file stamp = key
-        in
-        if not up_to_date then (
-          if Sys.file_exists stamp then Sys.remove stamp;
-          Env.run_exn emcc args;
-          write_file stamp key))
-      parts c_objs
+    List.combine parts c_objs
+    |> List.filter_map (fun (c, o) ->
+           let args = flags @ extra @ [ "-c"; c; "-o"; o ] in
+           let stamp = Filename.chop_suffix c ".c" ^ ".flags" in
+           let key = String.concat "\n" (emcc :: args) in
+           let up_to_date =
+             Sys.file_exists o && Sys.file_exists stamp
+             && (Unix.stat o).Unix.st_mtime >= (Unix.stat c).Unix.st_mtime
+             && Compat.read_file stamp = key
+           in
+           if up_to_date then None
+           else (
+             if Sys.file_exists stamp then Sys.remove stamp;
+             Some ((Unix.stat c).Unix.st_size, (emcc, args, fun () -> write_file stamp key))))
+    |> List.stable_sort (fun (a, _) (b, _) -> compare b a)
+    |> List.map snd |> Env.run_all_exn
   in
   let m = read_manifest (Filename.concat c_dir "manifest") in
   let c_arities = Hashtbl.create 64 in

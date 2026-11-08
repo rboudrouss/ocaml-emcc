@@ -62,6 +62,51 @@ let run_exn ?env ?cwd ?out prog args =
   let c = run ?env ?cwd ?out prog args in
   if c <> 0 then fail "command failed (exit %d): %s" c (Compat.quote_command prog args)
 
+(* How many commands [run_all_exn] runs at a time: $OCAML_EMCC_JOBS, else
+   the number of processors *)
+let jobs () =
+  match Option.bind (getenv_opt "OCAML_EMCC_JOBS") int_of_string_opt with
+  | Some n -> max 1 n
+  | None -> (
+      let ic = try Some (Unix.open_process_args_in "/bin/sh" [| "/bin/sh"; "-c"; "nproc 2>/dev/null || sysctl -n hw.ncpu" |]) with _ -> None in
+      match ic with
+      | None -> 1
+      | Some ic ->
+          let n = try int_of_string_opt (String.trim (input_line ic)) with End_of_file -> None in
+          ignore (Unix.close_process_in ic);
+          max 1 (Option.value n ~default:1))
+
+(* The commands [(prog, args, done_)], [jobs ()] at a time, [done_] called
+   once each succeeds; the first failure, once the others have ended *)
+let run_all_exn cmds =
+  let jobs = jobs () in
+  let running = Hashtbl.create 16 in
+  let failed = ref None in
+  let rec wait () = try Unix.wait () with Unix.Unix_error (Unix.EINTR, _, _) -> wait () in
+  let wait_one () =
+    let pid, st = wait () in
+    match Hashtbl.find_opt running pid with
+    | None -> ()
+    | Some (prog, args, done_) -> (
+        Hashtbl.remove running pid;
+        match st with
+        | Unix.WEXITED 0 -> done_ ()
+        | Unix.WEXITED c -> if !failed = None then failed := Some (c, prog, args)
+        | _ -> if !failed = None then failed := Some (255, prog, args))
+  in
+  List.iter
+    (fun (prog, args, done_) ->
+      if !failed = None then (
+        while Hashtbl.length running >= jobs do wait_one () done;
+        if !verbose then log "%s" (Compat.quote_command prog args);
+        let pid = spawn prog args (merged_env None) Unix.stdin Unix.stdout Unix.stderr in
+        Hashtbl.replace running pid (prog, args, done_)))
+    cmds;
+  while Hashtbl.length running > 0 do wait_one () done;
+  match !failed with
+  | Some (c, prog, args) -> fail "command failed (exit %d): %s" c (Compat.quote_command prog args)
+  | None -> ()
+
 let which prog =
   let path = Option.value (getenv_opt "PATH") ~default:"" in
   String.split_on_char ':' path

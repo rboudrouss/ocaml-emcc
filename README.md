@@ -166,6 +166,11 @@ differs.
   probably need `--cps-stack` too (see [Deep recursion in a
   browser](#deep-recursion-in-a-browser)). The plugins of such a program
   follow it (`plugin --main`, or `plugin --no-tail-calls`).
+- **Build time**: c_of_ocaml splits the C in parts (`partN.c`), and
+  ocaml-emcc compiles those that changed in parallel, the biggest first,
+  `$OCAML_EMCC_JOBS` at a time (default: the number of processors). The
+  C of a big program (Rocq's coq-lsp, 165 parts) then compiles in a few
+  minutes on 16 cores instead of more than ten.
 - **Asyncify**: Asyncify do not support WebAssembly tail calls.
   With `-sASYNCIFY`, as the raylib recipe links, ocaml-emcc turns them
   off by default, as `--no-tail-calls` does: they become ordinary calls,
@@ -239,6 +244,7 @@ needed.
 | variable | when | what |
 |----------|------|------|
 | `OCAML_EMCC_C_OF_OCAML` | build | the c_of_ocaml executable (default: the one in `PATH`) |
+| `OCAML_EMCC_JOBS` | build, compiled | the parts of the C compiled at a time (default: the number of processors) |
 | `OCAML_EMCC_TARGET` | build | as `--target` |
 | `OCAML_EMCC_SYSROOT` | build | as `--sysroot` |
 | `OCAML_EMCC_RECIPES_PATH` | build | more recipe directories (`:`-separated) |

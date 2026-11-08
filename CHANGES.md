@@ -40,6 +40,9 @@
   before 18.2, Firefox before 121, Chrome before 112), usually with
   `--cps-stack`. `-sASYNCIFY` implies it. Its plugins follow (`plugin
   --main`, or `plugin --no-tail-calls`).
+- Compiled mode compiles the parts of the C in parallel, the biggest
+  first, `$OCAML_EMCC_JOBS` at a time (default: the number of
+  processors).
 - Compiled mode leaves to c_of_ocaml what is about the code, and keeps
   here what is about emscripten; it needs a c_of_ocaml with a manifest
   (`--manifest`) and `camlc_main`. The primitives the code calls and the
