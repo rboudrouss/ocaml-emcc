@@ -1115,6 +1115,11 @@ let run o =
     if standalone || compiled = None then defaults
     else
       defaults
+      (* (--cps-stack, --jspi: not on a large stack, the deep recursions go
+         on off the stack of the engine) *)
+      @ (if (o.cps_stack || o.jspi) && not proxy_to_pthread then
+           [ "--pre-js"; Filename.concat (Env.share ()) "runtime/node_main_stack.js" ]
+         else [])
       @ [ "--pre-js"; Filename.concat (Env.share ()) ("runtime/" ^ if proxy_to_pthread then "node_threads_stack.js" else "node_stack.js");
           "-sEXPORTED_FUNCTIONS=_main,_malloc,_free" ]
   in

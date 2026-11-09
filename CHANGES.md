@@ -37,6 +37,10 @@
 - Compiled, under node: the main thread compiles the module while the
   worker with the large stack starts (some 15 ms less at startup for a
   6 MB program, ocamlc).
+- Compiled, under node: a program linked with `--cps-stack` or `--jspi`
+  runs on the main thread, without the worker and its large stack (20 to
+  40 ms less at startup), unless `$OCAML_EMCC_STACK_MB` is set. Out of
+  stack on the main thread is an uncaught `Stack_overflow` too.
 - Compiled with `-sASYNCIFY`: asyncify saves the stack in 1 MB
   (`-sASYNCIFY_STACK_SIZE=1048576`, unless given) rather than 4 KB, which
   suspending under some hundred frames exceeded. Only `-sASYNCIFY` itself

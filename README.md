@@ -147,8 +147,10 @@ differs.
 - **Stack depth**: the compiled code runs on the stack of the wasm engine.
   Under node, the program therefore runs in a worker thread with a stack
   of `$OCAML_EMCC_STACK_MB` megabytes, 1024 by default (`0` keeps it on
-  the main thread and saves about 40 ms at startup). Running out of it is
-  an uncaught `Stack_overflow`. For browsers, see [Deep recursion in a
+  the main thread and saves 20 to 40 ms at startup). Running out of it is
+  an uncaught `Stack_overflow`. With `--cps-stack` or `--jspi`, the deep
+  recursions do not need it: the program runs on the main thread unless
+  `$OCAML_EMCC_STACK_MB` is set. For browsers, see [Deep recursion in a
   browser](#deep-recursion-in-a-browser).
 - **Tail calls**: OCaml's tail calls are WebAssembly tail calls
   (`return_call`, emcc's `-mtail-call`), so that mutually recursive
@@ -254,7 +256,7 @@ needed.
 | `OCAML_EMCC_RECIPES_PATH` | build | more recipe directories (`:`-separated) |
 | `OCAML_EMCC_LDFLAGS` | build | more emcc link flags |
 | `OCAML_EMCC_EXTRA_CFLAGS` | build | more C flags for the stubs and recipes |
-| `OCAML_EMCC_STACK_MB` | run, node, compiled | the stack of the program, in MB (default 1024, `0` for node's main thread) |
+| `OCAML_EMCC_STACK_MB` | run, node, compiled | the stack of the program, in MB (default 1024, `0` for node's main thread, the default with `--cps-stack` or `--jspi`) |
 | `OCAML_EMCC_STUBLIBS` | run, interpreted, `--dynlink` | the directories (`:`-separated) of the wasm `dllX.so` of bytecode plugins, before the current one |
 | `OCAML_EMCC_CPUS` | run, WASI | `Domain.recommended_domain_count` (default 4) |
 | `OCAMLRUNPARAM` | run | as natively (`d=N` sets the number of domains), read with `--node-fs` and under WASI only |
