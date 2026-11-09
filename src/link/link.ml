@@ -1119,6 +1119,9 @@ let run o =
          on off the stack of the engine) *)
       @ (if (o.cps_stack || o.jspi) && not proxy_to_pthread then
            [ "--pre-js"; Filename.concat (Env.share ()) "runtime/node_main_stack.js" ]
+         else if not (proxy_to_pthread || jsoo || asyncify) then
+           (* (main on a large stack of its own under a node with JSPI) *)
+           [ "--pre-js"; Filename.concat (Env.share ()) "runtime/node_main_jspi.js" ]
          else [])
       @ [ "--pre-js"; Filename.concat (Env.share ()) ("runtime/" ^ if proxy_to_pthread then "node_threads_stack.js" else "node_stack.js");
           "-sEXPORTED_FUNCTIONS=_main,_malloc,_free" ]

@@ -9,12 +9,17 @@
 // Stack_overflow, as a native program would.  OCAML_EMCC_STACK_MB=0 runs
 // on the main thread, the default for a program whose deep recursions go
 // on off the stack of the engine (--cps-stack, --jspi: node_main_stack.js,
-// linked before), which saves starting the worker (some 20 ms).
+// linked before), which saves starting the worker (some 20 ms).  A node
+// with JSPI runs main on a stack of that size of its own instead
+// (node_main_jspi.js).
 if (typeof process == "object" && process.versions && process.versions.node) {
   var ocamlEmccStackMb = Number(
     process.env.OCAML_EMCC_STACK_MB || (typeof ocamlEmccMainStack != "undefined" ? 0 : 1024));
+  var ocamlEmccPromising =
+    ocamlEmccStackMb > 0 && typeof ocamlEmccMainJspi != "undefined" ? ocamlEmccJspi() : undefined;
+  var ocamlEmccJspiStack = typeof ocamlEmccPromising == "function";
   // (worker_threads loads node's streams, some 3 ms: only for the worker)
-  var ocamlEmccThreads = ocamlEmccStackMb > 0 ? require("worker_threads") : null;
+  var ocamlEmccThreads = ocamlEmccStackMb > 0 && !ocamlEmccJspiStack ? require("worker_threads") : null;
   if (ocamlEmccThreads && ocamlEmccThreads.isMainThread) {
     var ocamlEmccWorker = new ocamlEmccThreads.Worker(__filename, {
       argv: process.argv.slice(2),
@@ -60,6 +65,13 @@ if (typeof process == "object" && process.versions && process.versions.node) {
       });
     };
     process.on("uncaughtException", ocamlEmccOverflow);
+    if (ocamlEmccJspiStack)
+      Module["onRuntimeInitialized"] = (function (next) {
+        return function () {
+          _main = ocamlEmccMainOnStack(_main, ocamlEmccStackMb, ocamlEmccOverflow);
+          if (next) next();
+        };
+      })(Module["onRuntimeInitialized"]);
   } else {
     // the worker started above: the module compiled by the main thread
     if (ocamlEmccThreads.workerData && ocamlEmccThreads.workerData.ocamlEmccStack)
@@ -128,4 +140,56 @@ if (typeof process == "object" && process.versions && process.versions.node) {
 function ocamlEmccWasmBinary() {
   if (typeof wasmBinary != "undefined" && wasmBinary) return wasmBinary;
   return require("fs").readFileSync(findWasmBinary());
+}
+
+// WebAssembly.promising, of node 25 and later, and of node 24 once its flag
+// --experimental-wasm-jspi is set, in a new context (not in this one,
+// created before)
+function ocamlEmccJspi() {
+  if (typeof WebAssembly.promising == "function") return WebAssembly.promising;
+  if (process.versions.node.split(".")[0] != "24") return undefined;
+  require("v8").setFlagsFromString("--experimental-wasm-jspi");
+  return require("vm").runInNewContext("WebAssembly.promising");
+}
+
+// main run by WebAssembly.promising, on a new stack of the engine of mb
+// megabytes: the size V8 gives to the stacks it creates (in KB), set for
+// that one, and the limit of the stack (--stack-size: ineffective on the
+// stack of the thread, which exists already).  Nothing suspends it, so it
+// is done when promising returns, its outcome only coming in a promise:
+// emscripten's callMain sees main unwind (as one keeping the runtime
+// alive), and the outcome is handled as callMain would have.
+function ocamlEmccMainOnStack(main, mb, overflow) {
+  var promising = ocamlEmccPromising(main);
+  var v8 = require("v8");
+  var flags = function (kb) {
+    v8.setFlagsFromString("--stack-size=" + kb);
+    v8.setFlagsFromString("--wasm-stack-switching-stack-size=" + kb);
+  };
+  return function (argc, argv) {
+    flags(mb * 1024);
+    try {
+      var p = promising(argc, argv);
+    } finally {
+      // (V8's defaults: the stacks of the callbacks main runs come from a
+      // pool, only of small stacks)
+      flags(984);
+    }
+    p.then(
+      function (ret) {
+        try {
+          exitJS(ret, true);
+        } catch (e) {
+          handleException(e);
+        }
+      },
+      function (e) {
+        try {
+          handleException(e);
+        } catch (e2) {
+          overflow(e2);
+        }
+      });
+    throw "unwind";
+  };
 }
