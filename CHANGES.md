@@ -194,7 +194,9 @@
 - The C files behind the members of a native stub archive built by CMake
   (`x.c.o`, out of the source tree) are found.
 - Stubs without dune or a recipe: the C files reaching the OCaml headers
-  through several local headers are found (orsetto).
+  through several local headers are found (orsetto), and those including
+  them without their directory (`<mlvalues.h>`, as before OCaml 3.08:
+  labltk's).
 - ctypes-foreign: the functions emscripten only has as failing stubs
   (`getpwnam`...) are found by `dlsym` (opasswd stopped at startup with
   "undefined symbol"), and emscripten's libraries are looked for in

@@ -367,9 +367,12 @@ let archive_sources dir a =
 
 (* Whether the C file [f] includes the OCaml headers, directly or through
    headers of its directory (b0's b0_stubs.h; orsetto's cf_tai64_aux.h,
-   through cf_common_aux.h) *)
+   through cf_common_aux.h); also without their directory, as before OCaml
+   3.08 (labltk's <mlvalues.h>, compiled with -I of lib/ocaml/caml) *)
+let bare_caml s = Files.has_seq s "#include" [ "<mlvalues.h>"; "\"mlvalues.h\"" ]
+
 let includes_caml f =
-  let caml s = Files.has_seq s "#include" [ "<caml/"; "\"caml/" ] in
+  let caml s = Files.has_seq s "#include" [ "<caml/"; "\"caml/" ] || bare_caml s in
   let rec go depth f =
     let s = Files.contents f in
     caml s
@@ -435,7 +438,8 @@ let auto ?(force = false) pkg lib =
       List.filter_map
         (fun f ->
           log "  emcc %s" f;
-          if compile ~cwd:work ~flags:([ "-I" ^ Filename.dirname f; "-I" ^ native_dir ] @ cflags) f then
+          let bare = if bare_caml (Files.contents f) then [ "-I" ^ Env.sysroot_file "lib/ocaml/caml" ] else [] in
+          if compile ~cwd:work ~flags:([ "-I" ^ Filename.dirname f; "-I" ^ native_dir ] @ bare @ cflags) f then
             Some (Filename.remove_extension f ^ ".o")
           else if native = None && List.length files > 1 then (log "  %s does not compile: left out" f; None)
           else Env.fail "%s: cannot compile %s" pkg f)
