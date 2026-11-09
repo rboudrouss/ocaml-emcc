@@ -251,6 +251,27 @@ let dune_stubs ~dir ~provider pkg =
          of stubs (with their dllX.so) are rebuilt, the others were
          intermediate. *)
       let wasm, host = List.partition Archive.is_wasm all in
+      (* A rule copying its library elsewhere (radamsa: src/radamsa_c's
+         libradamsa.a to src/) gives two of the same name: the one beside
+         its dll<x>.so.  And one of a `cc -c -o lib<x>.a` is an object, not
+         an archive, which twice on the command line defines its symbols
+         twice: put in an archive. *)
+      let wasm =
+        let stub a = Sys.file_exists (Filename.concat (Filename.dirname a) ("dll" ^ lib_name a ^ ".so")) in
+        let sorted = List.filter stub wasm @ List.filter (fun a -> not (stub a)) wasm in
+        List.filter
+          (fun a -> List.find (fun b -> Filename.basename b = Filename.basename a) sorted = a)
+          wasm
+        |> List.map (fun a ->
+               if Archive.members a <> None then a
+               else (
+                 let out = Filename.concat dir "_wasm_stubs" in
+                 Source.sh "mkdir" [ "-p"; out ];
+                 let o = Filename.concat out (lib_name a ^ ".o") in
+                 sh "cp" [ "-f"; a; o ];
+                 log "  %s: an object, not an archive: put in one" (Filename.basename a);
+                 mklib out (lib_name a) [ o ]))
+      in
       let host =
         List.filter
           (fun a ->

@@ -42,11 +42,14 @@ let members file =
 
 let names file = match members file with Some m -> List.map fst m | None -> []
 
-(* Whether the (first) object of an archive is a wasm one: true when it
-   cannot be told *)
+(* Whether the (first) object of an archive is a wasm one, or the file one
+   (`cc -c -o libx.a`): true when it cannot be told *)
 let is_wasm file =
   match members file with
-  | None -> true
+  | None -> (
+      match Compat.read_file file with
+      | s -> not (Str_util.starts_with ~prefix:"\127ELF" s)
+      | exception Sys_error _ -> true)
   | Some m -> (
       match List.find_opt (fun (n, _) -> Filename.check_suffix n ".o") m with
       | Some (_, c) -> String.length c >= 4 && String.sub c 0 4 = "\000asm"
