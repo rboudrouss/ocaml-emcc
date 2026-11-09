@@ -19,7 +19,8 @@
 #   5.0    patches/5.0 (commit memory with mprotect, no mmap(MAP_FIXED); no
 #          pthread_getaffinity_np, configure only compiles its test); stub
 #          archives without the "byt" suffix
-#   >=5.1  patches/5.1+ (the same, with mprotect as on Cygwin)
+#   >=5.1  patches/5.1+ (the same, with mprotect as on Cygwin; the memory
+#          of the heaps from malloc, not cleared as emscripten's mmap does)
 #   5.0-5.2, >=5.3  patches/5.0-5.2, patches/5.3+ (the minor heaps of
 #          the domains are allocated at startup: a single domain before 5.3,
 #          the number the program's link chooses since, 1 without threads)

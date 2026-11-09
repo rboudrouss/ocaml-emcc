@@ -1,0 +1,42 @@
+emscripten: the memory of the heaps from malloc, not mmap.
+
+emscripten's anonymous mmap allocates with malloc and clears all of it,
+and munmap searches a list of all the mappings.  The minor heaps, which
+the program writes before it reads them, and the pools of the major heap,
+which pool_initialize fills, need neither: their memory comes from
+posix_memalign, aligned as mmap's, and goes back with free.  The minor
+heap is no longer cleared at startup (1M words: 4 MB, 8 of them with
+--threads), nor are the pools when the major heap grows.
+
+--- a/runtime/unix.c
++++ b/runtime/unix.c
+@@
+ void *caml_plat_mem_map(uintnat size, int reserve_only)
+ {
+   void* mem;
+
++#ifdef __EMSCRIPTEN__
++  (void)reserve_only;
++  if (posix_memalign(&mem, caml_plat_mmap_alignment, size) != 0)
++    return 0;
++  return mem;
++#else
+   mem = mmap(0, size, reserve_only ? PROT_NONE : (PROT_READ | PROT_WRITE),
+              MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+   if (mem == MAP_FAILED)
+     return 0;
+
+   return mem;
++#endif
+ }
+@@
+ void caml_plat_mem_unmap(void* mem, uintnat size)
+ {
++#ifdef __EMSCRIPTEN__
++  (void)size;
++  free(mem);
++#else
+   if (munmap(mem, size) != 0)
+     CAMLassert(0);
++#endif
+ }

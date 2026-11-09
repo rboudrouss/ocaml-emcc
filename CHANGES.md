@@ -34,6 +34,13 @@
   `double-translation`. It works with `-sASYNCIFY` (no wasm tail
   calls), C suspending under a deep recursion, with a c_of_ocaml whose
   returns to the continuations bounce on the trampoline.
+- OCaml 5.1 and later: the minor heaps and the pools of the major heap
+  take their memory from malloc instead of emscripten's mmap, which
+  cleared all of it and kept a list of the mappings: a program with
+  `--threads` starts some 5 ms faster with 28 MB less memory (the minor
+  heaps of its 8 possible domains), and a larger minor heap
+  (`OCAMLRUNPARAM=s=`) costs no memory until it is used. Existing
+  runtimes: `ocaml-emcc setup --force`.
 - Compiled, under node: the main thread compiles the module while the
   worker with the large stack starts (some 15 ms less at startup for a
   6 MB program, ocamlc).
