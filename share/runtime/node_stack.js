@@ -11,10 +11,11 @@
 // on off the stack of the engine (--cps-stack, --jspi: node_main_stack.js,
 // linked before), which saves starting the worker (some 20 ms).
 if (typeof process == "object" && process.versions && process.versions.node) {
-  var ocamlEmccThreads = require("worker_threads");
   var ocamlEmccStackMb = Number(
     process.env.OCAML_EMCC_STACK_MB || (typeof ocamlEmccMainStack != "undefined" ? 0 : 1024));
-  if (ocamlEmccThreads.isMainThread && ocamlEmccStackMb > 0) {
+  // (worker_threads loads node's streams, some 3 ms: only for the worker)
+  var ocamlEmccThreads = ocamlEmccStackMb > 0 ? require("worker_threads") : null;
+  if (ocamlEmccThreads && ocamlEmccThreads.isMainThread) {
     var ocamlEmccWorker = new ocamlEmccThreads.Worker(__filename, {
       argv: process.argv.slice(2),
       resourceLimits: { stackSizeMb: ocamlEmccStackMb },
@@ -44,7 +45,7 @@ if (typeof process == "object" && process.versions && process.versions.node) {
         give(null);
       }
     };
-  } else if (ocamlEmccThreads.isMainThread) {
+  } else if (!ocamlEmccThreads) {
     // on this thread, running out of the stack of the engine (through C
     // code: functions of C calling OCaml)
     var ocamlEmccOverflow = function (e) {
