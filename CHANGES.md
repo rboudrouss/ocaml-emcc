@@ -240,6 +240,9 @@
 - The C compiler of the sysroot drops the options of GNU ld that wasm-ld
   does not know (`-Wl,--no-undefined`, `-Wl,-z,defs`, `-Wl,--as-needed`,
   `-Wl,--eh-frame-hdr`): libbinaryen's `dllbinaryen.so` links.
+- conf-clang (the clang binary, a tool of the build: libbpf compiles its
+  BPF programs with it) no longer builds the clang recipe (clang's
+  libraries, an hour): libbpf fails at once, on its missing headers.
 
 ## 0.5.1
 

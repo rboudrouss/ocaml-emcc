@@ -49,6 +49,11 @@ let cma_libs pkg =
          objinfo_libs (Option.value (Env.output_of objinfo [ Filename.concat (Switch.prefix ()) f ]) ~default:""))
   |> List.sort_uniq compare
 
+(* conf-X packages for a tool X of the build, not a library: conf-clang is
+   the clang binary (libbpf compiles its BPF programs with it), not the
+   libraries of the clang recipe (conf-libclang, -lclang-cpp) *)
+let tools = [ "conf-clang" ]
+
 (* The system libraries [pkg] uses for which a recipe exists: its installed
    conf-X dependencies (recipe X), and the -lX its OCaml libraries ask for
    (glpk, which has no conf-glpk; see Recipe.lib_recipe). *)
@@ -58,6 +63,7 @@ let recipes ?(path = Env.recipes_path ()) pkg =
   | Some opam ->
       let confs =
         conf_packages opam
+        |> List.filter (fun c -> not (List.mem c tools))
         |> List.filter_map (fun c ->
                let r = String.sub c 5 (String.length c - 5) in
                if Switch.is_installed c && Recipe.find ~path r <> None then Some r else None)
