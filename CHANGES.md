@@ -232,6 +232,11 @@
   (jane-street-headers's `ocaml_utils.h` for core's), and those included
   with their package's directory (`<posix-time/posix-time.h>`:
   posix-mqueue).
+- When `dune build -x` fails for a package's stubs, the archives it built
+  are kept, and only the others are compiled from the C files of the
+  native build, those that do not compile left out: libbinaryen (whose
+  `dllbinaryen.so` failed) no longer builds binaryen natively for an hour,
+  and core's other stubs build without linux_ext's (`sys/prctl.h`).
 
 ## 0.5.1
 

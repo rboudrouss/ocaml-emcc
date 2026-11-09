@@ -170,8 +170,9 @@ let c_of_member m = let b = Filename.remove_extension m in if Filename.check_suf
    independent).  The stubs' own C flags are not known: only -I flags are
    given (the file's directory and its source directory, the headers of the
    opam packages it depends on, those of the system recipes).  [only]: the
-   archives to rebuild (lib<x>.a), all if empty.  The wasm archives. *)
-let native_stubs ~dir ~bdir pkg only =
+   archives to rebuild (lib<x>.a), all but [except] if empty.  [keep_going]:
+   those that do not compile are left out.  The wasm archives. *)
+let native_stubs ?(except = []) ?(keep_going = false) ~dir ~bdir pkg only =
   let nat = Filename.concat dir (Filename.concat bdir "default") in
   (* (dune -x also makes _build/default, with only what the target needs) *)
   let missing =
@@ -186,38 +187,42 @@ let native_stubs ~dir ~bdir pkg only =
   let incs = dep_includes pkg @ system_cflags pkg in
   let out = Filename.concat dir "_wasm_stubs" in
   Source.sh "mkdir" [ "-p"; out ];
+  let build a =
+    let adir = Filename.dirname a in
+    let src_dir =
+      let p = nat ^ "/" in
+      if Str_util.starts_with ~prefix:p adir then Filename.concat dir (String.sub adir (String.length p) (String.length adir - String.length p))
+      else adir
+    in
+    let objs =
+      List.map
+        (fun m ->
+          let base = c_of_member m in
+          let c =
+            let c = Filename.concat adir base in
+            if Sys.file_exists c then c
+            else
+              (* (include_subdirs): the sources are in subdirectories;
+                 CMake builds out of the source tree *)
+              match Files.first ~skip:Files.hidden adir (( = ) base) with
+              | Some c -> c
+              | None -> (
+                  match Files.first ~skip:Files.hidden dir (( = ) base) with
+                  | Some c -> c
+                  | None -> Env.fail "%s: no C source for %s (in %s)" pkg m a)
+          in
+          if not (compile ~cwd:dir ~flags:([ "-I" ^ Filename.dirname c; "-I" ^ adir; "-I" ^ src_dir ] @ incs) c) then
+            Env.fail "%s: cannot compile %s" pkg c;
+          Filename.remove_extension c ^ ".o")
+        (Archive.names a)
+    in
+    mklib out (lib_name a) objs
+  in
   archives nat
-  |> List.filter (fun a -> only = [] || List.mem (Filename.basename a) only)
-  |> List.map (fun a ->
-         let adir = Filename.dirname a in
-         let src_dir =
-           let p = nat ^ "/" in
-           if Str_util.starts_with ~prefix:p adir then Filename.concat dir (String.sub adir (String.length p) (String.length adir - String.length p))
-           else adir
-         in
-         let objs =
-           List.map
-             (fun m ->
-               let base = c_of_member m in
-               let c =
-                 let c = Filename.concat adir base in
-                 if Sys.file_exists c then c
-                 else
-                   (* (include_subdirs): the sources are in subdirectories;
-                      CMake builds out of the source tree *)
-                   match Files.first ~skip:Files.hidden adir (( = ) base) with
-                   | Some c -> c
-                   | None -> (
-                       match Files.first ~skip:Files.hidden dir (( = ) base) with
-                       | Some c -> c
-                       | None -> Env.fail "%s: no C source for %s (in %s)" pkg m a)
-               in
-               if not (compile ~cwd:dir ~flags:([ "-I" ^ Filename.dirname c; "-I" ^ adir; "-I" ^ src_dir ] @ incs) c) then
-                 Env.fail "%s: cannot compile %s" pkg c;
-               Filename.remove_extension c ^ ".o")
-             (Archive.names a)
-         in
-         mklib out (lib_name a) objs)
+  |> List.filter (fun a -> if only = [] then not (List.mem (Filename.basename a) except) else List.mem (Filename.basename a) only)
+  |> List.filter_map (fun a ->
+         try Some (build a)
+         with Env.Failed when keep_going -> log "  %s: could not: left out" (Filename.basename a); None)
 
 (* The stub archives (lib<x>.a with a dll<x>.so) the host's build of [pkg]
    installed *)
@@ -248,68 +253,73 @@ let dune_stubs ~dir ~provider pkg =
   in
   let dune = dune_for dir in
   let built =
-    if
+    let ok =
       Env.run ~cwd:dir ~env:(dune_env ()) ~out:Unix.stderr dune
         ([ "build"; "--build-dir"; bdir; "-x"; !Env.target ] @ Switch.dune_selection pkg @ [ "@install" ])
       = 0
-    then (
-      let all = archives (Filename.concat dir (Filename.concat bdir ("default." ^ !Env.target))) in
-      (* Archives made by a rule of the package with its own build system
-         (ocaml-lua: `make` in the vendored Lua) hold host objects.  Those
-         of stubs (with their dllX.so) are rebuilt, the others were
-         intermediate. *)
-      let wasm, host = List.partition Archive.is_wasm all in
-      (* A rule copying its library elsewhere (radamsa: src/radamsa_c's
-         libradamsa.a to src/) gives two of the same name: the one beside
-         its dll<x>.so.  And one of a `cc -c -o lib<x>.a` is an object, not
-         an archive, which twice on the command line defines its symbols
-         twice: put in an archive. *)
-      let wasm =
-        let stub a = Sys.file_exists (Filename.concat (Filename.dirname a) ("dll" ^ lib_name a ^ ".so")) in
-        let sorted = List.filter stub wasm @ List.filter (fun a -> not (stub a)) wasm in
-        List.filter
-          (fun a -> List.find (fun b -> Filename.basename b = Filename.basename a) sorted = a)
-          wasm
-        |> List.map (fun a ->
-               if Archive.members a <> None then a
-               else (
-                 let out = Filename.concat dir "_wasm_stubs" in
-                 Source.sh "mkdir" [ "-p"; out ];
-                 let o = Filename.concat out (lib_name a ^ ".o") in
-                 sh "cp" [ "-f"; a; o ];
-                 log "  %s: an object, not an archive: put in one" (Filename.basename a);
-                 mklib out (lib_name a) [ o ]))
-      in
-      let host =
-        List.filter
-          (fun a ->
-            let stub = Sys.file_exists (Filename.concat (Filename.dirname a) ("dll" ^ lib_name a ^ ".so")) in
-            if not stub then log "  %s: host objects, not a stub archive: ignored" (Filename.basename a);
-            stub)
-          host
-      in
-      let host = List.map Filename.basename host in
-      if host <> [] then log "host objects in %s: compiling the C files of the native build instead" (String.concat " " host);
-      (* Libraries enabled for some architectures only (curve448's C:
-         amd64, arm64...), which the wasm context's is not (none) *)
-      let skipped =
-        List.filter
-          (fun a -> not (List.mem a host || List.exists (fun w -> Filename.basename w = a) wasm))
-          (host_stub_archives pkg)
-      in
-      let skipped =
-        if skipped = [] then []
-        else (
-          log "%s not built for %s (enabled for some architectures only?): compiling the C files of the native build"
-            (String.concat " " skipped) !Env.target;
-          (* (they may well be for those architectures only) *)
-          try native_stubs ~dir ~bdir pkg skipped
-          with Env.Failed -> log "  could not: left out"; [])
-      in
-      wasm @ (if host = [] then [] else native_stubs ~dir ~bdir pkg host) @ skipped)
-    else (
-      log "dune -x %s failed: compiling the C files of the native build instead" !Env.target;
-      native_stubs ~dir ~bdir pkg [])
+    in
+    (* (failed: the archives it built still are, the others are compiled
+       from the native build, those that do not compile left out: core's
+       linux_ext includes sys/prctl.h) *)
+    if not ok then log "dune -x %s failed: compiling the C files of the native build for what it did not build" !Env.target;
+    let tdir = Filename.concat dir (Filename.concat bdir ("default." ^ !Env.target)) in
+    let all = if Files.is_dir tdir then archives tdir else [] in
+    (* Archives made by a rule of the package with its own build system
+       (ocaml-lua: `make` in the vendored Lua) hold host objects.  Those
+       of stubs (with their dllX.so) are rebuilt, the others were
+       intermediate. *)
+    let wasm, host = List.partition Archive.is_wasm all in
+    (* A rule copying its library elsewhere (radamsa: src/radamsa_c's
+       libradamsa.a to src/) gives two of the same name: the one beside
+       its dll<x>.so.  And one of a `cc -c -o lib<x>.a` is an object, not
+       an archive, which twice on the command line defines its symbols
+       twice: put in an archive. *)
+    let wasm =
+      let stub a = Sys.file_exists (Filename.concat (Filename.dirname a) ("dll" ^ lib_name a ^ ".so")) in
+      let sorted = List.filter stub wasm @ List.filter (fun a -> not (stub a)) wasm in
+      List.filter
+        (fun a -> List.find (fun b -> Filename.basename b = Filename.basename a) sorted = a)
+        wasm
+      |> List.map (fun a ->
+             if Archive.members a <> None then a
+             else (
+               let out = Filename.concat dir "_wasm_stubs" in
+               Source.sh "mkdir" [ "-p"; out ];
+               let o = Filename.concat out (lib_name a ^ ".o") in
+               sh "cp" [ "-f"; a; o ];
+               log "  %s: an object, not an archive: put in one" (Filename.basename a);
+               mklib out (lib_name a) [ o ]))
+    in
+    let host =
+      List.filter
+        (fun a ->
+          let stub = Sys.file_exists (Filename.concat (Filename.dirname a) ("dll" ^ lib_name a ^ ".so")) in
+          if not stub then log "  %s: host objects, not a stub archive: ignored" (Filename.basename a);
+          stub)
+        host
+    in
+    let host = List.map Filename.basename host in
+    if host <> [] then log "host objects in %s: compiling the C files of the native build instead" (String.concat " " host);
+    (* Libraries enabled for some architectures only (curve448's C:
+       amd64, arm64...), which the wasm context's is not (none) *)
+    let skipped =
+      List.filter
+        (fun a -> not (List.mem a host || List.exists (fun w -> Filename.basename w = a) wasm))
+        (host_stub_archives pkg)
+    in
+    let skipped =
+      if (not ok) && wasm = [] then native_stubs ~keep_going:true ~except:host ~dir ~bdir pkg []
+      else if skipped = [] then []
+      else (
+        (* (they may well be for those architectures only; after a failed
+           dune -x, only those: libbinaryen's libbinaryen.a was built, its
+           dllbinaryen.so failed, and the native build of binaryen takes
+           an hour) *)
+        log "%s not built for %s (%s): compiling the C files of the native build" (String.concat " " skipped) !Env.target
+          (if ok then "enabled for some architectures only?" else "dune -x failed");
+        try native_stubs ~keep_going:true ~dir ~bdir pkg skipped with Env.Failed -> log "  could not: left out"; [])
+    in
+    wasm @ (if host = [] then [] else native_stubs ~dir ~bdir pkg host) @ skipped
   in
   List.iter
     (fun a ->
