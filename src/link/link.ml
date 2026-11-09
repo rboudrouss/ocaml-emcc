@@ -336,24 +336,34 @@ type compiled = {
   c_tail_calls : bool;  (** compiled with wasm tail calls (-mtail-call) *)
 }
 
-(* c_of_ocaml's --cps-stack (a version in CPS of the recursive functions,
-   double translation's), if asked *)
-let cps_stack_flag cooc = function
-  | false -> []
-  | true -> (
-      match Env.output_of cooc [ "--help" ] with
-      | Some h when Str_util.find h "--cps-stack" <> None -> [ "--cps-stack" ]
-      | _ -> Env.fail "--cps-stack: %s does not have it, a newer c_of_ocaml does" cooc)
+(* The options of c_of_ocaml for the code of a program or a plugin *)
+let c_of_ocaml_options ?(dynlink = false) ?(cps_stack = false) ?(wasi = false) ?effects () =
+  (if !Env.target = "wasm64" then [ "--word-size"; "64" ] else [])
+  (* --dynlink: every compilation unit kept whole and registered by name,
+     for plugins *)
+  @ (if dynlink then [ "--dynlink" ] else [])
+  @ (match effects with Some e -> [ "--effects"; e ] | None -> [])
+  (* (a version in CPS of the recursive functions, double translation's) *)
+  @ (if cps_stack then [ "--cps-stack" ] else [])
+  (* c_of_ocaml pads the module with small functions (its small-functions
+     option) so that V8 gives the module its full inlining budget, which it
+     cuts when few of its functions are small.  For a WASI host
+     (wasmtime...), only a larger module *)
+  @ if wasi then [ "--disable"; "small-functions" ] else []
 
-(* c_of_ocaml pads the module with small functions (its small-functions
-   option) so that V8 gives the module its full inlining budget, which it
-   cuts when few of its functions are small.  For a WASI host (wasmtime...),
-   only a larger module: disabled with --wasi, if this c_of_ocaml has the
-   option (an unknown one fails) *)
-let small_functions_flag cooc ~wasi =
-  if wasi && Env.capture cooc [ "--disable"; "small-functions"; "--version" ] <> None then
-    [ "--disable"; "small-functions" ]
-  else []
+(* c_of_ocaml checks the options itself (--check), before anything is
+   built: whether it knows them (exit code 2: a newer c_of_ocaml may) and
+   accepts them together (1).  One older than --check checks them when it
+   compiles. *)
+let check_c_of_ocaml_options opts =
+  let cooc = c_of_ocaml () in
+  match Env.run_capture_stderr cooc (opts @ [ "--check" ]) with
+  | 0, _ -> ()
+  | 2, err when Str_util.find err "'--check'" <> None -> ()
+  | 2, err ->
+      let first = List.hd (String.split_on_char '\n' (String.trim err)) in
+      Env.fail "%s\n  A newer c_of_ocaml has it (https://github.com/rboudrouss/C_of_ocaml)." first
+  | c, err -> if String.trim err = "" then Env.fail "%s --check failed (exit %d)" cooc c else Env.fail "%s" (String.trim err)
 
 (* PROG.bc -> PROG.c (c_of_ocaml), compiled with the runtime support of the
    generated code (camlc.h, camlc_runtime.c, whose camlc_main main.c
@@ -368,17 +378,9 @@ let compile_to_c ?(dynlink = false) ?(cps_stack = false) ?(wasi = false) ?effect
      DIR/manifest *)
   let c_dir = Filename.concat work (base ^ ".c.d") in
   Env.log "compiling %s to C (c_of_ocaml)" (Filename.basename bc_path);
-  let word_size = if !Env.target = "wasm64" then [ "--word-size"; "64" ] else [] in
-  (* --dynlink: every compilation unit kept whole and registered by name,
-     for plugins *)
-  let dynlink = if dynlink then [ "--dynlink" ] else [] in
-  let effects = match effects with Some e -> [ "--effects"; e ] | None -> [] in
-  (* (a version in CPS of the recursive functions, double translation's) *)
-  let cps_stack = cps_stack_flag cooc cps_stack in
   (* (backtraces when the bytecode has debug events, ocamlc -g: c_of_ocaml's
      default) *)
-  let small_functions = small_functions_flag cooc ~wasi in
-  Env.run_exn cooc (word_size @ dynlink @ effects @ cps_stack @ small_functions @ [ bc_path; "--split"; c_dir ]);
+  Env.run_exn cooc (c_of_ocaml_options ~dynlink ~cps_stack ~wasi ?effects () @ [ bc_path; "--split"; c_dir ]);
   let parts =
     Sys.readdir c_dir |> Array.to_list
     |> List.filter (fun f -> Filename.check_suffix f ".c")
@@ -863,11 +865,6 @@ let run o =
     Env.fail "--wasi: WASI (preview1) is 32-bit, no WASI host runs a wasm64 module.  Use --target wasm32.";
   if standalone && o.mode <> Embed then
     Env.fail "--preload and --node-fs need the JavaScript glue: not available for a standalone %s" o.output;
-  (if o.cps_stack && o.compiled then
-     match o.effects with
-     | Some e when e <> "double-translation" ->
-         Env.fail "--cps-stack needs double translation (it runs the CPS versions of the functions): not --effects %s" e
-     | _ -> ());
   if o.cps_stack && not o.compiled then Env.log "note: --cps-stack is for the compiled mode: ignored (interpreted)";
   if (not o.tail_calls) && not o.compiled then Env.log "note: --no-tail-calls is for the compiled mode: ignored (interpreted)";
   if standalone && o.jspi then
@@ -875,6 +872,8 @@ let run o =
   if o.compiled then check_compiled ();
   if o.dynlink && standalone then Env.fail "--dynlink: plugins are loaded by the JavaScript glue: link OUT.js, not a standalone .wasm";
   if o.threads then check_threads ~standalone o;
+  if o.compiled then
+    check_c_of_ocaml_options (c_of_ocaml_options ~dynlink:o.dynlink ~cps_stack:o.cps_stack ~wasi:o.wasi ?effects:o.effects ());
   (* (compiled, c_of_ocaml warns of them itself) *)
   if !Env.target = "wasm32" && not o.compiled then warn_literals bc;
   if o.auto_deps then (Layouts.prune (); ignore (Layouts.ensure bc));
@@ -1496,10 +1495,8 @@ and plugin_compiled ?effects ~cps_stack ~threads ~tail_calls ~input ~output ~mai
            false
        | _ -> true
   in
-  (match effects with
-  | Some e when cps_stack && e <> "double-translation" ->
-      Env.fail "--cps-stack needs double translation (it runs the CPS versions of the functions): not --effects %s" e
-  | _ -> ());
+  let opts = c_of_ocaml_options ~cps_stack ?effects () in
+  check_c_of_ocaml_options opts;
   let emcc = Env.emcc () in
   let out_dir = Filename.dirname output in
   let base = Filename.remove_extension (Filename.basename output) in
@@ -1511,14 +1508,12 @@ and plugin_compiled ?effects ~cps_stack ~threads ~tail_calls ~input ~output ~mai
   Env.run_exn cooc [ "--runtime-files"; support ];
   let c_dir = Filename.concat work (base ^ ".c.d") in
   Env.log "compiling %s to C (c_of_ocaml)" (Filename.basename input);
-  let word_size = if !Env.target = "wasm64" then [ "--word-size"; "64" ] else [] in
-  let effects = match effects with Some e -> [ "--effects"; e ] | None -> [] in
-  Env.run_exn cooc (word_size @ effects @ cps_stack_flag cooc cps_stack @ [ input; "--split"; c_dir ]);
+  Env.run_exn cooc (opts @ [ input; "--split"; c_dir ]);
   (* a plugin performing effects without effect handlers would raise
      Effect.Unhandled when it runs: refused, unless --effects disabled asked
      for it *)
   (let m = read_manifest (Filename.concat c_dir "manifest") in
-   if m.uses_effects = Some true && m.effects = "disabled" && effects = [] then
+   if m.uses_effects = Some true && m.effects = "disabled" && effects = None then
      match main with
      | Some p ->
          Env.fail

@@ -6,6 +6,10 @@
   in `ocaml-emcc.conf`), less tested, and is used with OCaml before 4.14;
   `--compiled` is still accepted. `tests/run.sh --interpreted` runs the
   tests interpreted.
+- Compiled, c_of_ocaml checks its options (`c_of_ocaml --check`) before
+  anything is built: an option it lacks (a newer c_of_ocaml has it) or a
+  combination it refuses (`--cps-stack` with `--effects disabled`) fails
+  at once, with its message.
 - The dune patched for the (ctypes) stanza is built again once dune is
   upgraded (the copy of the previous one, read-only, made it fail:
   bls12-381, lilv).
