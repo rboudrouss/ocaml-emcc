@@ -1,0 +1,11 @@
+--- a/external/oss_stubs.c
++++ b/external/oss_stubs.c
+@@
+ #include <sys/ioctl.h>
++#ifdef __EMSCRIPTEN__
++#define SNDCTL_DSP_SPEED 0xc0045002
++#define SNDCTL_DSP_SETFMT 0xc0045005
++#define SNDCTL_DSP_CHANNELS 0xc0045006
++#else
+ #include <sys/soundcard.h>
++#endif
