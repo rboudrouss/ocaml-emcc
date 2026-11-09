@@ -17,10 +17,10 @@
   `-sJSPI`): `main` is asynchronous, and the compiled code recurses
   deeper than the stack of a browser (6 000 to 15 000 nested calls) on new
   stacks of the engine (c_of_ocaml's segmented stack), in Chrome and Edge
-  137 or later, or node 24 with `--experimental-wasm-jspi`. Without JSPI,
-  the program says so instead of failing to instantiate. Under `--wasi`,
-  the compiled code has no new stacks (it imported emscripten's JavaScript
-  for them, which a WASI host lacks). It also replaces `-sASYNCIFY` for C
+  137 or later, or node 24 and later (node 24's `--experimental-wasm-jspi`
+  is set at startup). Without JSPI, the program says so instead of failing
+  to instantiate. Under `--wasi`, the compiled code has no new stacks (it
+  imported emscripten's JavaScript for them, which a WASI host lacks). It also replaces `-sASYNCIFY` for C
   that suspends (`emscripten_sleep`, raylib's loop), keeping the tail
   calls, for a smaller program which may suspend under the code of
   plugins.

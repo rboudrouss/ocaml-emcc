@@ -376,8 +376,8 @@ ocaml-emcc build app.js --jspi         # or --cps-stack
   js_of_ocaml callback) stays on the stack it is called on, as JSPI
   cannot suspend JavaScript frames. A deep recursion has to start from
   the program's main code.
-- node needs neither option (a 1 GB stack). node 24 runs a `--jspi` build
-  with `node --experimental-wasm-jspi`.
+- node needs neither option (a 1 GB stack). A `--jspi` build needs node
+  24 or later (it sets node 24's `--experimental-wasm-jspi` itself).
 - No `--jspi` for a standalone `.wasm` (`--wasi`), as JSPI works through
   the JavaScript glue.
 - `--jspi` takes precedence over `-sASYNCIFY`. The C functions of

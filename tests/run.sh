@@ -189,7 +189,7 @@ while IFS='|' read -r name target args pkgs targets differ; do
     elif grep -qs '^jspi: *yes' ocaml-emcc.conf; then
       # on node's main thread, whose stack (984 KB) is that of browsers: the
       # deep recursions of the compiled code go on JSPI's new stacks
-      run() { OCAML_EMCC_STACK_MB=0 $TO "$NODE" --experimental-wasm-jspi "$@"; }
+      run() { OCAML_EMCC_STACK_MB=0 $TO "$NODE" "$@"; }
     elif grep -qs '^cps-stack: *yes' ocaml-emcc.conf; then
       # the same, the deep recursions going on in CPS on the heap
       run() { OCAML_EMCC_STACK_MB=0 $TO "$NODE" "$@"; }
