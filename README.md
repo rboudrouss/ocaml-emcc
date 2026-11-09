@@ -767,8 +767,8 @@ above (wasmtime 47 removed it). The module imports its memory, shared. `Domain.r
 `$OCAML_EMCC_CPUS`, or 4.
 
 The runtime reserves the minor heaps of the possible domains at startup,
-8 by default (32 MB on wasm32, 16 MB on wasm64). `OCAMLRUNPARAM=d=N` sets
-the number.
+8 by default (256 MB of memory on wasm32, used as the domains allocate;
+16 MB on wasm64). `OCAMLRUNPARAM=d=N` sets the number.
 
 ## Differences from native
 

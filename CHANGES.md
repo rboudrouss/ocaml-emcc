@@ -34,6 +34,12 @@
   `double-translation`. It works with `-sASYNCIFY` (no wasm tail
   calls), C suspending under a deep recursion, with a c_of_ocaml whose
   returns to the continuations bounce on the trampoline.
+- wasm32: the minor heap is 8M words (32 MB) by default instead of 1M,
+  used as the program allocates: programs allocating much spend less
+  time in minor collections (compiled, binary_trees 1.40 s, now 0.86 s;
+  hamming 0.27 s, now 0.18 s; boyer_no_exc 0.51 s, now 0.38 s), for up to
+  28 MB more memory. `OCAMLRUNPARAM=s=...` still sets it. Existing
+  runtimes: `ocaml-emcc setup --force`.
 - OCaml 5.1 and later: the minor heaps and the pools of the major heap
   take their memory from malloc instead of emscripten's mmap, which
   cleared all of it and kept a list of the mappings: a program with

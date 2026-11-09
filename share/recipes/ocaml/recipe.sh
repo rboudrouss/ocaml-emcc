@@ -5,8 +5,8 @@
 #
 # Version specifics:
 #   all    patches/all (debug events from memory for caml_startup_code:
-#          standalone .wasm; wasm32: a minor heap of 1M words by default,
-#          4 MB as a 64-bit one's 2 MB); patches/headers, on the installed headers
+#          standalone .wasm; wasm32: a minor heap of 8M words by default,
+#          32 MB); patches/headers, on the installed headers
 #          only (wasm64: caml_ba_alloc_dims dimensions converted to intnat)
 #   4.x    patches/4.x (Tag_val signed index; wasm32: literals beyond 31
 #          bits wrapped while DATA is read)
