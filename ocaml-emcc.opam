@@ -12,6 +12,7 @@ bug-reports: "https://github.com/rboudrouss/ocaml-emcc/issues"
 depends: [
   "dune" {>= "3.11"}
   "ocaml" {>= "4.08"}
+  "ocamlfind"
   "odoc" {with-doc}
 ]
 build: [

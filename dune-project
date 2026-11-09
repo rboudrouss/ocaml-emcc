@@ -18,4 +18,4 @@
    come from recipes. \
    Requires the emscripten SDK (emsdk) in PATH.")
  (depends
-  (ocaml (>= 4.08))))
+  (ocaml (>= 4.08)) ocamlfind))
