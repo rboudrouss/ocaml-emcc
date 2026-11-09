@@ -227,6 +227,11 @@
   object, not an archive) is put in an archive, and of two copies of an
   archive (the rule's own and dune's) one is kept: radamsa's functions
   were defined twice.
+- Stubs compiled from the C files of a package: the headers of all the
+  opam packages it depends on, not only directly, are found
+  (jane-street-headers's `ocaml_utils.h` for core's), and those included
+  with their package's directory (`<posix-time/posix-time.h>`:
+  posix-mqueue).
 
 ## 0.5.1
 

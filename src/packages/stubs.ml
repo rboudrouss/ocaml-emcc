@@ -51,33 +51,41 @@ let system_deps pkg =
 (* The C flags of the system recipes [pkg] uses (once built) *)
 let system_cflags pkg = Compat.concat_map (fun r -> read_meta (r ^ ".usecflags")) (Syslib.recipes pkg)
 
-(* -I flags for the lib/<dep> directories of the installed opam
-   dependencies of [pkg] (not ocaml's: those of the host's runtime), where
-   packages install the C headers of their stubs (integers:
-   ocaml_integers.h, which ctypes's include) *)
-let dep_includes pkg =
-  match Switch.opam pkg with
-  | None -> []
-  | Some s ->
-      Switch.entries (Switch.opam_field s "depends")
-      |> List.map fst |> List.sort_uniq compare
-      |> List.filter (fun d -> d <> "ocaml" && d <> "dune")
-      |> List.filter_map (fun d ->
-             let dir = Filename.concat (Switch.prefix ()) ("lib/" ^ d) in
-             if Files.is_dir dir then Some ("-I" ^ dir) else None)
+(* The installed opam packages [pkg] depends on, transitively *)
+let dep_closure pkg =
+  let seen = Hashtbl.create 16 in
+  let rec go p =
+    match Switch.opam p with
+    | None -> ()
+    | Some s ->
+        Switch.entries (Switch.opam_field s "depends")
+        |> List.iter (fun (d, _) ->
+               if (not (Hashtbl.mem seen d)) && Switch.is_installed d then (
+                 Hashtbl.add seen d ();
+                 go d))
+  in
+  go pkg;
+  List.sort compare (Hashtbl.fold (fun d () acc -> d :: acc) seen [])
 
-(* -I flags for the packages named in the opam file of [pkg] that install C
-   headers in lib/<package> *)
-let header_includes pkg =
-  match Switch.opam pkg with
-  | None -> []
-  | Some s ->
-      Switch.entries s |> List.map fst |> List.sort_uniq compare
-      |> List.filter (fun d -> d <> "ocaml")
-      |> List.filter_map (fun d ->
-             let dir = Filename.concat (Switch.prefix ()) ("lib/" ^ d) in
-             let headers = try Array.exists (fun f -> Filename.check_suffix f ".h") (Sys.readdir dir) with Sys_error _ -> false in
-             if headers then Some ("-I" ^ dir) else None)
+(* -I flags for the lib/<dep> directories of the installed opam
+   dependencies of [pkg], transitive (core's ocaml_utils.h comes from
+   jane-street-headers, through core_kernel), where packages install the C
+   headers of their stubs (integers: ocaml_integers.h, which ctypes's
+   include), not ocaml's (those of the host's runtime); and lib/, last,
+   for those included as <dep/x.h> (posix-time/posix-time.h, which
+   posix-mqueue's include).  [all]: lib/<dep> without headers of its own
+   too. *)
+let dep_includes ?(all = false) pkg =
+  let lib = Filename.concat (Switch.prefix ()) "lib" in
+  let named = match Switch.opam pkg with Some s -> List.map fst (Switch.entries s) | None -> [] in
+  let deps = dep_closure pkg in
+  List.sort_uniq compare (named @ deps)
+  |> List.filter (fun d -> d <> "ocaml" && d <> "dune")
+  |> List.filter_map (fun d ->
+         let dir = Filename.concat lib d in
+         let headers = try Array.exists (fun f -> Filename.check_suffix f ".h") (Sys.readdir dir) with Sys_error _ -> false in
+         if headers || (all && List.mem d deps && Files.is_dir dir) then Some ("-I" ^ dir) else None)
+  |> fun l -> l @ [ "-idirafter"; lib ]
 
 (* Apply the patches [files] in [cwd], in order (tools/patch.awk: hunks
    placed by their text) *)
@@ -175,7 +183,7 @@ let native_stubs ~dir ~bdir pkg only =
     log "no native build kept for %s: building it" pkg;
     if Env.run ~cwd:dir ~out:Unix.stderr (Filename.concat (Env.host_bin ()) "dune") ([ "build"; "--build-dir"; bdir ] @ Switch.dune_selection pkg @ [ "@install" ]) <> 0
     then Env.fail "%s: native build failed" pkg);
-  let incs = header_includes pkg @ system_cflags pkg in
+  let incs = dep_includes pkg @ system_cflags pkg in
   let out = Filename.concat dir "_wasm_stubs" in
   Source.sh "mkdir" [ "-p"; out ];
   archives nat
@@ -375,7 +383,7 @@ let auto ?(force = false) pkg lib =
   let name = Printf.sprintf "auto-%s-%s" pkg lib in
   if force || not (up_to_date name pkg) then (
     let sysflags = system_deps pkg in
-    let cflags = system_cflags pkg @ dep_includes pkg in
+    let cflags = system_cflags pkg @ dep_includes ~all:true pkg in
     let work = Env.sysroot_file ("build/auto-" ^ pkg) in
     Source.remove work;
     Source.sh "mkdir" [ "-p"; Filename.dirname work ];
