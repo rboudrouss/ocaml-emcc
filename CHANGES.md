@@ -245,6 +245,11 @@
   libraries, an hour): libbpf fails at once, on its missing headers.
 - The libc's libraries (`-lm`, `-lpthread`...) a package asks for build no
   recipe: frei0r's (whose link flag is `-lm`) was built for blake3, efl...
+- ctypes-foreign: the OpenGL functions named in the program are found by
+  `dlsym`, emscripten's WebGL ones, with its OpenGL 1.x emulation
+  (`-sLEGACY_GL_EMULATION`) for `glBegin` and the like; those emscripten
+  lacks (display lists, feedback mode) abort when called (gl-legacy
+  stopped at startup on `glBegin`).
 
 ## 0.5.1
 

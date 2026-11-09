@@ -41,13 +41,19 @@ void *dlopen(const char *file, int flags)
   return &the_handle; /* any non-null handle */
 }
 
+/* the functions of emscripten's JavaScript libraries the program names
+   (OpenGL's), compiled by `ocaml-emcc link` (gl_object in link.ml) */
+void *ocaml_emcc_dlsym_extra(const char *name) __attribute__((weak));
+
 void *dlsym(void *handle, const char *name)
 {
   int f;
   double d;
+  void *p;
   (void)handle;
   if ((f = ocaml_emcc_dlsym_func(name)) != 0) return (void *)(uintptr_t)f;
   if ((d = ocaml_emcc_dlsym_data(name)) >= 0) return (void *)(uintptr_t)d;
+  if (ocaml_emcc_dlsym_extra && (p = ocaml_emcc_dlsym_extra(name)) != NULL) return p;
   __dl_seterr("%s: undefined symbol (ocaml-emcc exports the C symbols named by string "
               "literals of the program, from the linked libraries)", name);
   return NULL;

@@ -471,9 +471,10 @@ let is_c_ident s =
 
 (* (in emscripten's cache, $EM_CACHE if set; libstubs: the functions
    emscripten only has failing, getpwnam for opasswd) *)
+let em_cache () = match Env.getenv_opt "EM_CACHE" with Some d when d <> "" -> d | _ -> Filename.concat (Filename.dirname (Env.emcc ())) "cache"
+
 let emscripten_system_libs () =
-  let cache = match Env.getenv_opt "EM_CACHE" with Some d when d <> "" -> d | _ -> Filename.concat (Filename.dirname (Env.emcc ())) "cache" in
-  let dir = List.fold_left Filename.concat cache [ "sysroot"; "lib"; !Env.target ^ "-emscripten" ] in
+  let dir = List.fold_left Filename.concat (em_cache ()) [ "sysroot"; "lib"; !Env.target ^ "-emscripten" ] in
   List.filter Sys.file_exists (List.map (Filename.concat dir) [ "libc.a"; "libdlmalloc.a"; "libcompiler_rt.a"; "libstubs.a" ])
 
 let foreign_exports ~archives bc =
@@ -481,6 +482,101 @@ let foreign_exports ~archives bc =
   Bytecode.strings bc
   |> List.filter (fun s -> is_c_ident s && Hashtbl.mem syms s)
   |> List.sort_uniq compare
+
+(* ctypes-foreign bindings of OpenGL (gl-legacy): emscripten's GL functions
+   are JavaScript (WebGL, and the OpenGL 1.x emulation of
+   -sLEGACY_GL_EMULATION), in no archive.  The string literals of the
+   program naming a function of emscripten's GL headers are looked up by
+   dlsym.c in a table compiled for them (ocaml_emcc_dlsym_extra): the
+   function, or a stub that aborts for those emscripten lacks (display
+   lists, feedback mode...), which a program binding them all at startup
+   may never call.  A probe link, with and without the emulation, tells
+   which it lacks; the emulation is linked in if it provides more, or
+   glBegin and the like (which abort without it).  libffi
+   calls them from JavaScript, whatever the stub's signature.  The object
+   and its link flags. *)
+let gl_prelude = "#define GL_GLEXT_PROTOTYPES\n#include <GL/gl.h>\n#include <GL/glext.h>\n#include <GL/glu.h>\n"
+
+let gl_functions =
+  lazy
+    (let tbl = Hashtbl.create 4096 in
+     let ident c = match c with 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '_' -> true | _ -> false in
+     List.iter
+       (fun h ->
+         let f = List.fold_left Filename.concat (em_cache ()) [ "sysroot"; "include"; "GL"; h ] in
+         let s = try Compat.read_file f with Sys_error _ -> "" in
+         let n = String.length s in
+         let rec go i =
+           if i < n then
+             if not (ident s.[i]) then go (i + 1)
+             else
+               let j = ref i in
+               while !j < n && ident s.[!j] do incr j done;
+               let k = ref !j in
+               while !k < n && (s.[!k] = ' ' || s.[!k] = '\t') do incr k done;
+               if !k < n && s.[!k] = '(' && Str_util.starts_with ~prefix:"gl" (String.sub s i (!j - i)) then
+                 Hashtbl.replace tbl (String.sub s i (!j - i)) ();
+               go !j
+         in
+         go 0)
+       [ "gl.h"; "glext.h"; "glu.h" ];
+     tbl)
+
+let gl_object ~emcc ~flags ~work ~exported bc =
+  let names =
+    Bytecode.strings bc
+    |> List.filter (fun s -> Hashtbl.mem (Lazy.force gl_functions) s && not (List.mem s exported))
+    |> List.sort_uniq compare
+  in
+  if names = [] then None
+  else
+    let missing legacy =
+      let c = Filename.concat work "gl_probe.c" in
+      Compat.write_file c
+        (gl_prelude ^ "void *ocaml_emcc_gl_probe[] = {\n"
+        ^ String.concat "" (List.map (fun n -> "  (void *)" ^ n ^ ",\n") names)
+        ^ "};\nint main(void) { return ocaml_emcc_gl_probe[0] == 0; }\n");
+      let code, err =
+        Env.run_capture_stderr emcc
+          (flags @ (if legacy then [ "-sLEGACY_GL_EMULATION=1" ] else []) @ [ "-Wl,--error-limit=0"; c; "-o"; Filename.concat work "gl_probe.js" ])
+      in
+      let undefined n = Str_util.find err ("undefined symbol: " ^ n ^ " ") <> None || Str_util.find err ("undefined symbol: " ^ n ^ "\n") <> None in
+      match List.filter undefined names with
+      | [] when code <> 0 -> Env.log "note: the probe link of the OpenGL functions failed:\n%s" err; None
+      | l -> Some l
+    in
+    match missing false with
+    | None -> None
+    | Some plain ->
+        (* (without it, emscripten has those four, which abort) *)
+        let stubbed = List.exists (fun n -> List.mem n names) [ "glBegin"; "glMatrixMode"; "glLoadIdentity"; "glVertexPointer" ] in
+        let with_legacy = if plain = [] && not stubbed then None else missing true in
+        let legacy =
+          match with_legacy with
+          | Some l -> List.length l < List.length plain || (stubbed && List.length l <= List.length plain)
+          | None -> false
+        in
+        let lacking = match with_legacy with Some l when legacy -> l | _ -> plain in
+        Env.log "dlsym (ctypes-foreign): %d OpenGL function(s) named in the program%s%s" (List.length names)
+          (if legacy then ", with emscripten's OpenGL 1.x emulation" else "")
+          (if lacking = [] then "" else Printf.sprintf ", %d not in emscripten (abort if called): %s" (List.length lacking) (String.concat " " lacking));
+        let c = Filename.concat work "gl_dlsym.c" in
+        Compat.write_file c
+          (gl_prelude
+          ^ "#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\
+             static void lacking(const char *name) {\n\
+            \  fprintf(stderr, \"%s: not in emscripten's OpenGL (ocaml-emcc)\\n\", name);\n\
+            \  abort();\n}\n"
+          ^ String.concat "" (List.map (fun n -> Printf.sprintf "static void lacking_%s(void) { lacking(\"%s\"); }\n" n n) lacking)
+          ^ "void *ocaml_emcc_dlsym_extra(const char *name) {\n"
+          ^ String.concat ""
+              (List.map
+                 (fun n -> Printf.sprintf "  if (!strcmp(name, \"%s\")) return (void *)%s%s;\n" n (if List.mem n lacking then "lacking_" else "") n)
+                 names)
+          ^ "  return 0;\n}\n");
+        let o = Filename.concat work "gl_dlsym.o" in
+        Env.run_exn emcc (flags @ [ "-c"; c; "-o"; o ]);
+        Some (o, if legacy then [ "-sLEGACY_GL_EMULATION=1" ] else [])
 
 (* Stub libraries replaced by a file of share/runtime: js_of_ocaml's, whose
    stubs only abort outside JavaScript (jsoo.c), and ocaml-emcc.dynlink's
@@ -1018,7 +1114,12 @@ let run o =
     | None -> ([], [])
     | Some names ->
         let dlsym_o = runtime_object "dlsym" in
-        ([ dlsym_o ], "-sALLOW_TABLE_GROWTH=1" :: List.map (fun n -> "-Wl,--export=" ^ n) names)
+        let gl_objs, gl_flags =
+          match gl_object ~emcc ~flags:(cflags @ [ o.opt ]) ~work ~exported:names bc with
+          | Some (obj, flags) -> ([ obj ], flags)
+          | None -> ([], [])
+        in
+        (dlsym_o :: gl_objs, ("-sALLOW_TABLE_GROWTH=1" :: List.map (fun n -> "-Wl,--export=" ^ n) names) @ gl_flags)
   in
   let wasi_objs () =
     if not o.wasi then []

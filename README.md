@@ -787,7 +787,10 @@ wasm64](#wasm32-or-wasm64)):
   structs of the libc (`struct stat`). `build`, `link` and `doctor` **warn**.
 - **ctypes-foreign** only finds the C symbols named by string literals of
   the program, not names computed at run time. `dlopen` accepts any file
-  name, since everything is linked in.
+  name, since everything is linked in. OpenGL's functions are emscripten's
+  WebGL (with its OpenGL 1.x emulation, `-sLEGACY_GL_EMULATION`, for
+  `glBegin` and the like); those it lacks (display lists, feedback mode)
+  abort when called.
 - **Missing primitives.** A primitive that no linked library defines (a
   stub written for one OS only, such as Linux's epoll or Windows') becomes
   a stub raising `Failure "NAME not implemented"` when called, as with
