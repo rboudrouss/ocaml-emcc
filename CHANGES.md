@@ -47,11 +47,11 @@
   heaps of its 8 possible domains), and a larger minor heap
   (`OCAMLRUNPARAM=s=`) costs no memory until it is used. Existing
   runtimes: `ocaml-emcc setup --force`.
-- Compiled, under node 24 and later: `main` runs on a large stack of its
+- Compiled for wasm32, under node 24 and later: `main` runs on a large stack of its
   own (JSPI's `WebAssembly.promising`, enabled at startup under node 24)
   instead of in a worker thread, 15 to 35 ms less at startup. Programs
   with js_of_ocaml's primitives or asyncify, whose callbacks enter the
-  program again from node's event loop, keep the worker.
+  program again from node's event loop, and wasm64 ones keep the worker.
 - Compiled, under node: the main thread compiles the module while the
   worker with the large stack starts (some 15 ms less at startup for a
   6 MB program, ocamlc).

@@ -148,10 +148,10 @@ differs.
   Under node, the program therefore gets a stack of
   `$OCAML_EMCC_STACK_MB` megabytes, 1024 by default (`0` keeps node's
   own, about 1 MB). From node 24, `main` runs on a stack of its own of
-  that size (JSPI's `WebAssembly.promising`); before, or with js_of_ocaml
-  or asyncify, whose callbacks enter the program again later, the program
-  runs in a worker thread with that stack, which costs 20 to 40 ms at
-  startup. Running out of it is an uncaught `Stack_overflow`. With
+  that size (JSPI's `WebAssembly.promising`); before, in wasm64, or with
+  js_of_ocaml or asyncify, whose callbacks enter the program again later,
+  the program runs in a worker thread with that stack, which costs 20 to
+  40 ms at startup. Running out of it is an uncaught `Stack_overflow`. With
   `--cps-stack` or `--jspi`, the deep recursions do not need it: the
   program runs on node's stack unless `$OCAML_EMCC_STACK_MB` is set. For
   browsers, see [Deep recursion in a browser](#deep-recursion-in-a-browser).

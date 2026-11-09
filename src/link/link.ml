@@ -1119,8 +1119,11 @@ let run o =
          on off the stack of the engine) *)
       @ (if (o.cps_stack || o.jspi) && not proxy_to_pthread then
            [ "--pre-js"; Filename.concat (Env.share ()) "runtime/node_main_stack.js" ]
-         else if not (proxy_to_pthread || jsoo || asyncify) then
-           (* (main on a large stack of its own under a node with JSPI) *)
+         else if not (proxy_to_pthread || jsoo || asyncify || !Env.target = "wasm64") then
+           (* (main on a large stack of its own under a node with JSPI; not
+              wasm64, whose _main is emscripten's JavaScript wrapper turning
+              its pointers into BigInts, not the export WebAssembly.promising
+              needs) *)
            [ "--pre-js"; Filename.concat (Env.share ()) "runtime/node_main_jspi.js" ]
          else [])
       @ [ "--pre-js"; Filename.concat (Env.share ()) ("runtime/" ^ if proxy_to_pthread then "node_threads_stack.js" else "node_stack.js");
