@@ -237,6 +237,9 @@
   native build, those that do not compile left out: libbinaryen (whose
   `dllbinaryen.so` failed) no longer builds binaryen natively for an hour,
   and core's other stubs build without linux_ext's (`sys/prctl.h`).
+- The C compiler of the sysroot drops the options of GNU ld that wasm-ld
+  does not know (`-Wl,--no-undefined`, `-Wl,-z,defs`, `-Wl,--as-needed`,
+  `-Wl,--eh-frame-hdr`): libbinaryen's `dllbinaryen.so` links.
 
 ## 0.5.1
 

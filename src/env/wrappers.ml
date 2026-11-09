@@ -5,7 +5,7 @@
 (* Bumped whenever [write] changes: the CLI then regenerates the toolchain
    in existing sysroots (cheap: the runtime is not rebuilt), and the stubs
    built with it are built again (see [Stamp.toolchain]). *)
-let version = "23"
+let version = "24"
 
 (* [template] with each @KEY@ replaced *)
 let subst vars template =
@@ -46,7 +46,10 @@ let symlink target link =
    -mfpmath=sse: rocq-runtime's configure tests the host's compiler) unless
    wasm SIMD is asked for (-msimd128: emscripten emulates SSE with it, as
    rowex does; emcc refuses them otherwise), and -Ofast, deprecated (hacl's -Werror): -O3
-   -ffast-math.  So are the host's headers (-I/usr/include..., from the
+   -ffast-math.  So are GNU ld's options wasm-ld does not know
+   (libbinaryen's -Wl,--no-undefined, a link of cargo's -Wl,--as-needed
+   and -Wl,--eh-frame-hdr): what they check or save does not apply to
+   wasm.  So are the host's headers (-I/usr/include..., from the
    host's pkg-config in a package configured on the host): their libc is not
    emscripten's, and a missing library reads better as a missing header.
    The headers and libraries of the sysroot come last (after the package's
@@ -83,6 +86,7 @@ for a; do
     -isystem/usr/include|-isystem/usr/include/*|-isystem/usr/local/include|-isystem/usr/local/include/*) ;;
     -pthread|-fopenmp|-fopenmp=*|-march=*|-mtune=*|-mcpu=*) ;;
     -Ofast) set -- "$@" -O3 -ffast-math ;;
+    -Wl,--no-undefined|-Wl,-z,defs|-Wl,--as-needed|-Wl,--no-as-needed|-Wl,--eh-frame-hdr) ;;
     -mfpmath=*) ;;
     -msse*|-mssse3|-mavx*|-mfma) [ -n "$simd" ] && set -- "$@" "$a" ;;
     *) set -- "$@" $inc "$a" ;;
