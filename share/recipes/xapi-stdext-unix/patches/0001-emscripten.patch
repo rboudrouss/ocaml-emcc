@@ -1,0 +1,21 @@
+--- a/lib/xapi-stdext-unix/blkgetsize_stubs.c
++++ b/lib/xapi-stdext-unix/blkgetsize_stubs.c
+@@
++#elif defined(__EMSCRIPTEN__)
++#include <errno.h>
++
++int stdext_blkgetsize(int fd, uint64_t *psize)
++{
++  (void)fd; (void)psize;
++  errno = ENOTSUP;
++  return -1;
++}
++
+ #else
+ # error "Unable to query block device size: unsupported platform, please report."
+--- a/lib/xapi-stdext-unix/unixext_stubs.c
++++ b/lib/xapi-stdext-unix/unixext_stubs.c
+@@
+-#elif defined(__APPLE__)
++#elif defined(__APPLE__) || defined(__EMSCRIPTEN__)
+ # define TCP_LEVEL IPPROTO_TCP
