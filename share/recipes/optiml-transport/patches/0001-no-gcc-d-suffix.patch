@@ -1,0 +1,5 @@
+--- a/lib/EMD_wrapper.cpp
++++ b/lib/EMD_wrapper.cpp
+@@
+-  double costv = 0.0d;
++  double costv = 0.0;

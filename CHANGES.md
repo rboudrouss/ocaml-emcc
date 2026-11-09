@@ -219,12 +219,13 @@
   gdbm (dbm), hdr_histogram (musl's <endian.h>), janestreet_cpuid (its
   CPUID primitives fail, as in JavaScript; its flags shifted in 63 bits),
   libcurl (curl), libpcre (pcre), mariadb (mysql, mariadb), mm (mm.oss
-  without OSS), ocaml_intrinsics (CRC-32C in software), readline,
-  rocq-runtime (no perf counter; its OCaml rebuilt for 31-bit integers on
-  wasm32), shared-memory-ring (memory barriers for wasm), shell (no disk
-  quotas: ENOSYS), tuntap (no devices: ENOSYS), unionFind (identifiers for
-  31-bit integers: frama-c on wasm32), unix-errno (Linux's errno codes),
-  zmq (libzmq).
+  without OSS), ocaml_intrinsics (CRC-32C in software), optiml-transport
+  (no GCC suffix on a floating constant), readline, rocq-runtime (no perf
+  counter; its OCaml rebuilt for 31-bit integers on wasm32),
+  shared-memory-ring (memory barriers for wasm), shell (no disk quotas:
+  ENOSYS), tuntap (no devices: ENOSYS), unionFind (identifiers for 31-bit
+  integers: frama-c on wasm32), unix-errno (Linux's errno codes), zmq
+  (libzmq).
 - Stub archives: one a package's rule makes with `cc -c -o lib<x>.a` (an
   object, not an archive) is put in an archive, and of two copies of an
   archive (the rule's own and dune's) one is kept: radamsa's functions
