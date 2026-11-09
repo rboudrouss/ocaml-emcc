@@ -15,6 +15,7 @@ if (typeof process == "object" && process.versions && process.versions.node) {
     var ocamlEmccWorker = new ocamlEmccThreads.Worker(__filename, {
       argv: process.argv.slice(2),
       resourceLimits: { stackSizeMb: ocamlEmccStackMb },
+      workerData: { ocamlEmccStack: true },
     });
     ocamlEmccWorker.on("error", function (e) {
       if (e instanceof RangeError && /call stack/.test(e.message)) {
@@ -26,9 +27,36 @@ if (typeof process == "object" && process.versions && process.versions.node) {
     ocamlEmccWorker.on("exit", function (code) {
       process.exit(code);
     });
-    // The module is instantiated by the worker only
-    Module["instantiateWasm"] = function () {};
+    // The module is instantiated by the worker only, compiled here while
+    // the worker starts, then given to it
+    Module["instantiateWasm"] = function () {
+      var give = function (m) {
+        ocamlEmccWorker.postMessage({ ocamlEmccModule: m });
+      };
+      try {
+        WebAssembly.compile(ocamlEmccWasmBinary()).then(give, function () {
+          give(null);
+        });
+      } catch (e) {
+        give(null);
+      }
+    };
   } else if (!ocamlEmccThreads.isMainThread) {
+    // the worker started above: the module compiled by the main thread
+    if (ocamlEmccThreads.workerData && ocamlEmccThreads.workerData.ocamlEmccStack)
+      Module["instantiateWasm"] = function (imports, done) {
+        ocamlEmccThreads.parentPort.once("message", function (msg) {
+          var m = msg && msg.ocamlEmccModule;
+          (m ? WebAssembly.instantiate(m, imports).then(function (i) {
+                 return { instance: i, module: m };
+               })
+             : WebAssembly.instantiate(ocamlEmccWasmBinary(), imports)
+          ).then(function (r) {
+            // (the module too: the dynamic linker reads it, --dynlink)
+            done(r.instance, r.module);
+          });
+        });
+      };
     // A worker cannot change the current directory of the process
     // (process.chdir throws, which emscripten's NODERAWFS turned into a
     // chdir that silently did nothing): the worker keeps its own, as
@@ -75,4 +103,10 @@ if (typeof process == "object" && process.versions && process.versions.node) {
       ocamlEmccCwd = d;
     };
   }
+}
+
+// The bytes of the module (emscripten's glue: wasmBinary, findWasmBinary)
+function ocamlEmccWasmBinary() {
+  if (typeof wasmBinary != "undefined" && wasmBinary) return wasmBinary;
+  return require("fs").readFileSync(findWasmBinary());
 }

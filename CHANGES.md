@@ -34,6 +34,9 @@
   `double-translation`. It works with `-sASYNCIFY` (no wasm tail
   calls), C suspending under a deep recursion, with a c_of_ocaml whose
   returns to the continuations bounce on the trampoline.
+- Compiled, under node: the main thread compiles the module while the
+  worker with the large stack starts (some 15 ms less at startup for a
+  6 MB program, ocamlc).
 - Compiled with `-sASYNCIFY`: asyncify saves the stack in 1 MB
   (`-sASYNCIFY_STACK_SIZE=1048576`, unless given) rather than 4 KB, which
   suspending under some hundred frames exceeded. Only `-sASYNCIFY` itself
