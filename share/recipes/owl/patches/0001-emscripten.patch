@@ -1,0 +1,20 @@
+The cache sizes of the CPU: fixed ones, as on ARM, instead of x86's cpuid
+(inline assembly).  And contract_one reads the dimensions of the ndarray
+as int64_t: a copy of them, intnat being 32-bit on wasm32.
+
+--- a/src/owl/core/owl_core_utils.c
++++ b/src/owl/core/owl_core_utils.c
+@@
+-#if defined(__arm__) || defined(__aarch64__)
++#if defined(__arm__) || defined(__aarch64__) || defined(__EMSCRIPTEN__)
+ void query_cache_sizes(int* l1p, int* l2p, int* l3p) {
+--- a/src/owl/core/owl_ndarray_contract_impl.h
++++ b/src/owl/core/owl_ndarray_contract_impl.h
+@@
+-  cp->n = X->dim;
++  cp->n = calloc(cp->dim, sizeof(int64_t));
++  for (int64_t i = 0; i < cp->dim; i++) cp->n[i] = X->dim[i];
+@@
+   free(cp->ofsy);
++  free(cp->n);
+   free(cp);

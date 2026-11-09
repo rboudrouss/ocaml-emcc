@@ -220,14 +220,14 @@
   CPUID primitives fail, as in JavaScript; its flags shifted in 63 bits),
   libcurl (curl), libpcre (pcre), mariadb (mysql, mariadb), mm (mm.oss
   without OSS), ocaml_intrinsics (CRC-32C in software), optiml-transport
-  (no GCC suffix on a floating constant), readline, rocq-runtime (no perf
-  counter; its OCaml rebuilt for 31-bit integers on wasm32),
-  shared-memory-ring (memory barriers for wasm), shell (no disk quotas:
-  ENOSYS), tuntap (no devices: ENOSYS), unionFind (identifiers for 31-bit
-  integers: frama-c on wasm32), unisim_archisec (floating-point exceptions
-  defined, never raised), unix-errno (Linux's errno codes),
-  xapi-stdext-unix (no block devices: ENOTSUP; TCP options at
-  IPPROTO_TCP), zmq (libzmq).
+  (no GCC suffix on a floating constant), owl (no x86 cpuid; ndarray
+  dimensions as intnat), readline, rocq-runtime (no perf counter; its
+  OCaml rebuilt for 31-bit integers on wasm32), shared-memory-ring (memory
+  barriers for wasm), shell (no disk quotas: ENOSYS), tuntap (no devices:
+  ENOSYS), unionFind (identifiers for 31-bit integers: frama-c on wasm32),
+  unisim_archisec (floating-point exceptions defined, never raised),
+  unix-errno (Linux's errno codes), xapi-stdext-unix (no block devices:
+  ENOTSUP; TCP options at IPPROTO_TCP), zmq (libzmq).
 - Stub archives: one a package's rule makes with `cc -c -o lib<x>.a` (an
   object, not an archive) is put in an archive, and of two copies of an
   archive (the rule's own and dune's) one is kept: radamsa's functions
