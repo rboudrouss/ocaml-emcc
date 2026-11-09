@@ -224,7 +224,8 @@
   counter; its OCaml rebuilt for 31-bit integers on wasm32),
   shared-memory-ring (memory barriers for wasm), shell (no disk quotas:
   ENOSYS), tuntap (no devices: ENOSYS), unionFind (identifiers for 31-bit
-  integers: frama-c on wasm32), unix-errno (Linux's errno codes),
+  integers: frama-c on wasm32), unisim_archisec (floating-point exceptions
+  defined, never raised), unix-errno (Linux's errno codes),
   xapi-stdext-unix (no block devices: ENOTSUP; TCP options at
   IPPROTO_TCP), zmq (libzmq).
 - Stub archives: one a package's rule makes with `cc -c -o lib<x>.a` (an
