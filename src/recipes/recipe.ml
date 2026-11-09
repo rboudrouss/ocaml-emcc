@@ -78,28 +78,33 @@ let glob pat s =
    LIB_PATTERNS) that builds lib<x>.a (for a -l<x> of the program): named x
    or libx (whatever the case: sdl2 for -lSDL2), whose LINK starts with -lx
    (zlib: -lz), or with a LIB_PATTERNS glob matching x (clang: -lclang-cpp,
-   -lLLVM-19). *)
+   -lLLVM-19).  None for those of the libc (-lm, -lpthread...): frei0r's
+   LINK is -lm, which nearly every package asks for (blake3, efl). *)
+let libc_libs = [ "c"; "m"; "dl"; "pthread"; "rt"; "util" ]
+
 let lib_recipe ?(path = Env.recipes_path ()) x =
-  let lower = String.lowercase_ascii x in
-  let matches name s =
-    name = lower || name = "lib" ^ lower
-    || List.exists (fun v -> List.nth_opt (Str_util.words v) 0 = Some ("-l" ^ x)) (assignments s "LINK")
-    || List.exists (fun v -> List.exists (fun p -> glob p x) (Str_util.words v)) (assignments s "LIB_PATTERNS")
-  in
-  let is_lib s =
-    List.exists
-      (fun l -> List.exists (fun prefix -> Str_util.starts_with ~prefix l) [ "SOURCE=system:"; "LINK="; "LIB_PATTERNS=" ])
-      (String.split_on_char '\n' s)
-  in
-  path
-  |> Compat.find_map (fun d ->
-         (try List.sort compare (Array.to_list (Sys.readdir d)) with Sys_error _ -> [])
-         |> Compat.find_map (fun name ->
-                let f = script (Filename.concat d name) in
-                match Compat.read_file f with
-                | s when is_lib s && matches name s -> Some name
-                | _ -> None
-                | exception Sys_error _ -> None))
+  if List.mem x libc_libs then None
+  else
+    let lower = String.lowercase_ascii x in
+    let matches name s =
+      name = lower || name = "lib" ^ lower
+      || List.exists (fun v -> List.nth_opt (Str_util.words v) 0 = Some ("-l" ^ x)) (assignments s "LINK")
+      || List.exists (fun v -> List.exists (fun p -> glob p x) (Str_util.words v)) (assignments s "LIB_PATTERNS")
+    in
+    let is_lib s =
+      List.exists
+        (fun l -> List.exists (fun prefix -> Str_util.starts_with ~prefix l) [ "SOURCE=system:"; "LINK="; "LIB_PATTERNS=" ])
+        (String.split_on_char '\n' s)
+    in
+    path
+    |> Compat.find_map (fun d ->
+           (try List.sort compare (Array.to_list (Sys.readdir d)) with Sys_error _ -> [])
+           |> Compat.find_map (fun name ->
+                  let f = script (Filename.concat d name) in
+                  match Compat.read_file f with
+                  | s when is_lib s && matches name s -> Some name
+                  | _ -> None
+                  | exception Sys_error _ -> None))
 
 (* ------------------------------------------------------------- install *)
 

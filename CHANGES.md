@@ -243,6 +243,8 @@
 - conf-clang (the clang binary, a tool of the build: libbpf compiles its
   BPF programs with it) no longer builds the clang recipe (clang's
   libraries, an hour): libbpf fails at once, on its missing headers.
+- The libc's libraries (`-lm`, `-lpthread`...) a package asks for build no
+  recipe: frei0r's (whose link flag is `-lm`) was built for blake3, efl...
 
 ## 0.5.1
 
