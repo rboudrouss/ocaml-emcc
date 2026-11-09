@@ -58,6 +58,30 @@ __attribute__((weak)) void *shmat(int shmid, const void *shmaddr, int shmflg)
   return (void *)-1;
 }
 
+/* POSIX message queues, which emscripten's libc declares only
+   (posix-mqueue's stubs): no queue can be opened. */
+#include <mqueue.h>
+
+__attribute__((weak)) mqd_t mq_open(const char *name, int flags, ...)
+{
+  (void)name; (void)flags;
+  errno = ENOSYS;
+  return (mqd_t)-1;
+}
+
+#define OCAML_EMCC_NO_MQ(ret, f, args) \
+  __attribute__((weak)) ret f args { errno = ENOSYS; return -1; }
+OCAML_EMCC_NO_MQ(int, mq_close, (mqd_t q))
+OCAML_EMCC_NO_MQ(int, mq_unlink, (const char *name))
+OCAML_EMCC_NO_MQ(int, mq_getattr, (mqd_t q, struct mq_attr *a))
+OCAML_EMCC_NO_MQ(int, mq_setattr, (mqd_t q, const struct mq_attr *a, struct mq_attr *o))
+OCAML_EMCC_NO_MQ(int, mq_notify, (mqd_t q, const struct sigevent *e))
+OCAML_EMCC_NO_MQ(int, mq_send, (mqd_t q, const char *m, size_t n, unsigned p))
+OCAML_EMCC_NO_MQ(ssize_t, mq_receive, (mqd_t q, char *m, size_t n, unsigned *p))
+OCAML_EMCC_NO_MQ(int, mq_timedsend, (mqd_t q, const char *m, size_t n, unsigned p, const struct timespec *t))
+OCAML_EMCC_NO_MQ(ssize_t, mq_timedreceive, (mqd_t q, char *m, size_t n, unsigned *p, const struct timespec *t))
+#undef OCAML_EMCC_NO_MQ
+
 /* OCaml >= 5.5: ocamlc defines these in the C file it links with the runtime
    (prims.c for ocamlrun).  STANDARD mode: the runtime opens argv[0] as the
    bytecode first (see main.c).  The standard library directory is the one

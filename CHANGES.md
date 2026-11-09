@@ -265,6 +265,9 @@
   the link strips the debugging information, and clang needed more than
   3 GB for some generated C++ with it (unisim_archisec's decoders: 0.9 GB
   without).
+- POSIX message queues (`mq_open`...), which emscripten's libc only
+  declares, fail with `ENOSYS` instead of being undefined at link
+  (posix-mqueue, interpreted).
 
 ## 0.5.1
 
