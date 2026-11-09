@@ -336,16 +336,6 @@ type compiled = {
   c_tail_calls : bool;  (** compiled with wasm tail calls (-mtail-call) *)
 }
 
-(* A size of emcc's settings (-sSTACK_SIZE=8MB): bytes, or KB, MB, GB *)
-let stack_bytes s =
-  let s = String.uppercase_ascii (String.trim s) in
-  let num, mult =
-    match List.find_opt (fun (suf, _) -> Filename.check_suffix s suf) [ ("KB", 1 lsl 10); ("MB", 1 lsl 20); ("GB", 1 lsl 30) ] with
-    | Some (suf, m) -> (Filename.chop_suffix s suf, m)
-    | None -> (s, 1)
-  in
-  Option.map (fun n -> n * mult) (int_of_string_opt (String.trim num))
-
 (* c_of_ocaml's --cps-stack (a version in CPS of the recursive functions,
    double translation's), if asked *)
 let cps_stack_flag cooc = function
@@ -877,16 +867,6 @@ let run o =
      match o.effects with
      | Some e when e <> "double-translation" ->
          Env.fail "--cps-stack needs double translation (it runs the CPS versions of the functions): not --effects %s" e
-     | _ -> ());
-  (* the deep recursions of --cps-stack and --jspi leave the stack of the
-     engine, not emscripten's C stack, which grows with them through the
-     over-applications (more arguments than the arity) and C functions:
-     c_of_ocaml asks for 1 MB at least *)
-  (if o.compiled && (o.cps_stack || o.jspi) then
-     match stack_bytes o.stack_size with
-     | Some b when b < 1024 * 1024 ->
-         Env.log "warning: %s with --stack-size %s: give the C stack at least 1MB"
-           (if o.cps_stack then "--cps-stack" else "--jspi") o.stack_size
      | _ -> ());
   if o.cps_stack && not o.compiled then Env.log "note: --cps-stack is for the compiled mode: ignored (interpreted)";
   if (not o.tail_calls) && not o.compiled then Env.log "note: --no-tail-calls is for the compiled mode: ignored (interpreted)";
