@@ -250,6 +250,12 @@
   (`-sLEGACY_GL_EMULATION`) for `glBegin` and the like; those emscripten
   lacks (display lists, feedback mode) abort when called (gl-legacy
   stopped at startup on `glBegin`).
+- `cargo build` in a dune rule of the wasm32 context builds the Rust
+  static library for `wasm32-unknown-emscripten` (its standard library
+  from rustup), with emcc, its build scripts with the host's `cc`, and
+  copies it where the rule expects it (blake3's, which then stops on its
+  vendored crates: ocaml-sys's `c_char` is unsigned on wasm32, Rust's
+  signed). Without that standard library (Debian's cargo), it says so.
 
 ## 0.5.1
 

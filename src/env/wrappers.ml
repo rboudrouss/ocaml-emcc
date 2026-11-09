@@ -5,7 +5,7 @@
 (* Bumped whenever [write] changes: the CLI then regenerates the toolchain
    in existing sysroots (cheap: the runtime is not rebuilt), and the stubs
    built with it are built again (see [Stamp.toolchain]). *)
-let version = "24"
+let version = "25"
 
 (* [template] with each @KEY@ replaced *)
 let subst vars template =
@@ -188,6 +188,19 @@ esac
 @FILTER@|}
   ^ next_in_path
 
+(* cargo: in the wasm context, share/tools/cargo (a Rust static library
+   built for wasm32-unknown-emscripten: blake3's) *)
+let cargo_wrapper =
+  {|#!/bin/sh
+case $INSIDE_DUNE/:$PWD/ in
+  */default.@TARGET@/*)
+    OCAML_EMCC_SYSROOT='@SYSROOT@' OCAML_EMCC_TARGET_NAME=@TARGET@ OCAML_EMCC_EMCC='@CC@' OCAML_EMCC_EMXX='@CXX@' EMAR='@EMAR@'
+    export OCAML_EMCC_SYSROOT OCAML_EMCC_TARGET_NAME OCAML_EMCC_EMCC OCAML_EMCC_EMXX EMAR
+    exec sh '@SHARE@/tools/cargo' "$@" ;;
+esac
+|}
+  ^ next_in_path
+
 let host_filter =
   {|for a; do
   shift
@@ -277,6 +290,7 @@ let write () =
   List.iter (fun t -> script (file ("bin/path/" ^ t)) (subst (("TOOL", t) :: vars) pkg_config_wrapper)) [ "pkg-config"; "pkgconf" ];
   List.iter (fun t -> script (file ("bin/path/" ^ t)) (subst (("TOOL", t) :: vars) llvm_wrapper)) [ "llvm-config"; "clang" ];
   script (file "bin/path/cmake") (subst (("TOOL", "cmake") :: vars) cmake_wrapper);
+  script (file "bin/path/cargo") (subst (("TOOL", "cargo") :: ("CXX", cxx) :: vars) cargo_wrapper);
   List.iter
     (fun (t, w) ->
       let filter = if t = "ar" || t = "ranlib" then "" else host_filter in

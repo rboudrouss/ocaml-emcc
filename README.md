@@ -844,7 +844,11 @@ program needs from its bytecode and its opam packages.
   shell scripts that a dune rule runs get emcc, emar and emranlib under the
   host's names (`cc`, `gcc`, `g++`, `clang`, `ar`, `ranlib`...), and CMake
   finds the sysroot's libraries first (qbf's picosat, re2's C++ library,
-  cudd, hdr_histogram). Stub libraries that dune skips for the target, as
+  cudd, hdr_histogram). `cargo build` builds a Rust static library for
+  `wasm32-unknown-emscripten` (whose standard library comes from `rustup
+  target add wasm32-unknown-emscripten`), where the rule expects it, its
+  build scripts linked by the host's `cc`; not on wasm64, which Rust has
+  no emscripten target for. Stub libraries that dune skips for the target, as
   enabled for some architectures only (curve448), are compiled from the C
   files of the native build.
 - **ctypes**: bindings using stub generation (`Cstubs`, dune's `(ctypes)`

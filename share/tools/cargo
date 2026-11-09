@@ -1,0 +1,61 @@
+#!/bin/sh
+# cargo for the wasm32 (emscripten) toolchain, first in dune's PATH in the
+# wasm context: a rule building a Rust static library for its stubs
+# (blake3: `cargo build --release`, then target/release/libocaml_blake3.a
+# and its .so) gets it built for wasm32-unknown-emscripten, with emcc, and
+# copied where it expects it (target/PROFILE/), next to a placeholder for
+# the shared library (placeholder-dll).  The build scripts (build.rs) and
+# proc macros are the host's: the host's cc links them.
+# Needs Rust's standard library for wasm32-unknown-emscripten (rustup).
+#   OCAML_EMCC_SYSROOT, OCAML_EMCC_TARGET_NAME, OCAML_EMCC_EMCC,
+#   OCAML_EMCC_EMXX, EMAR: set by the sysroot's bin/path/cargo
+
+self=$OCAML_EMCC_SYSROOT/bin/path cargo= ifs=$IFS
+IFS=:
+for d in $PATH; do
+  [ "$d" = "$self" ] && continue
+  [ -f "$d/cargo" ] && [ -x "$d/cargo" ] && { cargo=$d/cargo; break; }
+done
+IFS=$ifs
+[ -n "$cargo" ] || { echo "cargo: not found" >&2; exit 127; }
+
+case ${1:-} in build|rustc) ;; *) exec "$cargo" "$@" ;; esac
+for a; do case $a in --target|--target=*) exec "$cargo" "$@" ;; esac; done
+triple=wasm32-unknown-emscripten
+if [ "$OCAML_EMCC_TARGET_NAME" != wasm32 ]; then
+  echo "cargo: Rust has no emscripten target for $OCAML_EMCC_TARGET_NAME (only $triple)" >&2
+  exit 1
+fi
+libdir=$("${RUSTC:-rustc}" --print target-libdir --target $triple 2>/dev/null)
+if [ ! -d "$libdir" ]; then
+  echo "cargo: Rust's standard library for $triple is not installed (rustup target add $triple)" >&2
+  exit 1
+fi
+
+profile=debug tdir=${CARGO_TARGET_DIR:-} prev=
+for a; do
+  case $prev in --target-dir) tdir=$a ;; --profile) profile=$a ;; esac
+  case $a in
+    --release|-r) profile=release ;;
+    --target-dir=*) tdir=${a#*=} ;;
+    --profile=*) profile=${a#*=} ;;
+  esac
+  prev=$a
+done
+[ "$profile" = dev ] && profile=debug
+[ -n "$tdir" ] || tdir=$("$cargo" metadata --format-version 1 --no-deps 2>/dev/null | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+[ -n "$tdir" ] || tdir=target
+
+sub=$1; shift
+OCAML_EMCC_HOST_TOOLS=1 \
+CARGO_TARGET_WASM32_UNKNOWN_EMSCRIPTEN_LINKER=$OCAML_EMCC_EMCC \
+CC_wasm32_unknown_emscripten=$OCAML_EMCC_EMCC CXX_wasm32_unknown_emscripten=$OCAML_EMCC_EMXX \
+AR_wasm32_unknown_emscripten=$EMAR \
+  "$cargo" "$sub" --target $triple "$@" || exit
+
+mkdir -p "$tdir/$profile"
+for a in "$tdir/$triple/$profile"/lib*.a; do
+  [ -f "$a" ] || continue
+  cp -f "$a" "$tdir/$profile/"
+  sh "$(dirname "$0")/placeholder-dll" "$tdir/$profile/$(basename "$a" .a).so" "$a"
+done
