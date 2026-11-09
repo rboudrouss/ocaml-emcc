@@ -260,6 +260,10 @@
   copies it where the rule expects it (blake3's, which then stops on its
   vendored crates: ocaml-sys's `c_char` is unsigned on wasm32, Rust's
   signed). Without that standard library (Debian's cargo), it says so.
+- The C compiler of the sysroot drops `-g`, which dune gives every stub:
+  the link strips the debugging information, and clang needed more than
+  3 GB for some generated C++ with it (unisim_archisec's decoders: 0.9 GB
+  without).
 
 ## 0.5.1
 

@@ -5,7 +5,7 @@
 (* Bumped whenever [write] changes: the CLI then regenerates the toolchain
    in existing sysroots (cheap: the runtime is not rebuilt), and the stubs
    built with it are built again (see [Stamp.toolchain]). *)
-let version = "25"
+let version = "26"
 
 (* [template] with each @KEY@ replaced *)
 let subst vars template =
@@ -49,8 +49,11 @@ let symlink target link =
    -ffast-math.  So are GNU ld's options wasm-ld does not know
    (libbinaryen's -Wl,--no-undefined, a link of cargo's -Wl,--as-needed
    and -Wl,--eh-frame-hdr): what they check or save does not apply to
-   wasm.  So are the host's headers (-I/usr/include..., from the
-   host's pkg-config in a package configured on the host): their libc is not
+   wasm.  So is -g, which dune gives every stub: the link strips the
+   debugging information, and clang needs more than 3 GB for some files
+   with it (unisim_archisec's generated decoders).  So are the host's
+   headers (-I/usr/include..., from the host's pkg-config in a package
+   configured on the host): their libc is not
    emscripten's, and a missing library reads better as a missing header.
    The headers and libraries of the sysroot come last (after the package's
    own): dune-configurator's C tests only get the C flags, not -I.  Its -I
@@ -87,6 +90,7 @@ for a; do
     -pthread|-fopenmp|-fopenmp=*|-march=*|-mtune=*|-mcpu=*) ;;
     -Ofast) set -- "$@" -O3 -ffast-math ;;
     -Wl,--no-undefined|-Wl,-z,defs|-Wl,--as-needed|-Wl,--no-as-needed|-Wl,--eh-frame-hdr) ;;
+    -g|-g1|-g2|-g3|-ggdb|-ggdb3) ;;
     -mfpmath=*) ;;
     -msse*|-mssse3|-mavx*|-mfma) [ -n "$simd" ] && set -- "$@" "$a" ;;
     *) set -- "$@" $inc "$a" ;;
