@@ -591,8 +591,9 @@ On wasm32, as with a 32-bit OCaml:
 - Arithmetic beyond 31 bits wraps silently (`1 lsl 40` is 256).
 
 Packages that require 63-bit ints need wasm64, where matrix (its
-`assert (Sys.int_size >= 62)`, hence k7 and kaun-board), binsec (its
-marshalled data) and janestreet_cpuid (its flags) run. Two are patched to
+`assert (Sys.int_size >= 62)`, hence k7 and kaun-board), thumper (its
+`#error "thumper needs a 64-bit OCaml"`), binsec (its marshalled data) and
+janestreet_cpuid (its flags) run. Two are patched to
 run on wasm32 too. frama-c uses unionFind's identifiers patched for 31
 bits, and `--node-fs` for its share directory (c_of_ocaml peaks at about
 2 GB on it). rocq-runtime is rebuilt with its 31-bit integers and floats,
