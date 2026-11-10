@@ -130,6 +130,7 @@ differs.
 | effect handlers (OCaml 5) | yes (c_of_ocaml's double translation, chosen per program, see `--effects`) | yes |
 | plugins | `Emcc_dynlink` (`ocaml-emcc plugin`) | OCaml's `Dynlink`, of bytecode (see [Plugins](#plugins)) |
 | threads, domains, js_of_ocaml's library, WASI | yes | yes |
+| wasm tail calls | enabled by default, can be disabled using `--no-tail-calls` but might need [`--jspi` or `--cps-stack`](#deep-recursion-in-a-browser) | not needed |
 | deep recursion | the engine's stack: 1 GB under node, 500 KB to 1 MB in browsers, without limit with [`--jspi` or `--cps-stack`](#deep-recursion-in-a-browser) | the interpreter's own stack, as natively |
 | `Printexc.get_callstack` | empty (backtraces of exceptions work) | yes |
 | with asyncify (`-sASYNCIFY`) | without wasm tail calls by default, as `--no-tail-calls` (see below) | yes |
@@ -138,39 +139,39 @@ differs.
 
 ### The compiled mode
 
-- **Speed**: there is little to gain when the program spends its time in
+- There is little to gain when the program spends its time in
   C stubs (digestif's hash functions...).
 - **Small functions**: c_of_ocaml pads the module with small functions
   (a few percent of its size) because V8 cuts the inlining budget of a
   module that has few of them. This only helps V8 (node, Chrome), so
   `--wasi` turns it off (c_of_ocaml's `--disable small-functions`).
-- **Stack depth**: the compiled code runs on the stack of the wasm engine.
-  Under node, the program therefore gets a stack of
-  `$OCAML_EMCC_STACK_MB` megabytes, 1024 by default (`0` keeps node's
-  own, about 1 MB). From node 24, `main` runs on a stack of its own of
-  that size (JSPI's `WebAssembly.promising`); before, in wasm64, or with
-  js_of_ocaml or asyncify, whose callbacks enter the program again later,
-  the program runs in a worker thread with that stack, which costs 20 to
-  40 ms at startup. Running out of it is an uncaught `Stack_overflow`. With
-  `--cps-stack` or `--jspi`, the deep recursions do not need it: the
-  program runs on node's stack unless `$OCAML_EMCC_STACK_MB` is set. For
-  browsers, see [Deep recursion in a browser](#deep-recursion-in-a-browser).
+- **Stack depth**: the compiled code recurses on the stack of the wasm
+  engine, and node's main thread has only about 1 MB of it. Under node,
+  the program therefore runs on a stack of `$OCAML_EMCC_STACK_MB`
+  megabytes, 1024 by default (`0` keeps node's own). Running out of it
+  is an uncaught `Stack_overflow`.
+  - From node 24, `main` runs on a new stack of that size created by
+    `WebAssembly.promising` (JSPI, used here only for its stack, the
+    program needs no `--jspi`). This costs nothing at startup.
+  - Otherwise (node 22, wasm64, or js_of_ocaml and asyncify, whose
+    callbacks enter the program again after `main` returns), the program
+    runs in a worker thread with that stack, which costs 20 to 40 ms at
+    startup.
+  - With `--cps-stack` or `--jspi`, the deep recursions do not use the
+    engine's stack, the program runs on node's own stack, with no
+    worker, unless `$OCAML_EMCC_STACK_MB` is set.
+  - For browsers, see [Deep recursion in a browser](#deep-recursion-in-a-browser).
 - **Tail calls**: OCaml's tail calls are WebAssembly tail calls
   (`return_call`, emcc's `-mtail-call`), so that mutually recursive
   functions loop in constant stack, as natively. Engines have them since
   Chrome 112, Firefox 121, Safari 18.2 and node 20 (wasmer with
-  `--enable-tail-call`), and older ones do not load the module. They do
-  not change the speed: without them the Ocsigen benchmarks run as fast,
-  `--cps-stack` too.
-- **`--no-tail-calls`** (`tail-calls: no`) compiles without them, and is
-  only for the older browsers that lack them (Safari before 18.2, Firefox
-  before 121, Chrome before 112). Tail calls then become ordinary calls,
-  so a long loop of tail calls (mutually recursive functions, a loop
-  through closures) may overflow the stack. Those browsers have no JSPI
-  either, and a stack of 500 KB to 1 MB: a program recursing deeply will
-  probably need `--cps-stack` too (see [Deep recursion in a
-  browser](#deep-recursion-in-a-browser)). The plugins of such a program
-  follow it (`plugin --main`, or `plugin --no-tail-calls`).
+  `--enable-tail-call`), and older ones do not load the module.
+  - **`--no-tail-calls`** (`tail-calls: no`) compiles without them, and is
+    only for the older browsers that lack them. Tail calls then become ordinary calls,
+    so a long loop of tail calls (mutually recursive functions, a loop
+    through closures) may overflow the stack. Those browsers have no JSPI
+    either so a program recursing deeply will probably need `--cps-stack` 
+    too (see [Deep recursion in a browser](#deep-recursion-in-a-browser)). 
 - **Build time**: c_of_ocaml splits the C in parts (`partN.c`), and
   ocaml-emcc compiles those that changed in parallel, the biggest first,
   `$OCAML_EMCC_JOBS` at a time (default: the number of processors). The
@@ -182,9 +183,8 @@ differs.
   dune refusing to build while another holds `_build`.
 - **Asyncify**: Asyncify do not support WebAssembly tail calls.
   With `-sASYNCIFY`, as the raylib recipe links, ocaml-emcc turns them
-  off by default, as `--no-tail-calls` does: they become ordinary calls,
-  so a long chain of mutually recursive tail calls may overflow. You might need to use `--cps-stack` (or `--jspi` instead of Asyncify), see [Deep recursion in a
-  browser](#deep-recursion-in-a-browser).
+  off by default. You might need to use `--cps-stack` (or `--jspi` instead 
+  of Asyncify), see [Deep recursion in a browser](#deep-recursion-in-a-browser).
 - **Effects** performed across a callback from C raise
   `Effect.Unhandled`.
 - **Backtraces** work when the bytecode is compiled with `-g`, as dune
