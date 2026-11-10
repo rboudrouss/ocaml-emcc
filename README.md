@@ -167,11 +167,15 @@ differs.
   Chrome 112, Firefox 121, Safari 18.2 and node 20 (wasmer with
   `--enable-tail-call`), and older ones do not load the module.
   - **`--no-tail-calls`** (`tail-calls: no`) compiles without them, and is
-    only for the older browsers that lack them. Tail calls then become ordinary calls,
-    so a long loop of tail calls (mutually recursive functions, a loop
-    through closures) may overflow the stack. Those browsers have no JSPI
-    either so a program recursing deeply will probably need `--cps-stack` 
-    too (see [Deep recursion in a browser](#deep-recursion-in-a-browser)). 
+    only for the older browsers that lack them. Tail calls then become
+    ordinary calls, but a long loop of tail calls (mutually recursive
+    functions, a loop through closures or continuations) still runs in
+    constant stack: past a few hundred nested tail calls, c_of_ocaml returns
+    the next one to the last call which is not a tail call, which makes it.
+    Deep recursions which are not tail calls still use the engine's stack,
+    and those browsers have no JSPI either, so a program recursing deeply
+    will probably need `--cps-stack` too (see [Deep recursion in a
+    browser](#deep-recursion-in-a-browser)).
 - **Build time**: c_of_ocaml splits the C in parts (`partN.c`), and
   ocaml-emcc compiles those that changed in parallel, the biggest first,
   `$OCAML_EMCC_JOBS` at a time (default: the number of processors). The
