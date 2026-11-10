@@ -66,7 +66,10 @@
 - `--no-tail-calls` (`tail-calls: no`), compiled: without wasm tail
   calls (emcc's `-mtail-call`), for the browsers that lack them (Safari
   before 18.2, Firefox before 121, Chrome before 112), usually with
-  `--cps-stack`. `-sASYNCIFY` implies it. Its plugins follow (`plugin
+  `--cps-stack`. Long loops of tail calls (through closures,
+  continuations) still run in constant stack, c_of_ocaml returning the
+  next tail call past a few hundred nested ones to the last call which is
+  not one. `-sASYNCIFY` implies it. Its plugins follow (`plugin
   --main`, or `plugin --no-tail-calls`).
 - Compiled mode compiles the parts of the C in parallel, the biggest
   first, `$OCAML_EMCC_JOBS` at a time (default: the number of

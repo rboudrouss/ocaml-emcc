@@ -45,9 +45,9 @@ link options (build and link):
                   --dynlink, its plugins too (double translation)
   --no-tail-calls compiled: without wasm tail calls, only for the browsers
                   that lack them (Safari < 18.2, Firefox < 121, Chrome <
-                  112); long loops of tail calls may then overflow the
-                  stack, and those browsers need --cps-stack for deep
-                  recursions (implied by -sASYNCIFY; its plugins follow)
+                  112); loops of tail calls still run in constant stack,
+                  deep recursions need --cps-stack in those browsers
+                  (implied by -sASYNCIFY; its plugins follow)
   --dynlink       a program loading plugins (Emcc_dynlink of
                   ocaml-emcc.dynlink, see `plugin`), compiled only; its
                   bytecode must be linked with -linkall; implied when the
