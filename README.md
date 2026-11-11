@@ -340,8 +340,8 @@ Compiled code recurses on the stack of the wasm engine, which is 984 KB
 on the page's thread in Chrome and about 500 KB in a worker, that is
 6 000 to 15 000 nested calls of OCaml code. A parser or an analyser
 recursing on a large input runs out of it. Two link options let a compiled function about to go
-deeper than a limit of the current stack go on elsewhere, so that the
-recursion is only limited by memory.
+deeper than a limit of the current stack (a segment, about 2 000 nested
+calls) go on elsewhere, so that the recursion is only limited by memory.
 
 - `--jspi` (`jspi: yes` in `ocaml-emcc.conf`) continues the recursion on
   a new stack of the engine, which JSPI (WebAssembly's JavaScript Promise
@@ -360,8 +360,10 @@ ocaml-emcc build app.js --jspi         # or --cps-stack
 |-|----------|---------------|
 | browsers | Chrome and Edge 137 and later (Firefox announces it for 153, Safari has it in its preview only) | all |
 | `main` | asynchronous | synchronous |
-| size of the `.wasm` | about 4 % more | 0 to 10 % more for small numeric programs, about 50 % more with `Printf` or `Format`, twice as much C to compile |
-| speed | about 2 % slower on average, up to a third on a plain recursion of integers | about 4 % slower until reaching the limit, then 2 to 3 times slower than with JSPI |
+| size of the `.wasm` | about the same | 0 to 10 % more for small numeric programs, about 50 % more with `Printf` or `Format` (a quarter more on the Ocsigen benchmarks), twice as much C to compile |
+| speed, recursions within a segment | about 1 % slower on average (Ocsigen benchmarks) | about 3 % slower on average |
+| speed, deeper recursions | the part beyond the first segment 1.6 to 3 times slower than on a large stack | the part beyond the first segment 2 to 4 times slower than on a large stack, 1.2 to 1.6 times slower than with JSPI |
+| without wasm tail calls (`--no-tail-calls`) | not needed: the browsers with JSPI have tail calls | yes, for the older browsers, a few percent slower |
 | recursions still limited by the stack | in callbacks from C or JavaScript | in callbacks from C, through functions with unboxed (float) arguments or results, and tree recursions without frames (`fib`) |
 | plugins (`--dynlink`) | yes, their code goes on new stacks too | yes, the plugins compiled with `--cps-stack` too (see [Plugins](#plugins)) |
 | suspending C (`emscripten_sleep`...) | yes, instead of `-sASYNCIFY` | no, you need to use `-sASYNCIFY` |
