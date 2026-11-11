@@ -271,6 +271,9 @@
 - POSIX message queues (`mq_open`...), which emscripten's libc only
   declares, fail with `ENOSYS` instead of being undefined at link
   (posix-mqueue, interpreted).
+- A switch without ocamlfind: building the runtime failed (`Unix_error
+  ENOENT` running `ocamlfind printconf`) instead of using the default
+  findlib configuration of the switch.
 
 ## 0.5.1
 
