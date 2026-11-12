@@ -34,7 +34,7 @@ type opts = {
   check : bool;
   wasi : bool;  (** OUT.wasm for a WASI host (share/runtime/wasi.c) *)
   wasix : bool;  (** wasi, with WASIX's sockets (wasmer, share/runtime/wasix.c) *)
-  owi : bool;  (** wasi, for owi's symbolic execution (share/runtime/owi.c) *)
+  owi : bool;  (** wasi, for owi's symbolic execution (share/runtime/owi.c, Lower_atomics) *)
   compiled : bool;  (** compiled to C by c_of_ocaml rather than interpreted *)
   missing_prims : bool;  (** primitives no library defines raise Failure (else: link error) *)
   js_files : string list;  (** JavaScript files implementing primitives *)
@@ -1412,6 +1412,11 @@ let run o =
   if code <> 0 then Env.fail "emcc failed (exit %d)" code;
   if foreign <> None then keep_raw_exports o.output;
   if o.dynlink && not o.threads then tls_exports_for_plugins o.output;
+  if o.owi then (
+    match Lower_atomics.file o.output with
+    | 0 -> ()
+    | n -> Env.log "%s: %d atomic instructions made plain ones (one thread, for owi)" o.output n
+    | exception Failure e -> Env.fail "--owi: %s" e);
   if standalone then report_imports ~wasi:o.wasi ~wasix:o.wasix ~owi:o.owi ~threads:o.threads o.output
 
 (* ---------------------------------------------------------------- plugins *)

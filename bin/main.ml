@@ -60,7 +60,8 @@ link options (build and link):
                   getaddrinfo...): a module for wasmer (wasmer run --net)
   --owi           --wasi for owi's symbolic execution (owi wasm sym OUT.wasm
                   --entry-point _start): WASI inside the module (no files,
-                  stdout dropped), no threads
+                  stdout dropped), atomic instructions made plain ones, no
+                  threads
   --node-fs       node only: the real file system and environment instead of
                   emscripten's in memory (interpreted: the .bc next to OUT.js)
   --preload       interpreted: the bytecode in a separate .data file instead
