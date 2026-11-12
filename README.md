@@ -88,6 +88,7 @@ The extension of the output and `--wasi` decide what is written.
 | `main.html` (+ `.js`, `.wasm`) | the same, plus a minimal emscripten page | browsers | open the page (served over HTTP) |
 | `main.wasm --wasi` | a module importing only WASI (preview 1) functions | wasmtime, node's `node:wasi`, wasmer | `wasmtime run -W exceptions=y --dir . main.wasm ARGS` |
 | `main.wasm --wasix` | `--wasi`, with WASIX's sockets | wasmer | `wasmer run --net main.wasm` |
+| `main.wasm --owi` | `--wasi`, for symbolic execution | owi | `owi wasm sym main.wasm --entry-point _start` |
 | `main.wasm` | a standalone module, without JavaScript | hosts providing emscripten's imports | (your host) |
 
 A standalone `.wasm` without `--wasi` still imports emscripten functions
@@ -232,6 +233,7 @@ needed.
 | `--no-tail-calls` | compiled without wasm tail calls (implied by `-sASYNCIFY`) | only for browsers without them (Safari < 18.2, Firefox < 121, Chrome < 112), with `--cps-stack` for deep recursions, see [The compiled mode](#the-compiled-mode) |
 | `--wasi` | `OUT.wasm` for a WASI host | see [WASI](#wasi) |
 | `--wasix` | `--wasi`, with WASIX's sockets | network programs under wasmer |
+| `--owi` | `--wasi`, for owi's symbolic execution | finding the inputs that make a program fail, see [Symbolic execution with owi](#symbolic-execution-with-owi) |
 | `--node-fs` | the real file system and environment, node only | programs reading files installed with them (dune-site, why3's `share/why3`, frama-c) or the user's files |
 | `--preload` | the bytecode in a separate `main.data` (interpreted) | a page loading the bytecode apart |
 | `-l LIB`, `-L DIR` | more libraries (`-lfoo`, `libfoo.a`, `x.o`) and where to find them | C of your own, built by hand |
@@ -286,6 +288,7 @@ directory upwards. Every field is optional.
 | `cps-stack:` | link with `--cps-stack` | `cps-stack: yes` |
 | `tail-calls:` | `no`: link with `--no-tail-calls` | `tail-calls: no` |
 | `wasix:` | `--wasi` links with `--wasix` | `wasix: yes` |
+| `owi:` | `--wasi` links with `--owi` | `owi: yes` |
 | `interpreted:` | link with `--interpreted` (`--compiled` overrides it) | `interpreted: yes` |
 
 Emscripten link flags come from `link-flags:`, `$OCAML_EMCC_LDFLAGS`,
@@ -505,6 +508,56 @@ instructions (exnref), as wasmtime 50 and node 22 do.
   the imports that are not WASI, and such a module only runs where they
   are defined (`wasmtime -W unknown-imports-trap=y` runs it until one is
   called).
+
+### Symbolic execution with owi
+
+[owi](https://github.com/OCamlPro/owi) runs a wasm module on symbolic
+values and reports the values for which it fails, with the path leading
+there. `--owi` (or `owi: yes`, for `--wasi`) links a module it can run,
+and the library `ocaml-emcc.owi` gives the program its symbolic values:
+
+```ocaml
+let () =
+  let x = Emcc_owi.int () in
+  Emcc_owi.assume (x >= 0 && x < 1000);
+  let s = Emcc_owi.string 3 in
+  if int_of_string ("0x" ^ string_of_int x) = 0x423 && s = "ab=" then failwith "found"
+```
+
+```sh
+ocaml-emcc build main.wasm --exe main --owi
+owi wasm sym main.wasm --entry-point _start
+```
+
+owi finds `x = 423` and the characters 97, 98, 61 (`"ab="`) in about ten
+seconds.
+
+owi reports an exception the program does not catch (it exits with code
+2), a failed `Emcc_owi.check`, and a trap of the C code (a division by
+zero, an access outside the memory, `assert`, `abort`), with the value of
+each symbol, in the order the program asked for them. `Emcc_owi.assume`
+drops the paths where its condition is false. Natively, every value is 0.
+
+The module has no host: `--owi` links WASI's calls into it
+(`share/runtime/owi.c`), as owi's own cannot write to the memory. There
+are no files, `argv` is `["owi"]`, the environment is empty, stdout is
+dropped (printing a symbolic value would make it concrete), and stderr
+goes to owi's `print_char`, one character per line. Its atomic
+instructions become plain ones, as owi runs one thread: `--owi` refuses
+`--threads` and `--wasix`.
+
+Limits:
+
+- owi has to run `try_table` and `throw`, the wasm exceptions of
+  `longjmp` (OCaml exceptions raised by C), and read the tag section where
+  the standard puts it: neither is in owi's release yet.
+- Compiled only: the interpreter catches exceptions as references
+  (`catch_all_ref`, `throw_ref`), which owi does not run.
+- Code driven by tables (`Re`, the lexers of ocamllex) explodes into paths,
+  as symbolic addresses are made concrete. A program checking small
+  functions with small inputs works best.
+- An overflow in C inside the memory is not seen: owi checks the bounds of
+  the memory, not those of the blocks of `malloc`.
 
 ## JavaScript
 

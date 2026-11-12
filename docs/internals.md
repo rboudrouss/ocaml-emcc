@@ -144,6 +144,32 @@ defines one of the functions of `wasi.c`, `compat.c` or `dlsym.c`
 (`__syscall_getcwd` or `getaddrinfo` for instance), `link` leaves
 ocaml-emcc's out and says so: the program's definition is the one linked.
 
+## owi
+
+`--owi` is `--wasi` for [owi](https://github.com/OCamlPro/owi)'s symbolic
+execution. owi provides WASI's calls, but an external function of owi
+cannot write the memory of the module (its symbolic memory is a value
+that the function does not return), so `fd_write` cannot report what it
+wrote nor `args_get` give the arguments. `share/runtime/owi.c` defines the
+`__wasi_*` functions instead, and wasm-ld takes those definitions rather
+than importing them: the module imports only `owi.*` and `proc_exit`. It
+also defines the primitives of `Emcc_owi` (`lib/owi`), whose own stubs
+give 0 natively; like `Emcc_dynlink`'s, the stub library is replaced by
+the file of `share/runtime`, and a program linking `Emcc_owi` without
+`--owi` is refused.
+
+The C of the sysroot is compiled with `-pthread` (see [Flags used for all
+C code](#flags-used-for-all-c-code)), so a program without threads still
+has atomic instructions (the runtime's, about 560), on a memory that is
+not shared. owi does not run the threads proposal. `Lower_atomics`
+rewrites the linked module: atomic loads and stores become plain ones, a
+read-modify-write or compare-exchange a call to a function added at the
+end of the module (load, operation, store, the old value; one per
+instruction and memarg), `atomic.fence` nothing, `memory.atomic.notify`
+0 and `memory.atomic.wait` a trap, as on a memory that is not shared.
+With one thread this is exact, but for the alignment checks of the atomic
+instructions. A shared memory (`--threads`) is refused.
+
 ## Threads
 
 All the C code (runtime, recipes, stubs) is compiled with `-pthread`:

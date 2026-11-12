@@ -274,6 +274,12 @@
 - A switch without ocamlfind: building the runtime failed (`Unix_error
   ENOENT` running `ocamlfind printconf`) instead of using the default
   findlib configuration of the switch.
+- `--owi` (`owi: yes` in `ocaml-emcc.conf`, for `--wasi`) links a module
+  for owi's symbolic execution: WASI inside the module (no files, stdout
+  dropped, stderr to owi's `print_char`), atomic instructions made plain
+  ones (one thread: `--threads` refused), and `ocaml-emcc.owi`
+  (`Emcc_owi`) for symbolic values, assumptions and checks. owi has to
+  run `try_table` and `throw`, which its release does not yet.
 
 ## 0.5.1
 
