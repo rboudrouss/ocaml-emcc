@@ -979,6 +979,13 @@ let run o =
   if o.owi && not o.compiled then
     Env.log "warning: --owi --interpreted: the interpreter catches the exceptions of the C as references\n\
             \  (catch_all_ref, throw_ref), which owi does not run: use the compiled mode";
+  (* owi runs every byte a memset clears, one by one: a runtime built
+     before 5.1+/0002-emscripten-heap-memory-from-malloc clears its minor
+     heap at startup, seconds of every run *)
+  if o.owi && Recipe.changed "ocaml" then
+    Env.log "warning: --owi: the ocaml recipe changed since the runtime of %s was built: an older runtime\n\
+            \  can take seconds of owi's time to start (clearing its minor heap), rebuild it with:\n\
+            \  ocaml-emcc install --force ocaml" (Env.sysroot ());
   if o.dynlink && standalone then Env.fail "--dynlink: plugins are loaded by the JavaScript glue: link OUT.js, not a standalone .wasm";
   if o.threads then check_threads ~standalone o;
   if o.compiled then

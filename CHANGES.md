@@ -279,7 +279,9 @@
   dropped, stderr to owi's `print_char`), atomic instructions made plain
   ones (one thread: `--threads` refused), and `ocaml-emcc.owi`
   (`Emcc_owi`) for symbolic values, assumptions and checks. owi has to
-  run `try_table` and `throw`, which its release does not yet.
+  run `try_table` and `throw`, which its release does not yet. A runtime
+  built before its recipe changed is a warning: an older one can take
+  owi seconds to start.
 
 ## 0.5.1
 

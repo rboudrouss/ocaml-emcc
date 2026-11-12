@@ -151,6 +151,10 @@ let decide ~force ~sum ~installed name stamp =
             | _ -> None))
   | _ -> Build None
 
+(* Whether the recipe [name] changed since it was built (its patches...) *)
+let changed name =
+  match Option.bind (Stamp.read name) (Stamp.field "recipe") with Some s -> s <> sum name | None -> false
+
 (* Copy the sources of the recipe [name] to [work]: their version, None
    for SOURCE=fetch (the recipe's own `fetch`, run by driver.sh build) *)
 let fetch vars name work =
