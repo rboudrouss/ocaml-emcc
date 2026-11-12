@@ -115,7 +115,7 @@ global options:
   -v                      show the commands run
 
 A project can have an ocaml-emcc.conf (target, recipes, requires, link-flags,
-js-files, cflags, threads, wasix, interpreted) and an emcc-recipes/
+js-files, cflags, threads, wasix, owi, interpreted) and an emcc-recipes/
 directory, found from the current directory.
 |}
 
@@ -295,7 +295,8 @@ let with_config_flags (o : Link.opts) =
   in
   { o with emcc_flags = p.link_flags @ env_flags @ o.emcc_flags; js_files = p.js_files @ o.js_files; threads = o.threads || p.threads; jspi = o.jspi || p.jspi; cps_stack = o.cps_stack || p.cps_stack;
     tail_calls = o.tail_calls && not p.no_tail_calls;
-    wasix = o.wasix || (o.wasi && (not o.owi) && p.wasix); compiled }
+    owi = o.owi || (o.wasi && p.owi);
+    wasix = o.wasix || (o.wasi && (not (o.owi || p.owi)) && p.wasix); compiled }
 
 let cmd_link args =
   let out = ref "" in

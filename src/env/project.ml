@@ -13,6 +13,7 @@
      cps-stack: yes                  link with --cps-stack
      tail-calls: no                  link with --no-tail-calls
      wasix: yes                      --wasi links with --wasix (sockets)
+     owi: yes                        --wasi links with --owi (symbolic execution)
      interpreted: yes                link with --interpreted
 
    Without a configuration file, `emcc-recipes/` next to the nearest
@@ -31,10 +32,11 @@ type t = {
   cps_stack : bool;
   no_tail_calls : bool;
   wasix : bool;
+  owi : bool;
   interpreted : bool;
 }
 
-let empty = { dir = None; target = None; recipes = []; requires = []; link_flags = []; js_files = []; cflags = []; threads = false; jspi = false; cps_stack = false; no_tail_calls = false; wasix = false; interpreted = false }
+let empty = { dir = None; target = None; recipes = []; requires = []; link_flags = []; js_files = []; cflags = []; threads = false; jspi = false; cps_stack = false; no_tail_calls = false; wasix = false; owi = false; interpreted = false }
 
 let rec find_up dir names =
   match List.find_opt (fun n -> Sys.file_exists (Filename.concat dir n)) names with
@@ -86,6 +88,7 @@ let load () =
         cps_stack = yes "cps-stack";
         no_tail_calls = List.mem (last "tail-calls") [ "no"; "false" ];
         wasix = yes "wasix";
+        owi = yes "owi";
         interpreted = yes "interpreted";
       }
   | None -> (
