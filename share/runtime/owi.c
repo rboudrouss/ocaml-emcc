@@ -8,16 +8,44 @@
  * arguments but argv[0], no environment; stdout is dropped (printing a
  * symbolic value would make it concrete), stderr goes to owi's print_char
  * (the message of an uncaught exception); the clock ticks at each reading,
- * random bytes are zeros. */
+ * random bytes are zeros.
+ *
+ * And the primitives of Emcc_owi (ocaml-emcc.owi): symbolic values,
+ * assumptions and assertions. */
 
 #include <stdint.h>
 #include <string.h>
 #include <wasi/api.h>
+#include <caml/mlvalues.h>
+#include <caml/alloc.h>
 
 #define OWI(name) __attribute__((import_module("owi"), import_name(#name)))
 #define UNUSED __attribute__((unused))
 
+OWI(i32_symbol) int32_t owi_i32(void);
+OWI(i64_symbol) int64_t owi_i64(void);
+OWI(assume) void owi_assume(int32_t);
+OWI(assert) void owi_assert(int32_t);
 OWI(print_char) void owi_print_char(int32_t);
+
+/* ------------------------------------------------------------- Emcc_owi */
+
+value caml_emcc_owi_int(value unit) { (void)unit; return Val_long(owi_i32()); }
+value caml_emcc_owi_int64(value unit) { (void)unit; return caml_copy_int64(owi_i64()); }
+/* (a value in range, rather than its low bits: owi reports that value) */
+static int32_t in_range(uint32_t n)
+{
+  int32_t v = owi_i32();
+  owi_assume((uint32_t)v < n);
+  return v;
+}
+
+value caml_emcc_owi_bool(value unit) { (void)unit; return Val_bool(in_range(2)); }
+value caml_emcc_owi_char(value unit) { (void)unit; return Val_int(in_range(256)); }
+value caml_emcc_owi_assume(value b) { owi_assume(Bool_val(b)); return Val_unit; }
+value caml_emcc_owi_check(value b) { owi_assert(Bool_val(b)); return Val_unit; }
+
+/* ----------------------------------------------------------------- WASI */
 
 static const char argv0[] = "owi";
 

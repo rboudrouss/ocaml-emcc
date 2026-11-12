@@ -580,9 +580,10 @@ let gl_object ~emcc ~flags ~work ~exported bc =
         Some (o, if legacy then [ "-sLEGACY_GL_EMULATION=1" ] else [])
 
 (* Stub libraries replaced by a file of share/runtime: js_of_ocaml's, whose
-   stubs only abort outside JavaScript (jsoo.c), and ocaml-emcc.dynlink's
-   (dynlink.c). *)
-let runtime_libs = [ ("jsoo_runtime_stubs", "jsoo"); ("js_of_ocaml_stubs", "jsoo"); ("emcc_dynlink_stubs", "dynlink") ]
+   stubs only abort outside JavaScript (jsoo.c), ocaml-emcc.dynlink's
+   (dynlink.c) and ocaml-emcc.owi's (owi.c). *)
+let runtime_libs =
+  [ ("jsoo_runtime_stubs", "jsoo"); ("js_of_ocaml_stubs", "jsoo"); ("emcc_dynlink_stubs", "dynlink"); ("emcc_owi_stubs", "owi") ]
 
 let uses_runtime name bc =
   List.exists (fun d -> List.assoc_opt (Bytecode.lib_of_dll d) runtime_libs = Some name) (Bytecode.dlls bc)
@@ -964,6 +965,8 @@ let run o =
   if o.wasi && not standalone then Env.fail "--wasi makes a WASI module: the output must be OUT.wasm (not %s)" o.output;
   if o.owi && o.threads then Env.fail "--owi: owi runs a single thread, a program with threads is not supported (--threads, or threads: yes in ocaml-emcc.conf)";
   if o.owi && o.wasix then Env.fail "--owi: owi has no sockets (--wasix)";
+  if uses_runtime "owi" bc && not o.owi then
+    Env.fail "%s links Emcc_owi (ocaml-emcc.owi): it runs under owi, link it with --owi" (Filename.basename o.bc);
   if o.wasi && !Env.target = "wasm64" then
     Env.fail "--wasi: WASI (preview1) is 32-bit, no WASI host runs a wasm64 module.  Use --target wasm32.";
   if standalone && o.mode <> Embed then
@@ -1097,7 +1100,7 @@ let run o =
                @ (match compiled with Some c when not c.c_tail_calls -> [ "-DOCAML_EMCC_NO_TAIL_CALLS" ] | _ -> [])
                @ if o.threads then [ "-DOCAML_EMCC_THREADS" ] else []) ])
   in
-  (* --owi: WASI inside the module *)
+  (* --owi: WASI inside the module, and Emcc_owi's primitives *)
   let owi_objs =
     lazy
       (if not o.owi then []

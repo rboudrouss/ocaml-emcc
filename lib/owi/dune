@@ -1,0 +1,10 @@
+; Emcc_owi: symbolic values and checks for owi in programs linked by
+; `ocaml-emcc link --owi`, which links share/runtime/owi.c instead of these
+; stubs (a native program: every value is 0).
+
+(library
+ (name emcc_owi)
+ (public_name ocaml-emcc.owi)
+ (foreign_stubs
+  (language c)
+  (names emcc_owi_stubs)))
