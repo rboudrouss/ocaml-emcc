@@ -33,13 +33,20 @@ TARGET_COL=$TARGET; [ $WASI = yes ] && TARGET=wasm32 TARGET_COL=wasi
 WASMTIME=${WASMTIME:-$(command -v wasmtime || true)}
 WASMTIME_THREADS=${WASMTIME_THREADS:-$WASMTIME}
 WASMER=${WASMER:-$(command -v wasmer || true)}
+# Programs for owi (owi: yes) run in $OWI (owi in PATH), with $OWI_FLAGS
+# (--solver bitwuzla for an owi built without z3): what it reports, the
+# values of the symbols and whether the program fails
+OWI=${OWI:-$(command -v owi || true)}
 # a program running longer than $TEST_TIMEOUT seconds (default 900) is
 # stopped: the test fails (exit=124) instead of blocking the others
 TO="timeout -k 10 ${TEST_TIMEOUT:-900}"
 ZONES=; [ -d /usr/share/zoneinfo ] && ZONES="--dir /usr/share/zoneinfo"
 wasi_run() {
   local -x TMPDIR=/tmp
-  if grep -qs '^wasix: *yes' ocaml-emcc.conf; then
+  if grep -qs '^owi: *yes' ocaml-emcc.conf; then
+    $TO "$OWI" wasm sym "$1" --entry-point _start -w 1 ${OWI_FLAGS:-} 2>&1 \
+      | grep -oE 'symbol symbol_[0-9]+ [a-z0-9]+ [-0-9]+|Reached problem!|All OK!'
+  elif grep -qs '^wasix: *yes' ocaml-emcc.conf; then
     $TO "$WASMER" run --net --enable-tail-call "$1" -- "${@:2}"
   elif grep -qs '^threads: *yes' ocaml-emcc.conf; then
     $TO "$WASMTIME_THREADS" run -W exceptions=y,threads=y,shared-memory=y -S threads=y --dir . --dir /tmp --dir /etc $ZONES -S inherit-env=y "$@" 2> >(grep -v '^WARNING: the `-Sthreads` flag' >&2)
@@ -123,6 +130,7 @@ lwtthreads | lt      |            | lwt                         | wasm32 wasm64 
 sockets   | sk       |            | wasmer                      | wasi               |
 lwtsockets | ls      |            | lwt wasmer                  | wasi               |
 threadsockets | ts   |            | wasmer                      | wasi               |
+owi       | ow       |            | compiled owi                | wasi               |
 '
 # wasi (tests/run.sh --wasi): OUT.wasm --wasi, the tests checked that way.
 # ctypes needs libffi's JavaScript functions, no WASI host has them.
@@ -138,6 +146,8 @@ threadsockets | ts   |            | wasmer                      | wasi          
 # sockets, lwtsockets and threadsockets (WASIX's, wasix: yes) are for
 # --wasi only: they run in wasmer ($WASMER), a TCP server and its clients,
 # UDP, names, with Lwt, with threads.
+# owi (owi: yes) is for --wasi only: its symbolic execution ($OWI), which
+# needs an owi running try_table and throw (the exceptions of the C).
 # jsdom runs in headless Chromium (its check.mjs): it needs playwright,
 # PLAYWRIGHT_DIR (the directory of its node_modules) and
 # PLAYWRIGHT_BROWSERS_PATH.
@@ -147,6 +157,7 @@ has_pkg() {
     compiled) [ -z "$INTERPRETED" ] ;;
     interpreted) [ -n "$INTERPRETED" ] ;;
     wasmer) [ -n "$WASMER" ] ;;
+    owi) [ -n "$OWI" ] ;;
     wasi-threads) [ $WASI = no ] || { [ -n "$WASMTIME_THREADS" ] && [ "$("$WASMTIME_THREADS" --version | sed 's/^wasmtime \([0-9]*\).*/\1/')" -le 46 ]; } ;;
     playwright) [ -n "${PLAYWRIGHT_DIR:-}" ] && [ -d "$PLAYWRIGHT_DIR/node_modules/playwright" ] ;;
     cps-stack) "${OCAML_EMCC_C_OF_OCAML:-c_of_ocaml}" --help 2>/dev/null | grep -q -- --cps-stack ;;

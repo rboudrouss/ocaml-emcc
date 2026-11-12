@@ -78,6 +78,7 @@ stopped, and its test fails.
 | `domains`   | `Domain.spawn` in parallel (OCaml 5.3+): Atomic, a mutex shared by domains, collections while they allocate, `Domain.DLS`, a thread in a domain |
 | `threadsweb` | `threads` in headless Chromium, on a cross-origin isolated page |
 | `lwtthreads` | lwt with `--threads`: jobs in its pool of threads (several at once), `Lwt_preemptive.detach` while timers run |
+| `owi`       | `--owi` (`owi: yes`, `--wasi` only): owi's symbolic execution (`$OWI`, `$OWI_FLAGS`) finds the character and the integer making the program fail, through an exception raised by C and caught (an owi running `try_table`) |
 | `sockets`   | WASIX's sockets (`wasix: yes`, `--wasi` only): a TCP server and its client in one program, options, `select`, channels, UDP, `getaddrinfo`, `gethostbyname` |
 | `lwtsockets` | lwt's sockets with WASIX: a server and three clients at once, a read timing out, a refused connection |
 | `threadsockets` | WASIX's sockets with `--threads`: a server thread accepting, a thread per connection, client threads |
