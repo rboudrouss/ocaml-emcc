@@ -529,8 +529,8 @@ ocaml-emcc build main.wasm --exe main --owi
 owi wasm sym main.wasm --entry-point _start
 ```
 
-owi finds `x = 423` and the characters 97, 98, 61 (`"ab="`) in about ten
-seconds.
+owi finds `x = 423` and the characters 97, 98, 61 (`"ab="`) in about two
+seconds, almost all of it in the solver.
 
 owi reports an exception the program does not catch (it exits with code
 2), a failed `Emcc_owi.check`, and a trap of the C code (a division by
