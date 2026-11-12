@@ -34,6 +34,7 @@ type opts = {
   check : bool;
   wasi : bool;  (** OUT.wasm for a WASI host (share/runtime/wasi.c) *)
   wasix : bool;  (** wasi, with WASIX's sockets (wasmer, share/runtime/wasix.c) *)
+  owi : bool;  (** wasi, for owi's symbolic execution (share/runtime/owi.c) *)
   compiled : bool;  (** compiled to C by c_of_ocaml rather than interpreted *)
   missing_prims : bool;  (** primitives no library defines raise Failure (else: link error) *)
   js_files : string list;  (** JavaScript files implementing primitives *)
@@ -843,20 +844,24 @@ let runtime_object ~emcc ~flags ~lib_syms ~work ?(defs = []) name =
 
 (* The host of a standalone module provides its imports: the WASI ones,
    and with emscripten's glue, emscripten's JavaScript functions (env). *)
-let report_imports ~wasi ~wasix ~threads output =
+let report_imports ~wasi ~wasix ~owi ~threads output =
   match Wasm.imports output with
   | exception Failure e -> Env.log "note: could not read the imports of %s (%s)" output e
   | imports -> (
       (* (threads: the shared memory, wasi-threads) *)
       let threads_import = function "env", "memory" | "wasi", "thread-spawn" -> threads | _ -> false in
       let others =
-        List.filter (fun (m, f) -> m <> "wasi_snapshot_preview1" && not (threads_import (m, f) || (wasix && m = "wasix_32v1"))) imports
+        List.filter
+          (fun (m, f) -> m <> "wasi_snapshot_preview1" && not (threads_import (m, f) || (wasix && m = "wasix_32v1") || (owi && m = "owi")))
+          imports
       in
       let names l =
         let shown = Compat.filteri (fun i _ -> i < 12) l in
         String.concat " " (List.map (fun (m, f) -> m ^ "." ^ f) shown) ^ if List.length l > 12 then " ..." else ""
       in
       match others with
+      | [] when owi ->
+          Env.log "%s: module for owi (imports: %s)" output (String.concat " " (List.map (fun (m, f) -> m ^ "." ^ f) imports))
       | [] -> if wasi then Env.log "%s: WASI module (%d WASI imports)" output (List.length imports)
       | l when wasi ->
           Env.log
@@ -957,6 +962,8 @@ let run o =
     else o
   in
   if o.wasi && not standalone then Env.fail "--wasi makes a WASI module: the output must be OUT.wasm (not %s)" o.output;
+  if o.owi && o.threads then Env.fail "--owi: owi runs a single thread, a program with threads is not supported (--threads, or threads: yes in ocaml-emcc.conf)";
+  if o.owi && o.wasix then Env.fail "--owi: owi has no sockets (--wasix)";
   if o.wasi && !Env.target = "wasm64" then
     Env.fail "--wasi: WASI (preview1) is 32-bit, no WASI host runs a wasm64 module.  Use --target wasm32.";
   if standalone && o.mode <> Embed then
@@ -1087,8 +1094,18 @@ let run o =
                @ (match compiled with Some c when not c.c_tail_calls -> [ "-DOCAML_EMCC_NO_TAIL_CALLS" ] | _ -> [])
                @ if o.threads then [ "-DOCAML_EMCC_THREADS" ] else []) ])
   in
+  (* --owi: WASI inside the module *)
+  let owi_objs =
+    lazy
+      (if not o.owi then []
+       else
+         [ runtime_object ~emcc ~lib_syms ~work "owi"
+             ~flags:(Env.manifest_flags "cflags" @ [ o.opt; "-I" ^ Env.sysroot_file "lib/ocaml" ]) ])
+  in
   if o.check then (
-    let syms = defined_symbols (archives @ user_archives () @ flag_archives @ Lazy.force jsoo_objs @ Lazy.force dynlink_objs) in
+    let syms =
+      defined_symbols (archives @ user_archives () @ flag_archives @ Lazy.force jsoo_objs @ Lazy.force dynlink_objs @ Lazy.force owi_objs)
+    in
     let missing = List.filter (fun p -> not (Hashtbl.mem syms p || List.mem p js_provided)) prims in
     if missing <> [] then
       Env.log "warning: %d primitive(s) not defined by any linked library:\n  %s\n\
@@ -1126,6 +1143,7 @@ let run o =
     else
       runtime_object "wasi"
       :: (if o.wasix then [ runtime_object "wasix" ] else [])
+      @ Lazy.force owi_objs
       @ (if o.threads then [ runtime_object "wasi_threads" ~defs:[ "-DOCAML_EMCC_THREAD_STACK_SIZE=" ^ string_of_int thread_stack_size ] ]
           else [])
   in
@@ -1394,7 +1412,7 @@ let run o =
   if code <> 0 then Env.fail "emcc failed (exit %d)" code;
   if foreign <> None then keep_raw_exports o.output;
   if o.dynlink && not o.threads then tls_exports_for_plugins o.output;
-  if standalone then report_imports ~wasi:o.wasi ~wasix:o.wasix ~threads:o.threads o.output
+  if standalone then report_imports ~wasi:o.wasi ~wasix:o.wasix ~owi:o.owi ~threads:o.threads o.output
 
 (* ---------------------------------------------------------------- plugins *)
 

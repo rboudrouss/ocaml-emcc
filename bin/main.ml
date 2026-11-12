@@ -58,6 +58,9 @@ link options (build and link):
                   sockets: only those the host preopens (accept)
   --wasix         --wasi with WASIX's sockets (socket, connect, bind,
                   getaddrinfo...): a module for wasmer (wasmer run --net)
+  --owi           --wasi for owi's symbolic execution (owi wasm sym OUT.wasm
+                  --entry-point _start): WASI inside the module (no files,
+                  stdout dropped), no threads
   --node-fs       node only: the real file system and environment instead of
                   emscripten's in memory (interpreted: the .bc next to OUT.js)
   --preload       interpreted: the bytecode in a separate .data file instead
@@ -225,7 +228,7 @@ let cmd_dune args =
 let default_link_opts : Link.opts =
   {
     bc = ""; output = ""; lib_dirs = []; libs = []; emcc_flags = []; mode = Link.Embed;
-    opt = "-O2"; stack_size = "8MB"; auto_deps = true; check = true; wasi = false; wasix = false;
+    opt = "-O2"; stack_size = "8MB"; auto_deps = true; check = true; wasi = false; wasix = false; owi = false;
     compiled = true;
     missing_prims = true; js_files = []; dynlink = false; effects = None; threads = false; jspi = false; cps_stack = false;
     tail_calls = true;
@@ -249,6 +252,7 @@ let parse_link_opts ?(extra = fun _ -> None) args =
     | "--no-deps" :: rest -> go { o with auto_deps = false } pos rest
     | "--wasi" :: rest -> go { o with wasi = true } pos rest
     | "--wasix" :: rest -> go { o with wasi = true; wasix = true } pos rest
+    | "--owi" :: rest -> go { o with wasi = true; owi = true } pos rest
     | "--compiled" :: rest -> compiled_flag := Some true; go o pos rest
     | "--interpreted" :: rest -> compiled_flag := Some false; go o pos rest
     | "--dynlink" :: rest -> go { o with dynlink = true } pos rest
@@ -290,7 +294,7 @@ let with_config_flags (o : Link.opts) =
   in
   { o with emcc_flags = p.link_flags @ env_flags @ o.emcc_flags; js_files = p.js_files @ o.js_files; threads = o.threads || p.threads; jspi = o.jspi || p.jspi; cps_stack = o.cps_stack || p.cps_stack;
     tail_calls = o.tail_calls && not p.no_tail_calls;
-    wasix = o.wasix || (o.wasi && p.wasix); compiled }
+    wasix = o.wasix || (o.wasi && (not o.owi) && p.wasix); compiled }
 
 let cmd_link args =
   let out = ref "" in
