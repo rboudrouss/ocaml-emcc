@@ -40,4 +40,35 @@ let run () =
     ]
     (List.map show (Wasm.functions ~what:"obj" obj));
   Check.bool "Wasm.functions: not wasm" true
-    (match Wasm.functions ~what:"x" "\127ELF" with exception Failure _ -> true | _ -> false)
+    (match Wasm.functions ~what:"x" "\127ELF" with exception Failure _ -> true | _ -> false);
+  (* --owi: a function of type () -> i32, running an i32.atomic.rmw.add
+     (offset 4), an i32.atomic.load and an atomic.fence *)
+  let atomics ~memory body =
+    "\000asm\001\000\000\000"
+    ^ section 1 (vec [ b [ 0x60; 0; 1; 0x7f ] ])
+    ^ section 3 (vec [ b [ 0 ] ])
+    ^ section 5 (vec [ b memory ])
+    ^ section 10 (vec [ b (List.length body + 1 :: 0 :: body) ])
+  in
+  let body = [ 0x41; 8; 0x41; 1; 0xFE; 0x1E; 2; 4; 0x1A; 0x41; 8; 0xFE; 0x10; 2; 0; 0xFE; 0x03; 0; 0x0B ] in
+  let lowered, n = Lower_atomics.lower (atomics ~memory:[ 0; 1 ] body) in
+  Check.string "Lower_atomics.lower: count" "3" (string_of_int n);
+  let expected =
+    "\000asm\001\000\000\000"
+    (* (i32, i32) -> i32 added *)
+    ^ section 1 (vec [ b [ 0x60; 0; 1; 0x7f ]; b [ 0x60; 2; 0x7f; 0x7f; 1; 0x7f ] ])
+    ^ section 3 (vec [ b [ 0 ]; b [ 1 ] ])
+    ^ section 5 (vec [ b [ 0; 1 ] ])
+    ^ section 10
+        (vec
+           [
+             (* a call to function 1, an i32.load, no fence *)
+             b [ 14; 0; 0x41; 8; 0x41; 1; 0x10; 1; 0x1A; 0x41; 8; 0x28; 2; 0; 0x0B ];
+             (* the address, the old value (local 2) plus the operand, stored *)
+             b [ 23; 1; 1; 0x7f; 0x20; 0; 0x20; 0; 0x28; 2; 4; 0x21; 2; 0x20; 2; 0x20; 1; 0x6A; 0x36; 2; 4; 0x20; 2; 0x0B ];
+           ])
+  in
+  Check.string "Lower_atomics.lower: module" (String.escaped expected) (String.escaped lowered);
+  Check.string "Lower_atomics.lower: none left" "0" (string_of_int (snd (Lower_atomics.lower lowered)));
+  Check.bool "Lower_atomics.lower: shared memory refused" true
+    (match Lower_atomics.lower (atomics ~memory:[ 3; 1; 1 ] body) with exception Lower_atomics.Unsupported _ -> true | _ -> false)
