@@ -973,6 +973,9 @@ let run o =
   if standalone && o.jspi then
     Env.fail "--jspi (JSPI) suspends the wasm code through the JavaScript glue: link OUT.js or OUT.html, not a standalone %s" o.output;
   if o.compiled then check_compiled ();
+  if o.owi && not o.compiled then
+    Env.log "warning: --owi --interpreted: the interpreter catches the exceptions of the C as references\n\
+            \  (catch_all_ref, throw_ref), which owi does not run: use the compiled mode";
   if o.dynlink && standalone then Env.fail "--dynlink: plugins are loaded by the JavaScript glue: link OUT.js, not a standalone .wasm";
   if o.threads then check_threads ~standalone o;
   if o.compiled then
