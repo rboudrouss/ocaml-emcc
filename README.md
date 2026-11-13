@@ -538,26 +538,19 @@ zero, an access outside the memory, `assert`, `abort`), with the value of
 each symbol, in the order the program asked for them. `Emcc_owi.assume`
 drops the paths where its condition is false. Natively, every value is 0.
 
-The module has no host: `--owi` links WASI's calls into it
-(`share/runtime/owi.c`), as owi's own cannot write to the memory. There
+`--owi` links WASI's calls into the module (`share/runtime/owi.c`), as
+owi's own cannot write to the memory. There
 are no files, `argv` is `["owi"]`, the environment is empty, stdout is
 dropped (printing a symbolic value would make it concrete), and stderr
 goes to owi's `print_char`, one character per line. Its atomic
-instructions become plain ones, as owi runs one thread: `--owi` refuses
-`--threads` and `--wasix`.
+instructions become plain ones, as owi runs one thread, and `--owi`
+refuses `--threads` and `--wasix`.
 
-Limits:
-
-- owi has to run `try_table` and `throw`, the wasm exceptions of
-  `longjmp` (OCaml exceptions raised by C), and read the tag section where
-  the standard puts it: neither is in owi's release yet.
-- Compiled only: the interpreter catches exceptions as references
-  (`catch_all_ref`, `throw_ref`), which owi does not run.
-- Code driven by tables (`Re`, the lexers of ocamllex) explodes into paths,
-  as symbolic addresses are made concrete. A program checking small
-  functions with small inputs works best.
-- An overflow in C inside the memory is not seen: owi checks the bounds of
-  the memory, not those of the blocks of `malloc`.
+The module needs an owi that runs `try_table` and `throw`, the wasm
+exceptions that C's `longjmp` compiles to when C raises an OCaml exception,
+and that reads the tag section where the standard puts it. Only the
+compiled mode works, as the interpreter catches some exceptions as
+references (`catch_all_ref`, `throw_ref`), which owi does not run.
 
 ## JavaScript
 
