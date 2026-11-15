@@ -1,6 +1,11 @@
 in sub: true sub
 read from sub/
 back: true true
+ls sub: data.txt dir
+ls sub/dir: x.txt
+ls .: true
+missing: No such file or directory
+prog.ml: Not a directory
 missing: No such file or directory
 prog.ml: Not a directory
 root: / true

@@ -1183,6 +1183,7 @@ let run o =
     Env.run_exn emcc
       (cflags @ [ o.opt; "-std=gnu11"; "-Wno-incompatible-function-pointer-types"; "-Wno-deprecated-non-prototype"; "-c"; prims_src; "-o"; prims_o ])
   in
+  let node_readdir = Filename.concat (Env.share ()) "runtime/node_readdir.js" in
   let fs_flags =
     match o.mode with
     | _ when standalone -> []
@@ -1192,7 +1193,7 @@ let run o =
         write_file pre
           "// the environment of the node process, as for a native program\n\
            Module['preRun'] = [].concat(Module['preRun'] || [], function () { Object.assign(ENV, process.env); });\n";
-        [ "-sNODERAWFS=1"; "-sENVIRONMENT=node"; "--pre-js"; pre ]
+        [ "-sNODERAWFS=1"; "-sENVIRONMENT=node"; "--pre-js"; pre; "--js-library"; node_readdir ]
     | Embed -> [ "--embed-file"; bc_out ^ "@" ^ vfs_path ]
     | Preload -> [ "--preload-file"; bc_out ^ "@" ^ vfs_path ]
     | Node_rawfs ->
@@ -1204,7 +1205,7 @@ let run o =
               // the environment of the node process, as for a native program\n\
               Module['preRun'] = [].concat(Module['preRun'] || [], function () { Object.assign(ENV, process.env); });\n"
              bc_name);
-        [ "-sNODERAWFS=1"; "-sENVIRONMENT=node"; "--pre-js"; pre ]
+        [ "-sNODERAWFS=1"; "-sENVIRONMENT=node"; "--pre-js"; pre; "--js-library"; node_readdir ]
   in
   let defaults =
     ldflags

@@ -52,6 +52,11 @@
   instead of in a worker thread, 15 to 35 ms less at startup. Programs
   with js_of_ocaml's primitives or asyncify, whose callbacks enter the
   program again from node's event loop, and wasm64 ones keep the worker.
+- `--node-fs`: reading a directory (`Sys.readdir`, `Unix.readdir`,
+  readdir(3)) takes the types of its entries from node's readdir, without
+  emscripten's lstat of each entry: ocamlc compiling 160 files spends 6 %
+  less time (3.9 s, now 3.7 s). FIFOs and sockets have their own type
+  instead of a regular file's, and `d_ino` is not the inode of the entry.
 - Compiled, under node: the main thread compiles the module while the
   worker with the large stack starts (some 15 ms less at startup for a
   6 MB program, ocamlc).
