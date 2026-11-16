@@ -5,6 +5,9 @@
   its own, and its result the others only if it is a function, as
   js_of_ocaml. It failed ("function signature mismatch" compiled,
   `Stack_overflow` interpreted).
+- js_of_ocaml: `String(v)` and `v.toString()` of an OCaml string given to
+  JavaScript are the string, as with js_of_ocaml: Brr's `Console.str`
+  printed `[object Object]`.
 
 ## 1.0.1
 

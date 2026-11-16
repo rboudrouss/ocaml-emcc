@@ -894,6 +894,16 @@ EMSCRIPTEN_KEEPALIVE int ocaml_emcc_js_bytes(double cell)
   return caml_string_length(v);
 }
 
+/* The bytes of the OCaml value at cell if it is a string, else -1 (the
+   toString of an OcamlValue) */
+EMSCRIPTEN_KEEPALIVE int ocaml_emcc_js_string_bytes(double cell)
+{
+  value v = *(value *)(uintptr_t)cell;
+  if (Is_long(v) || Tag_val(v) != String_tag) return -1;
+  ret_slot = ADDR(String_val(v));
+  return caml_string_length(v);
+}
+
 /* A root of a new OCaml string (the arguments of a mount's function) */
 EMSCRIPTEN_KEEPALIVE double ocaml_emcc_js_new_string(double p, int len)
 {

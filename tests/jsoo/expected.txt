@@ -16,6 +16,7 @@ call: 42
 unsafe callback: 5
 forEach: [1;2;3;4]
 more args: 42 42
+String: caml
 meth callback: 107
 opaque: 5 same=true
 js error: TypeError / boom

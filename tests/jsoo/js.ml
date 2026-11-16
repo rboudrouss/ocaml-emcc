@@ -48,6 +48,8 @@ let () =
   let curried = Js.wrap_callback (fun x -> fun y -> x * 10 + y) in
   p "more args: %d %d" (Js.Unsafe.fun_call f [| Js.Unsafe.inject 4; Js.Unsafe.inject 2; Js.Unsafe.inject 9 |])
     (Js.Unsafe.fun_call curried [| Js.Unsafe.inject 4; Js.Unsafe.inject 2; Js.Unsafe.inject 9 |]);
+  (* an OCaml string is a string for String() (Brr's Console.str) *)
+  p "String: %s" (Js.to_string (Js.Unsafe.fun_call (Js.Unsafe.js_expr "String") [| Js.Unsafe.inject "caml" |]));
   let m = Js.Unsafe.obj [| ("v", Js.Unsafe.inject 7) |] in
   Js.Unsafe.set m "get" (Js.wrap_meth_callback (fun this k -> (Js.Unsafe.get this "v" : int) + k));
   p "meth callback: %d" (Js.Unsafe.meth_call m "get" [| Js.Unsafe.inject 100 |]);

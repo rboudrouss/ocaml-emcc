@@ -46,7 +46,7 @@
 // (its root), -4 for a stack overflow.
 
 addToLibrary({
-  $ocamlJs__deps: ['$runtimeKeepalivePush', '$ExitStatus', 'ocaml_emcc_js_callback', 'ocaml_emcc_js_release', 'free'],
+  $ocamlJs__deps: ['$runtimeKeepalivePush', '$ExitStatus', 'ocaml_emcc_js_callback', 'ocaml_emcc_js_release', 'ocaml_emcc_js_string_bytes', 'free'],
   $ocamlJs: {
     // 1 undefined, 2 null, 3 true, 4 false, 5 globalThis: never released
     // (set by init: the library's values are evaluated by emcc)
@@ -72,7 +72,18 @@ addToLibrary({
       if (bits == 64) { J.intMin = Number.MIN_SAFE_INTEGER; J.intMax = Number.MAX_SAFE_INTEGER; }
       J.utf8 = new TextDecoder('utf-8');
       J.statics = new Map();
-      J.OcamlValue = class OcamlValue { constructor(cell) { this.cell = cell; } };
+      J.OcamlValue = class OcamlValue {
+        constructor(cell) { this.cell = cell; }
+        // an OCaml string is a JavaScript string for js_of_ocaml: its bytes
+        // (Brr's Console.str, String(v))
+        toString() {
+          var n = _ocaml_emcc_js_string_bytes(this.cell);
+          if (n < 0) return '[object Object]';
+          var p = HEAPF64[ocamlJs.retAddr / 8], s = '';
+          for (var i = 0; i < n; i += 8192) s += String.fromCharCode.apply(null, HEAPU8.subarray(p + i, p + Math.min(n, i + 8192)));
+          return s;
+        }
+      };
       J.OcamlExn = class OcamlExn extends Error {
         constructor(cell, msg) { super(msg); this.name = 'OCamlException'; this.cell = cell; }
       };
