@@ -26,4 +26,5 @@ jobs:
           ocaml-compiler: ${{ matrix.ocaml }}
           windows-environment: ${{ matrix.environment }}
       - run: opam install . --deps-only --with-test
-      - run: opam exec -- dune build -p ocaml-emcc @install @runtest
+      # quoted: PowerShell takes @install for a splatted variable
+      - run: opam exec -- dune build -p ocaml-emcc '@install' '@runtest'
