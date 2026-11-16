@@ -1,4 +1,4 @@
-## Unreleased
+## 1.0.0
 
 - Compiled mode is the default: `build` and `link` compile the bytecode
   to C with c_of_ocaml (in `PATH`, or `$OCAML_EMCC_C_OF_OCAML`). The
