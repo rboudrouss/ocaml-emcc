@@ -1,9 +1,10 @@
 open Ocaml_emcc
 
-let run () =
-  let root = Check.temp_dir () in
+(* the archives are made by the host's ar, which a Windows switch may lack *)
+let has_ar = lazy (Env.capture "ar" [ "--version" ] <> None)
+
+let archives root =
   let f p c = Check.file root p c in
-  (* archives, made by the host's ar *)
   f "a/x.o" "\000asm\001\000\000\000";
   f "a/a_very_long_object_name_for_gnu_ar.o" "\127ELF";
   f "a/h.o" "\127ELF";
@@ -19,6 +20,21 @@ let run () =
   Check.bool "Archive.is_wasm: not an archive" true (Archive.is_wasm (a "x.o"));
   Check.option (fun l -> String.concat "," l) "Archive.members: not an archive" None
     (Option.map (List.map fst) (Archive.members (a "x.o")));
+  (* the C files of a native archive *)
+  f "s/_build/default/stubs.c" "";
+  f "s/src/stubs.c" "";
+  f "s/_build/default/gen.c" "";
+  ar "../s/_build/default/libs.a" [ "x.o" ];
+  let s = Filename.concat root "s" in
+  let lib = Filename.concat s (Filename.concat "_build" (Filename.concat "default" "libs.a")) in
+  Check.option (fun l -> String.concat "," l) "archive_sources: none for x.o" None (Stubs.archive_sources s lib);
+  f "s/x.c" "";
+  Check.option (fun l -> String.concat "," l) "archive_sources" (Some [ Filename.concat s "x.c" ]) (Stubs.archive_sources s lib)
+
+let run () =
+  let root = Check.temp_dir () in
+  let f p c = Check.file root p c in
+  if Lazy.force has_ar then archives root;
   (* text searches *)
   Check.bool "has_word" true (Files.has_word "let t = seal t" "seal");
   Check.bool "has_word: part of a word" false (Files.has_word "unsealed sealing" "seal");
@@ -35,14 +51,4 @@ let run () =
   let layouts p = Shadow.computes_layouts (Filename.concat root p) in
   Check.bool "computes_layouts" true (layouts "p1");
   Check.bool "computes_layouts: constants only" false (layouts "p2");
-  Check.bool "computes_layouts: dune rule" true (layouts "p3");
-  (* the C files of a native archive *)
-  f "s/_build/default/stubs.c" "";
-  f "s/src/stubs.c" "";
-  f "s/_build/default/gen.c" "";
-  ar "../s/_build/default/libs.a" [ "x.o" ];
-  Check.option (fun l -> String.concat "," l) "archive_sources: none for x.o" None
-    (Stubs.archive_sources (Filename.concat root "s") (Filename.concat root "s/_build/default/libs.a"));
-  f "s/x.c" "";
-  Check.option (fun l -> String.concat "," l) "archive_sources" (Some [ Filename.concat root "s/x.c" ])
-    (Stubs.archive_sources (Filename.concat root "s") (Filename.concat root "s/_build/default/libs.a"))
+  Check.bool "computes_layouts: dune rule" true (layouts "p3")
