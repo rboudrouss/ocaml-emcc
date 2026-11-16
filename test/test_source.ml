@@ -20,7 +20,9 @@ let bash_release_files prefix text =
   List.filter (( <> ) "") (String.split_on_char '\n' out)
 
 let run () =
-  Check.strings "release_files: as driver.sh" (bash_release_files "mpfr" listing) (Source.release_files "mpfr" listing);
+  (* not on Windows, where driver.sh never ran (nor may bash) *)
+  if not Sys.win32 then
+    Check.strings "release_files: as driver.sh" (bash_release_files "mpfr" listing) (Source.release_files "mpfr" listing);
   Check.strings "release_files"
     [ "1.0 mpfr-1.0.tar.gz"; "3.1.6 mpfr-3.1.6.tar.gz"; "4.2.1 mpfr-4.2.1.tar.xz"; "4.9 mpfr-4.9.tar.gz"; "4.10.0 mpfr-4.10.0.tar.gz" ]
     (Source.release_files "mpfr" listing);

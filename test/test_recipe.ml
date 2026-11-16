@@ -32,8 +32,8 @@ let run () =
   Check.string_opt "find: project first" (Some "project") (find "zarith");
   Check.string_opt "find: builtin" (Some "builtin") (find "gmp");
   Check.string_opt "find: none" None (find "nope");
-  (* not on Windows: driver.sh never wrote stamps there, and its sha256sum
-     and find print paths differently *)
+  (* not on Windows: driver.sh never wrote stamps there (nor may bash run),
+     and its sha256sum and find print paths differently *)
   if not Sys.win32 then begin
     Check.string "sum: as driver.sh" (bash_sum path "zarith") (Recipe.sum ~path "zarith");
     Check.string "sum: single" (bash_sum path "gmp") (Recipe.sum ~path "gmp");
