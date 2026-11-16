@@ -584,7 +584,20 @@ GC. Code written for wasm_of_ocaml works unchanged.
 
 - Each call goes from wasm to JavaScript and back: about 65 ns to read a
   property and 140 ns to call a method, compiled (the property names of
-  the code are decoded once), 110 and 280 ns interpreted.
+  the code are decoded once), 110 and 280 ns interpreted, and 150 to
+  300 ns to convert a string of 20 characters. Code spending its time in
+  the DOM (creating elements, styles, canvas, events) runs 2 to 3 times
+  slower than with js_of_ocaml (Chromium).
+- A number of JavaScript comes back to OCaml as an int (an integer) or a
+  JavaScript value, never as a float: a `float` read from JavaScript (a
+  `float Js.prop` of a class type, the `val x = 1.5` of an `object%js`
+  read back, `Js.to_array` of an array of floats) is garbage. Read
+  numbers as `Js.number_t` and convert them (`Js.float_of_number`).
+- `Json.unsafe_input` is not supported, and crashes.
+- OCaml and JavaScript calling each other recursively run out of the
+  stack of a browser (or of node's main thread) after about 500 levels,
+  and the program ends with an uncaught exception instead of raising
+  `Stack_overflow`.
 - `==` between two JavaScript values is physical equality of the OCaml
   blocks, false for two handles on the same object. `Js.equals` and
   `Js.strict_equals` compare the objects (as `Js.Opt` does).
