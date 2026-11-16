@@ -1,4 +1,4 @@
-## Unreleased
+## 1.0.2
 
 - js_of_ocaml: a callback called with more arguments than its function
   takes (`forEach` passes the index and the array too) gives the function
