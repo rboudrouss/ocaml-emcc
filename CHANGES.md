@@ -1,3 +1,8 @@
+## 1.0.1
+
+- Windows: the unit tests discard the errors of the commands they run
+  through `NUL`, not `/dev/null`, which does not exist there (they failed).
+
 ## 1.0.0
 
 - Compiled mode is the default: `build` and `link` compile the bytecode
