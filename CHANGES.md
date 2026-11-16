@@ -1,3 +1,11 @@
+## Unreleased
+
+- js_of_ocaml: a callback called with more arguments than its function
+  takes (`forEach` passes the index and the array too) gives the function
+  its own, and its result the others only if it is a function, as
+  js_of_ocaml. It failed ("function signature mismatch" compiled,
+  `Stack_overflow` interpreted).
+
 ## 1.0.1
 
 - Windows: the unit tests discard the errors of the commands they run

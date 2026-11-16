@@ -40,6 +40,14 @@ let () =
   p "call: %d" (Js.Unsafe.fun_call f [| Js.Unsafe.inject 4; Js.Unsafe.inject 2 |]);
   let u = Js.Unsafe.callback (fun x y -> x - y) in
   p "unsafe callback: %d" (Js.Unsafe.fun_call u [| Js.Unsafe.inject 9; Js.Unsafe.inject 4 |]);
+  (* more arguments than the function takes (forEach passes 3): the
+     function gets its own, its result the others if it is a function *)
+  let seen = ref [] in
+  ignore (Js.Unsafe.meth_call a "forEach" [| Js.Unsafe.inject (Js.wrap_callback (fun x -> seen := x :: !seen)) |]);
+  p "forEach: [%s]" (String.concat ";" (List.rev_map string_of_int !seen));
+  let curried = Js.wrap_callback (fun x -> fun y -> x * 10 + y) in
+  p "more args: %d %d" (Js.Unsafe.fun_call f [| Js.Unsafe.inject 4; Js.Unsafe.inject 2; Js.Unsafe.inject 9 |])
+    (Js.Unsafe.fun_call curried [| Js.Unsafe.inject 4; Js.Unsafe.inject 2; Js.Unsafe.inject 9 |]);
   let m = Js.Unsafe.obj [| ("v", Js.Unsafe.inject 7) |] in
   Js.Unsafe.set m "get" (Js.wrap_meth_callback (fun this k -> (Js.Unsafe.get this "v" : int) + k));
   p "meth callback: %d" (Js.Unsafe.meth_call m "get" [| Js.Unsafe.inject 100 |]);

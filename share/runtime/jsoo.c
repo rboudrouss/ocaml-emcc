@@ -646,7 +646,27 @@ static int run_callback(double cell, int kind, int n)
     for (int i = 0; i < n; i++) Store_field(a, i, of_js(ocaml_js_cb_arg(i)));
     args = alloca(n * sizeof(value));
     for (int i = 0; i < n; i++) args[i] = Field(a, i);
-    res = caml_callbackN_exn(f, n, args);
+    /* More arguments than the function takes (JavaScript often passes
+       more: forEach's index...): as js_of_ocaml, the function gets as many
+       as it takes, and its result the others only if it is a function.
+       The arity is unknown for bytecode closures (0): one at a time. */
+    res = f;
+    for (int i = 0; i < n;) {
+      int k = n - i;
+      if (!(Is_block(res) && (Tag_val(res) == Closure_tag || Tag_val(res) == Infix_tag))) break;
+#ifdef Arity_closinfo
+      {
+        int ar = (int)Arity_closinfo(Closinfo_val(res));
+        if (ar <= 0) k = 1;
+        else if (ar < k) k = ar;
+      }
+#else
+      k = 1;
+#endif
+      res = caml_callbackN_exn(res, k, args + i);
+      if (Is_exception_result(res)) break;
+      i += k;
+    }
   }
   if (Is_exception_result(res)) {
     char *msg;
