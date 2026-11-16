@@ -1,0 +1,29 @@
+name: Windows
+
+# what opam-repository's CI does on Windows: a mingw switch under Cygwin
+# or MSYS2, `dune build -p ocaml-emcc @install @runtest`
+on:
+  push:
+    branches: [main]
+    tags: ['*']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  opam:
+    strategy:
+      fail-fast: false
+      matrix:
+        ocaml: ['4.14', '5.5']
+        environment: [cygwin, msys2]
+    runs-on: windows-latest
+    steps:
+      # the sources as in the release tarball, without CRLF
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v7
+      - uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: ${{ matrix.ocaml }}
+          windows-environment: ${{ matrix.environment }}
+      - run: opam install . --deps-only --with-test
+      - run: opam exec -- dune build -p ocaml-emcc @install @runtest
