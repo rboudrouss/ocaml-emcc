@@ -146,7 +146,7 @@ let capture ?env ?cwd ?(errors = false) prog args =
   if !verbose then log "%s" (Compat.quote_command prog args);
   let tmp = Filename.temp_file "ocaml-emcc" ".out" in
   let fd = Unix.openfile tmp [ Unix.O_WRONLY; Unix.O_TRUNC ] 0o600 in
-  let err = if errors then Unix.stderr else Unix.openfile "/dev/null" [ Unix.O_WRONLY ] 0 in
+  let err = if errors then Unix.stderr else Unix.openfile Compat.null [ Unix.O_WRONLY ] 0 in
   (* a missing program fails like a failing one: the callers fall back *)
   let pid = try Some (spawn ?cwd prog args (merged_env env) Unix.stdin fd err) with Unix.Unix_error _ -> None in
   Unix.close fd;

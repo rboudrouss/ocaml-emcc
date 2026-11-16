@@ -36,3 +36,6 @@ let filteri p l =
 
 (* Filename.quote_command (4.10), for log messages only *)
 let quote_command prog args = String.concat " " (List.map Filename.quote (prog :: args))
+
+(* Filename.null (4.10) *)
+let null = if Sys.win32 then "NUL" else "/dev/null"
