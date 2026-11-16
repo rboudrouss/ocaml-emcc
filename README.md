@@ -36,10 +36,11 @@ The compiled mode, the default, also needs
 [c_of_ocaml](https://github.com/rboudrouss/C_of_ocaml), which is not in
 opam: it is installed apart, like emscripten. Build it in the switch of
 your project, and give it to ocaml-emcc with `$OCAML_EMCC_C_OF_OCAML` (or
-put `c_of_ocaml` in `PATH`). Only `--interpreted` does without it.
+put `c_of_ocaml` in `PATH`). Only `--interpreted` does without it. Its
+tag `ocaml-emcc-1.0.0` is the c_of_ocaml this release was tested with.
 
 ```sh
-git clone --depth 1 https://github.com/rboudrouss/C_of_ocaml.git && cd C_of_ocaml
+git clone --depth 1 --branch ocaml-emcc-1.0.0 https://github.com/rboudrouss/C_of_ocaml.git && cd C_of_ocaml
 opam pin add -n -y ppx_devtools-optcomp.dev "git+https://github.com/ocsigen/ppx_devtools.git#f62719d5087fa8d7f2bd0616c1fa91fd660eb27e"
 opam install -y --deps-only ./js_of_ocaml-compiler.opam
 dune build --profile release compiler/bin-c_of_ocaml/c_of_ocaml.exe
