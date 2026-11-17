@@ -23,6 +23,8 @@ let read_opt f = if Sys.file_exists f then Some (Compat.read_file f) else None
    dependencies matter once installed), not those for tests, documentation
    or development. *)
 let deps pkg =
+  if Shadow.from_recipe pkg then Shadow.recipe_deps pkg
+  else
   match Switch.opam pkg with
   | None -> []
   | Some s ->
@@ -31,15 +33,32 @@ let deps pkg =
       |> List.filter_map (fun (d, f) -> if d <> pkg && Switch.is_installed d && not (dev f) then Some d else None)
       |> List.sort_uniq compare
 
+(* The recipes of [dirs] *)
+let recipes dirs =
+  Compat.concat_map
+    (fun d -> try Array.to_list (Sys.readdir d) with Sys_error _ -> [])
+    dirs
+  |> List.filter (fun n -> Recipe.find n <> None)
+  |> List.sort_uniq compare
+
+(* The packages whose OCaml libraries a recipe builds from its own sources
+   (Shadow.from_recipe), installed or not *)
+let from_recipes_l = lazy (List.filter Shadow.from_recipe (recipes (Env.recipes_path ())))
+
+(* The installed packages, and those *)
+let packages_l =
+  lazy
+    (List.sort_uniq compare
+       (Hashtbl.fold (fun p _ acc -> p :: acc) (Lazy.force Switch.installed) [] @ Lazy.force from_recipes_l))
+
 (* The packages whose build depends on the target, whatever their users:
    ctypes, jst-config on wasm32 (the 64-bit host's config.h is right for
    wasm64), and those whose recipe patches their OCaml libraries
-   (async_unix) *)
+   (async_unix) or builds them from its own sources *)
 let roots_l =
   lazy
     (("ctypes" :: (if !Env.target = "wasm32" then [ "jst-config" ] else []))
-    @ (Hashtbl.fold (fun p _ acc -> p :: acc) (Lazy.force Switch.installed) []
-      |> List.filter Shadow.patches_ocaml |> List.sort compare))
+    @ List.filter Shadow.patches_ocaml (Lazy.force packages_l))
 
 let roots () = Lazy.force roots_l
 
@@ -47,9 +66,8 @@ let roots () = Lazy.force roots_l
 let target_users =
   lazy
     (let users = Hashtbl.create 16 in
-     List.iter (fun r -> if Switch.is_installed r then Hashtbl.replace users r ()) (roots ());
-     let pkgs = Hashtbl.fold (fun p _ acc -> p :: acc) (Lazy.force Switch.installed) [] |> List.sort compare in
-     let deps = List.map (fun p -> (p, deps p)) pkgs in
+     List.iter (fun r -> if Shadow.version r <> None then Hashtbl.replace users r ()) (roots ());
+     let deps = List.map (fun p -> (p, deps p)) (Lazy.force packages_l) in
      let rec fix () =
        let added =
          List.filter
@@ -62,9 +80,22 @@ let target_users =
      fix ();
      (users, deps))
 
-(* The interfaces [pkg] installed: (module, path relative to the switch) *)
+(* The interfaces [pkg] installed: (module, path relative to the switch).
+   For a package built from the sources of its recipe, those of its build
+   for the target (lib/DIR/..., under the sysroot's lib/findlib). *)
 let cmis pkg =
-  Switch.lib_files pkg
+  let files =
+    if Shadow.from_recipe pkg then
+      let dirs = Str_util.words (String.map (fun c -> if c = '\n' then ' ' else c) (Files.contents (Shadow.dirs_file pkg))) in
+      Compat.concat_map
+        (fun d ->
+          let root = Env.sysroot_file "lib/findlib" in
+          Files.find (Filename.concat root d) (fun f -> Filename.check_suffix f ".cmi")
+          |> List.map (fun f -> "lib/" ^ String.sub f (String.length root + 1) (String.length f - String.length root - 1)))
+        dirs
+    else Switch.lib_files pkg
+  in
+  files
   |> List.filter (fun f -> Filename.check_suffix f ".cmi")
   |> List.map (fun f -> (String.capitalize_ascii (Filename.chop_suffix (Filename.basename f) ".cmi"), f))
 
@@ -95,7 +126,7 @@ let dep_versions pkg =
   let users, deps = Lazy.force target_users in
   Option.value (List.assoc_opt pkg deps) ~default:[]
   |> List.filter (Hashtbl.mem users)
-  |> List.map (fun d -> d ^ "." ^ Option.value (Switch.version d) ~default:"")
+  |> List.map (fun d -> d ^ "." ^ Option.value (Shadow.version d) ~default:"")
   |> String.concat ","
   |> ( ^ ) "deps="
 
@@ -105,7 +136,7 @@ let dep_versions pkg =
 let stamp pkg =
   match Stamp.read ("shadow-" ^ pkg) with
   | Some (v :: status :: rest)
-    when Some v = Switch.version pkg
+    when Some v = Shadow.version pkg
          && Stamp.current_toolchain rest
          && List.mem (Shadow.patch_tag pkg) rest
          && Shadow.dune_readable rest
@@ -140,13 +171,19 @@ let locked f =
   lock ();
   Fun.protect ~finally:(fun () -> Unix.close fd) f
 
+(* (but those of the recipes of another project, from their own sources:
+   no recipe here to tell) *)
 let prune () =
   locked @@ fun () ->
   Stamp.names ()
   |> List.iter (fun f ->
          if Str_util.starts_with ~prefix:"shadow-" f then
            let pkg = String.sub f 7 (String.length f - 7) in
-           if stamp pkg = None then drop pkg)
+           let elsewhere () =
+             Shadow.version pkg = None
+             && match Stamp.read f with Some (v :: _) -> Str_util.starts_with ~prefix:"recipe-" v | _ -> false
+           in
+           if stamp pkg = None && not (elsewhere ()) then drop pkg)
 
 (* [roots] and the users of the roots (ctypes...) they depend on,
    dependencies first *)
@@ -245,7 +282,7 @@ let shadow l =
       | Some q ->
           Env.log "  %s: not built for %s, as %s could not be" p !Env.target q;
           drop p;
-          (match Switch.version p with
+          (match Shadow.version p with
           | Some v ->
               Stamp.write ("shadow-" ^ p) [ v; "failed"; Stamp.toolchain; Shadow.patch_tag p; dep_versions p ]
           | None -> ());
@@ -271,6 +308,16 @@ let ensure bc =
   match to_build (with_deps (packages bc)) with
   | [] -> false
   | l -> ignore (shadow l); true
+
+(* The packages whose OCaml libraries the recipes of the project patch, or
+   build from their own sources, built for the target before the program:
+   their patches may change interfaces or add libraries, which the
+   program then uses (rocq-web's coq-lsp.controller).  Their dependencies
+   among the users of the roots first. *)
+let ensure_patched () =
+  let project = recipes (Env.extra_recipe_dirs ()) in
+  let patched = List.filter (fun p -> Shadow.patches_ocaml p && Shadow.version p <> None) project in
+  match to_build (with_deps patched) with [] -> () | l -> ignore (shadow l)
 
 (* ocamlc's "Files A and B make inconsistent assumptions over interface X"
    (A and B quoted since 5.2): a library of the switch compiled against the

@@ -59,13 +59,35 @@ let reads_word_size work =
   let has s = List.exists (fun w -> Str_util.find s w <> None) [ "%{ocaml-config:int_size}"; "%{ocaml-config:word_size}"; "%{arch_sixtyfour}" ] in
   !Env.target = "wasm32" && List.exists (fun f -> has (Files.contents f)) (Files.find ~skip work (fun f -> f = "dune"))
 
+(* The recipe.sh of [pkg], if it has a recipe *)
+let recipe_text pkg = Option.map (fun d -> Files.contents (Recipe.script d)) (Recipe.find pkg)
+
+let has_line s l = List.exists (fun x -> String.trim x = l) (String.split_on_char '\n' s)
+
+(* Whether the recipe of [pkg] builds the OCaml libraries of [pkg] from its
+   own sources (PATCH_OCAML=1 with SOURCE=git:, url: or dir:): a package
+   the switch does not have (coq-lsp for Rocq 9.2, which opam lacks), or
+   another version of one it has.  They are built for the target only. *)
+let from_recipe pkg =
+  match recipe_text pkg with
+  | Some s ->
+      has_line s "PATCH_OCAML=1"
+      && List.exists
+           (fun src -> List.exists (fun prefix -> Str_util.starts_with ~prefix src) [ "git:"; "url:"; "dir:" ])
+           (Recipe.assignments s "SOURCE")
+  | None -> false
+
+(* Whether the recipe of [pkg] builds its opam sources (SOURCE=opam:PKG) *)
+let opam_recipe pkg =
+  match recipe_text pkg with Some s -> Str_util.find s ("SOURCE=opam:" ^ pkg) <> None | None -> false
+
 (* The patches of the recipe of [pkg] that it is built with (core_unix's C
-   stubs), if it has one for its opam sources: patches/*.patch, as
-   `apply_patches DIR` applies them (not the subdirectories, which its
+   stubs), if it has one for its opam sources or its own: patches/*.patch,
+   as `apply_patches DIR` applies them (not the subdirectories, which its
    build chooses by version: raylib's until-2.3) *)
 let patches pkg =
   match Recipe.find pkg with
-  | Some d when Str_util.find (Files.contents (Recipe.script d)) ("SOURCE=opam:" ^ pkg) <> None ->
+  | Some d when opam_recipe pkg || from_recipe pkg ->
       let dir = Filename.concat d "patches" in
       (try Array.to_list (Sys.readdir dir) with Sys_error _ -> [])
       |> List.filter (fun f -> Filename.check_suffix f ".patch")
@@ -76,20 +98,90 @@ let patches pkg =
 (* Whether the recipe of [pkg] patches its OCaml libraries (PATCH_OCAML=1):
    they are then rebuilt for the target with its patches *)
 let patches_ocaml pkg =
-  match Recipe.find pkg with
-  | Some d ->
-      let s = Files.contents (Recipe.script d) in
-      Str_util.find s ("SOURCE=opam:" ^ pkg) <> None
-      && List.exists (fun l -> String.trim l = "PATCH_OCAML=1") (String.split_on_char '\n' s)
+  match recipe_text pkg with
+  | Some s -> (opam_recipe pkg && has_line s "PATCH_OCAML=1") || from_recipe pkg
   | None -> false
 
 (* Whether the recipe of [pkg] has its build tools built for the host
    (HOST_TOOLS=1) when its OCaml libraries are rebuilt for the target *)
-let host_tools pkg =
-  match Recipe.find pkg with
-  | Some d ->
-      List.exists (fun l -> String.trim l = "HOST_TOOLS=1") (String.split_on_char '\n' (Files.contents (Recipe.script d)))
-  | None -> false
+let host_tools pkg = match recipe_text pkg with Some s -> has_line s "HOST_TOOLS=1" | None -> false
+
+(* The version of [pkg] its build for the target is from: the installed
+   one, or "recipe-<checksum>" of a recipe with its own sources *)
+let versions = Hashtbl.create 16
+
+let version pkg =
+  match Hashtbl.find_opt versions pkg with
+  | Some v -> v
+  | None ->
+      let v = if from_recipe pkg then Some ("recipe-" ^ Recipe.sum pkg) else Switch.version pkg in
+      Hashtbl.replace versions pkg v;
+      v
+
+(* The sources of [pkg], patched, in [work] *)
+let prepare pkg work =
+  Source.remove work;
+  Source.sh "mkdir" [ "-p"; Filename.dirname work ];
+  if from_recipe pkg then ignore (Recipe.fetch (Recipe.describe pkg) pkg work) else ignore (Source.opam_source pkg work);
+  Stubs.apply_patches ~cwd:work (patches pkg)
+
+(* The installed packages whose libraries the dune files of [work] name
+   ((libraries ...), select forms included): the findlib packages of the
+   switch, by the opam package that installed their META *)
+let dune_deps pkg work =
+  let skip = Str_util.starts_with ~prefix:"_build" in
+  let names = Hashtbl.create 16 in
+  List.iter
+    (fun f ->
+      let s = Files.contents f in
+      let rec scan i =
+        match Str_util.find_from s i "(libraries" with
+        | None -> ()
+        | Some a ->
+            let depth = ref 1 and j = ref (a + 1) in
+            while !j < String.length s && !depth > 0 do
+              (match s.[!j] with '(' -> incr depth | ')' -> decr depth | _ -> ());
+              incr j
+            done;
+            let body = String.sub s (a + 10) (!j - a - 10) in
+            let blank c = if String.contains "()\n\t\r" c then ' ' else c in
+            List.iter
+              (fun w -> Hashtbl.replace names (List.hd (String.split_on_char '.' w)) ())
+              (Str_util.words (String.map blank body));
+            scan !j
+      in
+      scan 0)
+    (Files.find ~skip work (fun f -> f = "dune"));
+  Hashtbl.fold (fun n () acc -> n :: acc) names []
+  |> List.filter_map (fun n ->
+         let meta = Printf.sprintf "lib/%s/META" n in
+         if n <> "" && Sys.file_exists (Filename.concat (Switch.prefix ()) meta) then Switch.owner meta else None)
+  |> List.filter (fun d -> d <> pkg)
+  |> List.sort_uniq compare
+
+(* The dependencies of [pkg], built from the sources of its recipe, among
+   the installed packages (no opam file to read them from): from its dune
+   files, recorded for its version *)
+let deps_file pkg = Stubs.meta ("shadow-" ^ pkg ^ ".deps")
+
+let record_deps pkg work =
+  Source.sh "mkdir" [ "-p"; Filename.dirname (deps_file pkg) ];
+  Compat.write_file (deps_file pkg) (String.concat " " (Option.get (version pkg) :: dune_deps pkg work) ^ "\n")
+
+let recipe_deps pkg =
+  let read () =
+    match Str_util.words (String.trim (Files.contents (deps_file pkg))) with
+    | v :: ds when Some v = version pkg -> Some ds
+    | _ -> None
+  in
+  match read () with
+  | Some ds -> ds
+  | None ->
+      let work = Env.sysroot_file ("build/deps-" ^ pkg) in
+      prepare pkg work;
+      record_deps pkg work;
+      Source.remove work;
+      Option.value (read ()) ~default:[]
 
 (* "patch=<checksum>" of [patches], in the stamp: a change builds it again *)
 let patch_tag pkg =
@@ -135,7 +227,7 @@ let merge_jst_config () =
     Compat.write_file target merged)
 
 let build ?(force = false) ?(needed = fun () -> true) ?(direct = true) pkg =
-  let ver = match Switch.version pkg with Some v -> v | None -> Env.fail "%s is not installed in %s" pkg (Switch.prefix ()) in
+  let ver = match version pkg with Some v -> v | None -> Env.fail "%s is not installed in %s" pkg (Switch.prefix ()) in
   let name = "shadow-" ^ pkg in
   let built =
     match Stamp.read name with
@@ -149,15 +241,15 @@ let build ?(force = false) ?(needed = fun () -> true) ?(direct = true) pkg =
     (try Sys.remove dirs with Sys_error _ -> ());
     let work = Env.sysroot_file ("build/" ^ name) in
     Source.remove work;
+    let own = from_recipe pkg in
     (* (without its sources when it does not depend on a root itself) *)
     let unneeded = lazy (not (needed ())) in
     let status = ref "none" in
     if (not direct) && Lazy.force unneeded then
       log "%s: the interfaces it was compiled against are the same for %s: not rebuilt" pkg !Env.target
     else (
-      Source.sh "mkdir" [ "-p"; Filename.dirname work ];
-      ignore (Source.opam_source pkg work);
-      Stubs.apply_patches ~cwd:work (patches pkg);
+      prepare pkg work;
+      if own then record_deps pkg work;
       let layouts = computes_layouts work || reads_jst_config pkg work || reads_word_size work || patches_ocaml pkg in
       if layouts then status := "failed";
       if (not layouts) && Lazy.force unneeded then
@@ -198,8 +290,11 @@ let build ?(force = false) ?(needed = fun () -> true) ?(direct = true) pkg =
             |> List.map (fun f -> String.sub f 4 (String.length f - 4)))
         in
         let complete () = Lazy.force ocaml_files <> [] && List.for_all (fun f -> Sys.file_exists (Filename.concat lib f)) (Lazy.force ocaml_files) in
-        let ok = (built || complete ()) && (has_cmi lib || not host_has_cmi) in
-        if ok && not built then log "  (its C failed: built apart)";
+        (* (from the recipe's sources: what built, coq-lsp's executables
+           for jsoo failing) *)
+        let ok = if own then built || has_cmi lib else (built || complete ()) && (has_cmi lib || not host_has_cmi) in
+        if ok && not built then
+          if own then log "  (some of its targets failed, log: %s)" log_file else log "  (its C failed: built apart)";
         if ok then (
           Source.sh "mkdir" [ "-p"; Env.sysroot_file "lib/findlib" ];
           (try List.sort compare (Array.to_list (Sys.readdir lib)) with Sys_error _ -> [])

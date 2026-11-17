@@ -1,5 +1,12 @@
 ## Unreleased
 
+- Recipes: a project recipe can patch the OCaml code of any dependency,
+  even one without C (`PATCH_OCAML=1` and `patches/`), and build it from
+  its own sources (`SOURCE=git:`, `url:` or `dir:`), for a package the
+  switch does not have. These libraries are built for the target before
+  the program, so a patch may change an interface or add a library the
+  program links. Such a recipe needs no `build` function. See [patching an
+  OCaml dependency](README.md#patching-an-ocaml-dependency).
 - The builds of OCaml libraries for the target (ctypes users, patched
   packages) take a lock in the sysroot: the builds of a Makefile running
   in parallel wait for the first one instead of building in the same

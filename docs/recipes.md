@@ -62,7 +62,13 @@ The recipe should install a pkg-config file in `$SYSROOT/lib/pkgconfig`
 - `PATCH_OCAML=1`: with `SOURCE=opam:PACKAGE`, its `patches/` change the
   OCaml libraries of the package as well: they are rebuilt for the target
   with them, into the sysroot's findlib directory, as for
-  [ctypes](internals.md#ctypes-layouts) (`async_unix`)
+  [ctypes](internals.md#ctypes-layouts) (`async_unix`). With `SOURCE=git:`,
+  `url:` or `dir:`, the OCaml libraries of the package named like the
+  recipe are built for the target from these sources, patched, whether
+  the switch has the package or not. Those of the project's recipes are
+  built before the program (see [patching an OCaml
+  dependency](../README.md#patching-an-ocaml-dependency)). Without a
+  `build` function, the recipe builds nothing else
 - `HOST_TOOLS=1`: with `PATCH_OCAML=1`, the executables that the package's
   build runs are built for the host, in a host context of that rebuild
   (rocq-runtime's `configure.exe`, which has C stubs). Not by default: the
@@ -73,7 +79,8 @@ The recipe should install a pkg-config file in `$SYSROOT/lib/pkgconfig`
   (`clang`: `'clang* LLVM*'`)
 - `USE_CFLAGS=`: C flags its users' stubs need besides the sysroot's
   include directory (`sdl2`: `-I$SYSROOT/include/SDL2`)
-- functions: `build` (required), `pre_build`, `releases`, `fetch`
+- functions: `build` (required, but with `PATCH_OCAML=1`), `pre_build`,
+  `releases`, `fetch`
 - helpers: `stub_cc file.c [flags]` (emcc with the OCaml runtime headers),
   `mklib`, `install_lib`, `install_headers`, `install_pc NAME VERSION LIBS
   [CFLAGS]`, `link_flags LIB "-lfoo"` (flags needed whenever `libLIB.a` is

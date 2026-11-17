@@ -148,12 +148,12 @@ let ensure_setup () =
     Env.log "updating the toolchain wrappers of %s" (Env.sysroot ());
     Wrappers.write ())
 
-(* `requires:` of ocaml-emcc.conf (no-op once built: recipes are stamped) *)
+(* `requires:` of ocaml-emcc.conf, and the OCaml libraries the project's
+   recipes patch (no-op once built: recipes are stamped) *)
 let ensure_requires () =
   ensure_setup ();
-  match (Project.get ()).requires with
-  | [] -> ()
-  | rs -> List.iter (fun r -> Recipe.install r) rs
+  List.iter (fun r -> Recipe.install r) (Project.get ()).requires;
+  Layouts.ensure_patched ()
 
 let cmd_setup args =
   let f, _ = force args in

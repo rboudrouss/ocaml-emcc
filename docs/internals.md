@@ -369,6 +369,17 @@ Packages built without dune cannot be rebuilt this way. When one of them
 does not generate structs or unions (its types are constants), the host's
 build is kept as it is.
 
+The packages whose recipe patches their OCaml code (`PATCH_OCAML=1`) are
+rebuilt the same way, with the patches, and so are their users. Those of
+the project's recipes are built before the bytecode rather than found
+from it, since their patches may add the libraries it links. A recipe
+with its own sources (`git:`, `url:`, `dir:`) builds a package that may
+not be installed: it has no opam file, so its dependencies are the
+packages owning the findlib libraries its dune files name, and its
+version is the checksum of the recipe. These builds take a lock in the
+sysroot (`meta/shadow.lock`): the builds of a Makefile running in parallel
+wait for the first one, and then find them built.
+
 ## Jane Street's configuration
 
 Jane Street's libraries choose some of their OCaml code when they are

@@ -207,18 +207,22 @@ let rec install ?(force = false) name =
       if find name = None then Env.fail "no recipe named '%s'" name;
       let vars = describe name in
       List.iter (install ~force:false) (Str_util.words (var vars "DEPENDS"));
-      let work = Env.sysroot_file (Filename.concat "build" name) in
-      Source.remove work;
-      Source.sh "mkdir" [ "-p"; Filename.dirname work ];
-      let version = fetch vars name work in
-      let result = Filename.temp_file "ocaml-emcc" ".result" in
-      let code = Driver.run ([ "build"; name; result ] @ Option.to_list version) in
-      let lines = String.split_on_char '\n' (Compat.read_file result) in
-      Sys.remove result;
-      if code <> 0 then Env.fail "the %s recipe failed" name;
-      let source_version, emcc_version =
-        match lines with v :: e :: _ -> (v, e) | _ -> Env.fail "the %s recipe did not complete" name
-      in
-      Stamp.write name
-        ([ source_version; "emcc-" ^ emcc_version; "recipe=" ^ sum; "abi=" ^ Toolchain.abi ]
-        @ match opam_package vars with Some p -> [ "opam=" ^ p ] | None -> [])
+      (* (a recipe patching only OCaml code: its build for the target is
+         Shadow's) *)
+      if var vars "PATCH_OCAML" = "1" && not (List.mem "build" (Str_util.words (var vars "FUNCTIONS"))) then ()
+      else (
+        let work = Env.sysroot_file (Filename.concat "build" name) in
+        Source.remove work;
+        Source.sh "mkdir" [ "-p"; Filename.dirname work ];
+        let version = fetch vars name work in
+        let result = Filename.temp_file "ocaml-emcc" ".result" in
+        let code = Driver.run ([ "build"; name; result ] @ Option.to_list version) in
+        let lines = String.split_on_char '\n' (Compat.read_file result) in
+        Sys.remove result;
+        if code <> 0 then Env.fail "the %s recipe failed" name;
+        let source_version, emcc_version =
+          match lines with v :: e :: _ -> (v, e) | _ -> Env.fail "the %s recipe did not complete" name
+        in
+        Stamp.write name
+          ([ source_version; "emcc-" ^ emcc_version; "recipe=" ^ sum; "abi=" ^ Toolchain.abi ]
+          @ match opam_package vars with Some p -> [ "opam=" ^ p ] | None -> []))

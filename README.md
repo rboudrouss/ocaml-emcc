@@ -1033,6 +1033,44 @@ include_recipe apron
 pre_build() { sed -i '...' apron/ap_manager.c; }
 ```
 
+#### Patching an OCaml dependency
+
+Some OCaml code needs changes for WebAssembly or the web, even without
+C: an interface to add, a call that cannot work in a browser, a library
+to make public. A project recipe named after an opam package, with
+`PATCH_OCAML=1` and the changes as `.patch` files in its `patches/`
+directory, has the OCaml libraries of that package built for the target
+with them, into the sysroot's findlib directory, which the toolchain
+searches before the switch. They are built before the program (by
+`build`, `dune` and `link`), so that a patch may change an interface or add
+a library the program uses. The packages compiled against the changed
+interfaces are built again too. The native build of the package in the
+switch stays as it is.
+
+```sh
+# emcc-recipes/unionFind/recipe.sh: the sources of the installed package
+SOURCE=opam:unionFind
+PATCH_OCAML=1
+```
+
+With `SOURCE=git:`, `url:` or `dir:`, the libraries are built from these
+sources instead, for a package the switch does not have (a version opam
+lacks, a fork) or in place of the one it has.
+[rocq-web](https://github.com/rboudrouss/rocq-web) builds coq-lsp for Rocq
+9.2, which opam does not have, this way:
+
+```sh
+# emcc-recipes/coq-lsp/recipe.sh, and emcc-recipes/coq-lsp/patches/*.patch
+SOURCE=url:https://github.com/ejgallego/rocq-lsp/archive/f49d7b39....tar.gz
+SHA256=4201b900...
+PATCH_OCAML=1
+```
+
+The package must be built by dune (`dune build -p NAME`), and its
+dependencies installed in the switch. Such a recipe needs no `build`
+function: one, if present, builds the package's C stubs as for any recipe
+(see `share/recipes/rocq-runtime`).
+
 Recipes for system C libraries, the variables, functions and helpers
 recipes can use, and how their patches are applied are described in
 [docs/recipes.md](docs/recipes.md).

@@ -38,11 +38,13 @@
 #   DEPENDS  space separated recipe names built first
 #   PATCH_OCAML  1: for SOURCE=opam:<package>, patches/ changes its OCaml
 #            libraries as well: they are rebuilt for the target with them
-#            (in $SYSROOT/lib/findlib, as for ctypes: Shadow)
+#            (in $SYSROOT/lib/findlib, as for ctypes: Shadow); for git:,
+#            url: or dir:, the libraries of the package named like the
+#            recipe are built from these sources
 #   HOST_TOOLS  1: with PATCH_OCAML, the executables its build runs are
 #            built for the host, in a host context (rocq-runtime's
 #            configure.exe, with C stubs)
-# and must define a `build` function (or include one: `include_recipe NAME`,
+# and must define a `build` function, but with PATCH_OCAML (or include one: `include_recipe NAME`,
 # with an optional `pre_build` function run before it).  `build` runs inside
 # a fresh copy of the sources with the helpers below available (install_lib, install_headers,
 # link_flags, mklib, apply_patches...).
@@ -334,7 +336,7 @@ describe_recipe() {
   ( load_recipe "$1"
     local v f fns=
     for v in $RECIPE_VARS; do printf '%s=%s\0' "$v" "${!v}"; done
-    for f in fetch releases pre_build; do declare -F $f >/dev/null && fns="$fns $f"; done
+    for f in build fetch releases pre_build; do declare -F $f >/dev/null && fns="$fns $f"; done
     printf 'FUNCTIONS=%s\0' "${fns# }" )
 }
 
