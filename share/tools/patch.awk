@@ -13,7 +13,8 @@
 # The text before the first `--- ` line describes the patch.  A hunk with
 # line counts (`@@ -12,7 +12,9 @@`) ends after them; without, at the next
 # `@@` or file, ignoring trailing empty lines.  An empty line in a hunk is
-# an empty context line.  `--- /dev/null` creates a file.
+# an empty context line.  `--- /dev/null` creates a file, and its
+# directories.
 
 function fail(msg) { printf "%s: %s\n", PATCH, msg > "/dev/stderr"; failed = 1; exit 1 }
 
@@ -72,8 +73,17 @@ function end_hunk() {
   inhunk = 0
 }
 
+# the directories of a file the patch creates (web/dune)
+function mkdirs(f,    d) {
+  d = f
+  if (!sub(/\/[^\/]*$/, "", d)) return
+  gsub(/'/, "'\\''", d)
+  if (system("mkdir -p '" d "'") != 0) fail("cannot create the directory of " f)
+}
+
 function end_file() {
   end_hunk()
+  if (file != "" && file != "/dev/null" && created) mkdirs(file)
   if (file != "" && file != "/dev/null") save(file)
   file = ""
 }
@@ -90,7 +100,8 @@ END {
       src = strip1(substr(line, 5)); dst = strip1(substr(L[n + 1], 5)); n++
       file = dst == "/dev/null" ? src : dst
       if (file == "/dev/null") fail("no file name")
-      load(src == "/dev/null" ? "" : file)
+      created = src == "/dev/null"
+      load(created ? "" : file)
       hunk = 0; nfiles++
       continue
     }

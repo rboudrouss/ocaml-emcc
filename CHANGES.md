@@ -7,6 +7,8 @@
   the program, so a patch may change an interface or add a library the
   program links. Such a recipe needs no `build` function. See [patching an
   OCaml dependency](README.md#patching-an-ocaml-dependency).
+- Patches: a file created by a patch (`--- /dev/null`) gets its
+  directories, which `apply_patches` failed to write.
 - The builds of OCaml libraries for the target (ctypes users, patched
   packages) take a lock in the sysroot: the builds of a Makefile running
   in parallel wait for the first one instead of building in the same
