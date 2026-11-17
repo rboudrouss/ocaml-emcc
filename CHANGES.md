@@ -7,6 +7,11 @@
   the program, so a patch may change an interface or add a library the
   program links. Such a recipe needs no `build` function. See [patching an
   OCaml dependency](README.md#patching-an-ocaml-dependency).
+- rocq-runtime built for the target is configured as opam does
+  (`./configure -prefix`): from fresh sources, its `coqlib` was
+  relocatable, looked up from a `rocq` binary in `PATH`, which a browser
+  has not (coq-lsp failed to start). Recipes patching OCaml code can
+  define `configure_ocaml` for such a step.
 - Patches: a file created by a patch (`--- /dev/null`) gets its
   directories, which `apply_patches` failed to write.
 - The builds of OCaml libraries for the target (ctypes users, patched

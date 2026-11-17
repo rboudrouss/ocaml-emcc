@@ -1071,7 +1071,9 @@ dependencies installed in the switch. Sources in the project
 (`SOURCE=dir:_src`) go in a directory dune skips, its name starting with
 `_` or `.`, else dune builds them as part of the project. Such a recipe needs no `build`
 function: one, if present, builds the package's C stubs as for any recipe
-(see `share/recipes/rocq-runtime`).
+(see `share/recipes/rocq-runtime`). ocaml-emcc runs `dune build` alone:
+a package whose opam `build:` configures it first needs a
+`configure_ocaml` function doing so (rocq-runtime's `./configure`).
 
 Recipes for system C libraries, the variables, functions and helpers
 recipes can use, and how their patches are applied are described in

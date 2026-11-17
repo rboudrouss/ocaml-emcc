@@ -80,7 +80,10 @@ The recipe should install a pkg-config file in `$SYSROOT/lib/pkgconfig`
 - `USE_CFLAGS=`: C flags its users' stubs need besides the sysroot's
   include directory (`sdl2`: `-I$SYSROOT/include/SDL2`)
 - functions: `build` (required, but with `PATCH_OCAML=1`), `pre_build`,
-  `releases`, `fetch`
+  `releases`, `fetch`, `configure_ocaml` (with `PATCH_OCAML=1`: runs in
+  the package's sources before dune builds its OCaml libraries for the
+  target, for the configure step of opam's `build:`, which ocaml-emcc does
+  not run: rocq-runtime's `./configure -prefix "$PREFIX" ...`)
 - helpers: `stub_cc file.c [flags]` (emcc with the OCaml runtime headers),
   `mklib`, `install_lib`, `install_headers`, `install_pc NAME VERSION LIBS
   [CFLAGS]`, `link_flags LIB "-lfoo"` (flags needed whenever `libLIB.a` is

@@ -45,7 +45,9 @@
 #            built for the host, in a host context (rocq-runtime's
 #            configure.exe, with C stubs)
 # and must define a `build` function, but with PATCH_OCAML (or include one: `include_recipe NAME`,
-# with an optional `pre_build` function run before it).  `build` runs inside
+# with an optional `pre_build` function run before it; with PATCH_OCAML,
+# an optional `configure_ocaml` runs in the sources before dune builds
+# them for the target, as opam's configure step).  `build` runs inside
 # a fresh copy of the sources with the helpers below available (install_lib, install_headers,
 # link_flags, mklib, apply_patches...).
 
@@ -325,7 +327,7 @@ load_recipe() {
   for v in $RECIPE_VARS; do eval "$v="; done
   SOURCE=none
   RECIPE_DIR=$dir RECIPE_NAME=$1 BASE_RECIPE_DIR=$dir
-  unset -f pre_build fetch releases
+  unset -f pre_build fetch releases configure_ocaml
   # shellcheck disable=SC1091
   . "$dir/recipe.sh"
 }
@@ -336,7 +338,7 @@ describe_recipe() {
   ( load_recipe "$1"
     local v f fns=
     for v in $RECIPE_VARS; do printf '%s=%s\0' "$v" "${!v}"; done
-    for f in build fetch releases pre_build; do declare -F $f >/dev/null && fns="$fns $f"; done
+    for f in build fetch releases pre_build configure_ocaml; do declare -F $f >/dev/null && fns="$fns $f"; done
     printf 'FUNCTIONS=%s\0' "${fns# }" )
 }
 
@@ -368,6 +370,10 @@ build_recipe() {
 # releases <name>: the output of the recipe's `releases` function
 releases_of() { ( load_recipe "$1"; releases ) }
 
+# configure-ocaml <name> <dir>: the recipe's `configure_ocaml` in the sources
+# of its package, before its OCaml libraries are built for the target
+configure_ocaml_of() { ( load_recipe "$1"; cd "$2"; configure_ocaml ) }
+
 # dune_stubs <opam-package> [<provider>]: in the sources of a dune package
 # (the current directory), build its stub archives with `dune build -x` and
 # install them (Stubs.dune_stubs).  For recipes that patch a package before
@@ -379,5 +385,6 @@ case "$cmd" in
   describe)     describe_recipe "$1" ;;
   build)        build_recipe "$@" ;;
   releases)     releases_of "$1" ;;
+  configure-ocaml) configure_ocaml_of "$1" "$2" ;;
   *) die "usage: driver.sh describe|build|releases ..." ;;
 esac

@@ -118,12 +118,19 @@ let version pkg =
       Hashtbl.replace versions pkg v;
       v
 
-(* The sources of [pkg], patched, in [work] *)
-let prepare pkg work =
+(* The sources of [pkg], patched, in [work], configured by the recipe's
+   configure_ocaml (opam's configure step, which the dune build alone
+   skips: rocq-runtime's ./configure -prefix, else its coqlib is relocatable,
+   looked up from a rocq binary in PATH) *)
+let prepare ?(configure = false) pkg work =
   Source.remove work;
   Source.sh "mkdir" [ "-p"; Filename.dirname work ];
   if from_recipe pkg then ignore (Recipe.fetch (Recipe.describe pkg) pkg work) else ignore (Source.opam_source pkg work);
-  Stubs.apply_patches ~cwd:work (patches pkg)
+  Stubs.apply_patches ~cwd:work (patches pkg);
+  if configure && patches_ocaml pkg && List.mem "configure_ocaml" (Str_util.words (Recipe.var (Recipe.describe pkg) "FUNCTIONS"))
+  then (
+    log "configuring %s (configure_ocaml)" pkg;
+    if Driver.run [ "configure-ocaml"; pkg; work ] <> 0 then Env.fail "%s: its configure_ocaml failed" pkg)
 
 (* The installed packages whose libraries the dune files of [work] name
    ((libraries ...), select forms included): the findlib packages of the
@@ -183,9 +190,12 @@ let recipe_deps pkg =
       Source.remove work;
       Option.value (read ()) ~default:[]
 
-(* "patch=<checksum>" of [patches], in the stamp: a change builds it again *)
+(* "patch=<checksum>" of [patches], in the stamp, and of the recipe when it
+   patches the OCaml code (its configure_ocaml): a change builds it again *)
 let patch_tag pkg =
-  "patch=" ^ match patches pkg with [] -> "" | l -> Recipe.checksum (String.concat "" (List.map Compat.read_file l))
+  let recipe = if patches_ocaml pkg then Option.to_list (recipe_text pkg) else [] in
+  "patch="
+  ^ match recipe @ List.map Compat.read_file (patches pkg) with [] -> "" | l -> Recipe.checksum (String.concat "" l)
 
 (* "dune=<version>" of the dune building it, in the stamp.  Its
    dune-package files say (lang dune <its version>), which an older dune
@@ -248,7 +258,7 @@ let build ?(force = false) ?(needed = fun () -> true) ?(direct = true) pkg =
     if (not direct) && Lazy.force unneeded then
       log "%s: the interfaces it was compiled against are the same for %s: not rebuilt" pkg !Env.target
     else (
-      prepare pkg work;
+      prepare ~configure:true pkg work;
       if own then record_deps pkg work;
       let layouts = computes_layouts work || reads_jst_config pkg work || reads_word_size work || patches_ocaml pkg in
       if layouts then status := "failed";

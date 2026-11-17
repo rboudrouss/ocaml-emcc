@@ -3,7 +3,9 @@
 # Its OCaml libraries are built for the target too: their 63-bit integers
 # and floats are uint63_%{ocaml-config:int_size}.ml..., the 31-bit
 # versions on wasm32.  Its configure.exe, run by the build, has C stubs:
-# built for the host (HOST_TOOLS).
+# built for the host (HOST_TOOLS).  Configured as opam does
+# (configure_ocaml): else its coqlib is relocatable, found from a rocq
+# binary in PATH, which a browser has not (coq-lsp's Args).
 
 SOURCE=opam:rocq-runtime
 PATCH_OCAML=1
@@ -12,4 +14,8 @@ HOST_TOOLS=1
 build() {
   apply_patches "$BASE_RECIPE_DIR/patches"
   dune_stubs rocq-runtime
+}
+
+configure_ocaml() {
+  ./configure -release -prefix "$PREFIX" -libdir "$PREFIX/lib/coq" -native-compiler no
 }
