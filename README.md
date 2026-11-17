@@ -1067,7 +1067,9 @@ PATCH_OCAML=1
 ```
 
 The package must be built by dune (`dune build -p NAME`), and its
-dependencies installed in the switch. Such a recipe needs no `build`
+dependencies installed in the switch. Sources in the project
+(`SOURCE=dir:_src`) go in a directory dune skips, its name starting with
+`_` or `.`, else dune builds them as part of the project. Such a recipe needs no `build`
 function: one, if present, builds the package's C stubs as for any recipe
 (see `share/recipes/rocq-runtime`).
 
