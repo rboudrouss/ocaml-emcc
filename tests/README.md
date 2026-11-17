@@ -17,6 +17,7 @@ stopped, and its test fails.
 | `stubs`     | dune `foreign_stubs`: int64, floats, callbacks, C exceptions, custom blocks; unix, str |
 | `ocaml5`    | effects, Atomic, Mutex, Dynarray (5.2+; `Domain.spawn` raises) |
 | `gitrecipe` | a project recipe cloning cJSON from GitHub |
+| `patchocaml` | project recipes patching OCaml code: an installed package (ohex) whose patched interface the program uses, and one the switch lacks (`SOURCE=dir:`), with a library its patch adds |
 | `nodune`    | a Makefile, ocamlfind, a hand-compiled stub and `ocaml-emcc link` |
 | `binio`     | binary data on stdout and stderr under node |
 | `nodefs`    | `--node-fs`: real files, `Sys.chdir` and relative paths in the worker thread of compiled code, `Sys.readdir` |

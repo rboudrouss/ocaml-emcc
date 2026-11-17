@@ -65,6 +65,7 @@ mixed     | mixed    | --name w 7 | digestif yojson re cmdliner | wasm32 wasm64 
 ocaml5    | o5       |            | ocaml>=5                    | wasm32 wasm64 wasi | ^Domain\.
 compress  | cm       |            | ocaml>=5.1                  | wasm32 wasm64 wasi |
 gitrecipe | bin/main |            |                             | wasm32 wasm64 wasi |
+patchocaml | bin/main |           | ohex                        | wasm32 wasm64 wasi |
 nodune    | prog     |            | zarith                      | wasm32 wasm64 wasi |
 syslibs   | bin/main |            | mlmpfr zlib                 | wasm32 wasm64 wasi |
 apron     | ap       |            | apron                       | wasm32 wasm64 wasi | could not set fpu|cannot change the FPU

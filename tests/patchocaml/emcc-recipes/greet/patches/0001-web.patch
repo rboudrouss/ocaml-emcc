@@ -1,0 +1,10 @@
+The library greet.web.
+
+--- /dev/null
++++ b/web/dune
+@@
++(library (name greet_web) (public_name greet.web) (libraries greet))
+--- /dev/null
++++ b/web/greet_web.ml
+@@
++let hello () = Greet.hello "web"
