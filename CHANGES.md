@@ -1,3 +1,10 @@
+## 1.0.3
+
+- Windows: the unit tests pass under Cygwin and MSYS2, as
+  opam-repository's CI runs them: without a host `ar` they skip the
+  archives, and no longer compare with driver.sh's checksums, which they
+  computed differently there.
+
 ## 1.0.2
 
 - js_of_ocaml: a callback called with more arguments than its function
