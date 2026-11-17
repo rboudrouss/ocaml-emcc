@@ -1,3 +1,10 @@
+## Unreleased
+
+- The builds of OCaml libraries for the target (ctypes users, patched
+  packages) take a lock in the sysroot: the builds of a Makefile running
+  in parallel wait for the first one instead of building in the same
+  directory.
+
 ## 1.0.3
 
 - Windows: the unit tests pass under Cygwin and MSYS2, as

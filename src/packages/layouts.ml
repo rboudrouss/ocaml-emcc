@@ -129,7 +129,19 @@ let drop pkg =
   ignore (Env.run "rm" ("-rf" :: dirs :: Stamp.file ("shadow-" ^ pkg)
                         :: List.map (fun d -> Env.sysroot_file ("lib/findlib/" ^ d)) l))
 
+(* Builds for the target hold one at a time, between the ocaml-emcc
+   processes of the machine (the builds of a Makefile running in parallel):
+   the others wait, and find them built. *)
+let locked f =
+  let file = Env.sysroot_file "meta/shadow.lock" in
+  Source.sh "mkdir" [ "-p"; Filename.dirname file ];
+  let fd = Unix.openfile file [ Unix.O_RDWR; Unix.O_CREAT ] 0o666 in
+  let rec lock () = try Unix.lockf fd Unix.F_LOCK 0 with Unix.Unix_error (Unix.EINTR, _, _) -> lock () in
+  lock ();
+  Fun.protect ~finally:(fun () -> Unix.close fd) f
+
 let prune () =
+  locked @@ fun () ->
   Stamp.names ()
   |> List.iter (fun f ->
          if Str_util.starts_with ~prefix:"shadow-" f then
@@ -223,6 +235,7 @@ let imports_changed pkg =
    build for its version is only built again if one of its dependencies was
    rebuilt here, or failed (not if they were all left as the host's). *)
 let shadow l =
+  locked @@ fun () ->
   Env.log "checking the %s builds of %s (C layouts, configuration)" !Env.target (String.concat ", " l);
   let failed = ref [] and rebuilt = ref [] in
   List.iter
