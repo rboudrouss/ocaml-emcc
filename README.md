@@ -41,7 +41,6 @@ tag `ocaml-emcc-1.0.3` is the c_of_ocaml this release was tested with.
 
 ```sh
 git clone --depth 1 --branch ocaml-emcc-1.0.3 https://github.com/rboudrouss/C_of_ocaml.git && cd C_of_ocaml
-opam pin add -n -y ppx_devtools-optcomp.dev "git+https://github.com/ocsigen/ppx_devtools.git#f62719d5087fa8d7f2bd0616c1fa91fd660eb27e"
 opam install -y --deps-only ./js_of_ocaml-compiler.opam
 dune build --profile release compiler/bin-c_of_ocaml/c_of_ocaml.exe
 export OCAML_EMCC_C_OF_OCAML=$PWD/_build/default/compiler/bin-c_of_ocaml/c_of_ocaml.exe
