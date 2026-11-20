@@ -89,8 +89,6 @@ jobs:
       - name: Build c_of_ocaml
         run: |
           git clone --depth 1 https://github.com/rboudrouss/C_of_ocaml.git ../C_of_ocaml
-          # ppx_devtools is not released yet (its pin-depends)
-          opam pin add -n -y ppx_devtools-optcomp.dev "git+https://github.com/ocsigen/ppx_devtools.git#f62719d5087fa8d7f2bd0616c1fa91fd660eb27e"
           opam install -y --deps-only ../C_of_ocaml/js_of_ocaml-compiler.opam
           # (opam exec from here: the switch is local, _opam)
           opam exec -- sh -c 'cd ../C_of_ocaml && dune build --profile release --root . compiler/bin-c_of_ocaml/c_of_ocaml.exe'
