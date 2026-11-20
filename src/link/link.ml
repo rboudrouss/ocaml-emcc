@@ -649,12 +649,15 @@ let linked_symbols ~objects ~archives =
 
 (* C functions the C stubs of a plugin may call directly, exported by a
    main module even when it does not use them itself (c_of_ocaml --dynlink
-   links those its code calls itself in the program) *)
+   links those its code calls itself in the program). The libm functions
+   are also those the stdlib's [@@unboxed] float externals name, which the
+   generated C of a plugin calls (Float.log is log). *)
 let plugin_libc =
   [ "malloc"; "calloc"; "realloc"; "free"; "memcpy"; "memmove"; "memset"; "memcmp"; "memchr"; "strlen"; "strcmp";
     "strncmp"; "strcpy"; "strncpy"; "strchr"; "strrchr"; "strstr"; "strdup"; "snprintf"; "sprintf"; "vsnprintf";
     "printf"; "fprintf"; "puts"; "fputs"; "fflush"; "strtol"; "strtod"; "atoi"; "qsort"; "getenv"; "abort";
-    "fmod"; "pow"; "log10"; "round"; "atan2"; "ldexp"; "frexp"; "expm1"; "log1p" ]
+    "fmod"; "pow"; "log10"; "round"; "atan2"; "ldexp"; "frexp"; "expm1"; "log1p"; "exp"; "log"; "sqrt"; "sin";
+    "cos"; "tan"; "asin"; "acos"; "atan"; "sinh"; "cosh"; "tanh"; "ceil"; "floor" ]
 
 (* The symbols a main module (--dynlink) exports for its plugins: those its
    runtime support (EXPORTED objects) and the members of the archives it
