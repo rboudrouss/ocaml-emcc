@@ -96,6 +96,7 @@ argon2    | ar       |            | argon2                      | wasm32 wasm64 
 expat     | ex       |            | expat                       | wasm32 wasm64      |
 lmdb      | lm       |            | lmdb                        | wasm32 wasm64      |
 leveldb   | ld       |            | leveldb                     | wasm32 wasm64      |
+xxhash    | xh       |            | xxhash                      | wasm32 wasm64 wasi |
 flint     | fl       |            | flint                       | wasm32 wasm64 wasi |
 mapfile   | mf       |            | interpreted                 | wasm32 wasm64 wasi |
 glpk      | gl       |            | glpk                        | wasm32 wasm64      |

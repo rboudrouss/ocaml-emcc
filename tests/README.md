@@ -53,6 +53,7 @@ stopped, and its test fails.
 | `argon2`    | argon2 (ctypes-foreign, `-largon2`) + libargon2 |
 | `lmdb`      | lmdb + liblmdb: a database file, cursors, transactions |
 | `leveldb`   | leveldb + LevelDB (C++, Snappy): a small write buffer, the tables compacted in its thread (`threads: yes`), the database reopened |
+| `xxhash`    | xxhash: ctypes stubs built by oasis, XXH32 and XXH64 |
 | `flint`     | flint: ctypes stub generation, pkg-config, polynomials, algebraic numbers, exact reals (calcium) |
 | `sdl`       | tsdl + sdl2: timer, events, surfaces, RWops (wasm64) |
 | `raylib`    | raylib (raylib-ocaml): its vendored raylib built for the web, ctypes structs holding pointers; images, colors, collisions, text, without a window |

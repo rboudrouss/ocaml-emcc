@@ -4,7 +4,7 @@
   version), leveldb (leveldb, with Snappy; its compactions need
   `--threads`), ppl (apron's PPL domains, jasmin; `std::mem_fn` in its
   headers, which libc++ in C++17 needs), pplite (apron's PPLite domain,
-  its newest release).
+  its newest release), xxhash (xxhash).
 - apron: every domain is built, those on PPL (`ppl`, `polkaGrid`), PPLite
   and GLPK (`fppD`) too, whichever the host's apron has. A program using
   them failed to link (their stubs were missing).
