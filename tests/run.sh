@@ -3,7 +3,7 @@
 #   tests/run.sh [--target wasm32|wasm64] [test...]   (default: wasm32)
 #   tests/run.sh --wasi [test...]      OUT.wasm --wasi, run by wasmtime (or node's WASI)
 #   tests/run.sh --interpreted [test...]  the bytecode interpreted, not compiled
-#                                      to C by c_of_ocaml (always with OCaml < 4.14 or 5.0-5.2)
+#                                      to C by c_of_ocaml (always with OCaml < 4.13)
 #   SWITCH=bench tests/run.sh          (another opam switch)
 set -u
 cd "$(dirname "$0")"; TESTS_DIR=$PWD
@@ -19,9 +19,9 @@ while [ $# -gt 0 ]; do
   esac
 done
 export OCAML_EMCC_TARGET=$TARGET
-# the compiled mode needs OCaml 4.14, or 5.3 and later (ocaml-emcc
-# interprets with the others)
-case $(ocamlc -vnum) in 4.0[0-9]*|4.1[0-3]*|5.[0-2].*) INTERPRETED=--interpreted ;; esac
+# the compiled mode needs OCaml 4.13 or later (ocaml-emcc interprets with
+# the others)
+case $(ocamlc -vnum) in 4.0[0-9]*|4.1[0-2]*) INTERPRETED=--interpreted ;; esac
 # --wasi: a "wasi" entry in the targets column of the test
 TARGET_COL=$TARGET; [ $WASI = yes ] && TARGET=wasm32 TARGET_COL=wasi
 # the WASI host: $WASMTIME, wasmtime in PATH, else node:wasi.  Programs

@@ -8,15 +8,15 @@
   from 5.3: zstd was only looked for in `compression_c_libraries`, which
   5.1 and 5.2 lack.
 - c_of_ocaml is an opam package, a dependency of ocaml-emcc except with
-  the OCaml versions it does not support (4.08 to 4.13, 5.0 to 5.2):
+  the OCaml versions it does not support (4.08 to 4.12):
   `opam install ocaml-emcc` installs it.
 - ocaml-emcc runs the c_of_ocaml of the switch (built by its compiler,
   for its bytecode format) before the one in `PATH`;
   `$OCAML_EMCC_C_OF_OCAML` still overrides both.
-- With an OCaml the compiled mode does not support (before 4.14, and now
-  5.0 to 5.2, whose runtime c_of_ocaml's runtime support does not compile
-  with), ocaml-emcc stops and asks for `--interpreted` (or `interpreted:
-  yes`) instead of interpreting the program without being asked.
+- The compiled mode works with OCaml 4.13 and 5.0 to 5.2 too (it needed
+  4.14, or 5.3 and later). With an older OCaml, ocaml-emcc stops and asks
+  for `--interpreted` (or `interpreted: yes`) instead of interpreting the
+  program without being asked.
 - Added recipes: flint (flint, apron's PPLite domain; the host's minor
   version), leveldb (leveldb, with Snappy; its compactions need
   `--threads`), ppl (apron's PPL domains, jasmin; `std::mem_fn` in its

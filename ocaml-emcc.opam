@@ -13,7 +13,7 @@ depends: [
   "ocaml" {>= "4.08"}
   "ocamlfind"
   # the compiled mode (the default), with the OCaml versions it supports
-  ("ocaml" {< "4.14" | >= "5.0" & < "5.3"} | "c_of_ocaml" {>= "0.1.0" & < "0.2"})
+  ("ocaml" {< "4.13"} | "c_of_ocaml" {>= "0.1.0" & < "0.2"})
   "odoc" {with-doc}
 ]
 build: [

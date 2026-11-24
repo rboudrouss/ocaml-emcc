@@ -37,9 +37,9 @@ The compiled mode, the default, uses
 that `opam install ocaml-emcc` installs with it (`opam install c_of_ocaml`
 in a switch that lacks it). ocaml-emcc runs the one of the switch, built by
 its compiler; `$OCAML_EMCC_C_OF_OCAML` gives another one. With OCaml 4.08
-to 4.13 and 5.0 to 5.2, which c_of_ocaml does not support, ocaml-emcc
-installs without it, and stops unless asked for the interpreter
-(`--interpreted`, or `interpreted: yes` in `ocaml-emcc.conf`).
+to 4.12, which c_of_ocaml does not support, ocaml-emcc installs without
+it, and stops unless asked for the interpreter (`--interpreted`, or
+`interpreted: yes` in `ocaml-emcc.conf`).
 
 Until c_of_ocaml 0.1.0 is in opam-repository, pin it before installing
 ocaml-emcc:
@@ -65,7 +65,7 @@ with emcc, compiles the program to C, and writes `main.js` and
 
 | what | version | notes |
 |------|---------|-------|
-| opam switch | OCaml 4.14, or 5.3 and later | 4.08 to 4.13 and 5.0 to 5.2 with `--interpreted` only |
+| opam switch | OCaml 4.13 or later | 4.08 to 4.12 with `--interpreted` only |
 | [emsdk](https://emscripten.org/docs/getting_started/downloads.html) | tested with 6.0.11 | `emcc` in `PATH`, 4.0 or later for standalone `.wasm` outputs |
 | c_of_ocaml | 0.1 | installed by opam with ocaml-emcc, see [Quick start](#quick-start) |
 | dune | 3.11 or later | except for projects built [without dune](#without-dune) |
@@ -124,7 +124,7 @@ differs.
 | | compiled (default) | interpreted (`--interpreted`) |
 |-|--------------------|-------------------------------|
 | how | c_of_ocaml compiles the bytecode to C, emcc compiles the C | an `ocamlrun` compiled to wasm runs the bytecode |
-| OCaml | 4.14, 5.3 and later | 4.08 and later |
+| OCaml | 4.13 and later | 4.08 and later |
 | needs | c_of_ocaml (`opam install c_of_ocaml`) | nothing more |
 | speed | at least 5 times faster than interpreted, about as fast as wasm_of_ocaml | about 1.5 times slower than the native `ocamlrun` |
 | `.wasm` size | 2 to 8 times smaller (no interpreter, no bytecode) | the interpreter and the bytecode |
