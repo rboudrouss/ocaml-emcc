@@ -8,6 +8,8 @@
 - apron: every domain is built, those on PPL (`ppl`, `polkaGrid`), PPLite
   and GLPK (`fppD`) too, whichever the host's apron has. A program using
   them failed to link (their stubs were missing).
+- openblas uses its WebAssembly target from 0.3.32 (`WASM128_GENERIC`, SIMD
+  kernels): sgemm about twice as fast, dgemm a few percent.
 - Recipes: a project recipe can patch the OCaml code of any dependency,
   even one without C (`PATCH_OCAML=1` and `patches/`), and build it from
   its own sources (`SOURCE=git:`, `url:` or `dir:`), for a package the

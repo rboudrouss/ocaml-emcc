@@ -1,9 +1,10 @@
 # OpenBLAS (conf-openblas): BLAS, CBLAS, and LAPACK and LAPACKE from their C
 # translation (C_LAPACK: no Fortran compiler), for blas and lapack users too
-# (-lblas, -llapack...).  Generic C kernels: its RISCV64_GENERIC target, as
-# Pyodide does, whose -march/-mabi flags clang refuses for wasm and are
-# dropped.  No threads of its own, but locks (USE_LOCKING) for programs
-# calling it from several threads.
+# (-lblas, -llapack...).  Its WebAssembly target since 0.3.32
+# (WASM128_GENERIC: SIMD kernels, -msimd128), before that generic C kernels
+# (its RISCV64_GENERIC target, as Pyodide does, whose -march/-mabi flags
+# clang refuses for wasm and are dropped).  No threads of its own, but locks
+# (USE_LOCKING) for programs calling it from several threads.
 # Its subroutines (returning nothing in Fortran) are void in its BLAS, int or
 # void in its own LAPACK functions (getrf, potrf..., not as in its lapack.h)
 # and in the C translation of LAPACK, int in xerbla: harmless natively, but
@@ -23,12 +24,13 @@ releases() {
 }
 
 build() {
-  local binary=32 l
+  local binary=32 l target=RISCV64_GENERIC
   [ "$TARGET" = wasm64 ] && binary=64
+  [ "$(printf '%s\n' 0.3.32 "$SOURCE_VERSION" | sort -V | head -1)" = 0.3.32 ] && target=WASM128_GENERIC
   printf '#!/bin/sh\nfor a; do shift; case $a in -march=*|-mabi=*) ;; *) set -- "$@" "$a" ;; esac; done\nexec %s "$@"\n' \
     "$EMCC" > emcc-generic
   chmod +x emcc-generic
-  set -- HOSTCC=cc CC="$PWD/emcc-generic" AR="$EMAR" RANLIB="$EMSDK_BIN/emranlib" TARGET=RISCV64_GENERIC \
+  set -- HOSTCC=cc CC="$PWD/emcc-generic" AR="$EMAR" RANLIB="$EMSDK_BIN/emranlib" TARGET=$target \
     BINARY=$binary NOFORTRAN=1 C_LAPACK=1 USE_THREAD=0 USE_LOCKING=1 NO_SHARED=1 DYNAMIC_ARCH=0 \
     NO_AFFINITY=1 CFLAGS="$CFLAGS -Wno-return-mismatch" PREFIX="$SYSROOT"
   local own="getf2|getrf|laswp|getrs|gesv|potf2|potrf|potri|potrs|lauu2|lauum|trti2|trtri|trtrs|laed3"
@@ -41,7 +43,7 @@ build() {
   sed -i -E -e "s/^int (BLASFUNC\\([sdqczx]($own)\\))/void \\1/" -e 's/^int( +BLASFUNC\(xerbla\))/void\1/' \
     common_interface.h driver/others/xerbla.c
   sed -i -E "s/^lapack_int (LAPACK_[sdcz]($own)(_base)?\\()/void \\1/" lapack-netlib/LAPACKE/include/lapack.h
-  log "make"
+  log "make ($target)"
   make -j"$NPROC" "$@" libs netlib > make.log 2>&1 || { tail -30 make.log; die "make failed"; }
   make "$@" install > install.log 2>&1 || { tail -30 install.log; die "install failed"; }
   for l in blas cblas lapack lapacke; do cp -f "$SYSROOT/lib/libopenblas.a" "$SYSROOT/lib/lib$l.a"; done

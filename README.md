@@ -963,7 +963,7 @@ it.
 | `ncurses` | curses | wide-character libraries, the host's terminfo under node, more than 64 KB of stack needed |
 | `libjpeg`, `gd` | gd | libjpeg-turbo without SIMD, libgd with PNG, JPEG and FreeType |
 | `liblo` | lo | Open Sound Control (its server thread needs `--threads`) |
-| `openblas` | lacaml, nx, owl... (`-lblas`, `-llapack` too) | BLAS, CBLAS, LAPACK and LAPACKE in C (no Fortran), generic kernels, no threads, its subroutines' C signatures made to agree (wasm traps on a mismatch), 30 to 40 minutes to build on one core |
+| `openblas` | lacaml, nx, owl... (`-lblas`, `-llapack` too) | BLAS, CBLAS, LAPACK and LAPACKE in C (no Fortran), its WebAssembly SIMD kernels from 0.3.32 (generic C ones before), no threads, its subroutines' C signatures made to agree (wasm traps on a mismatch), 30 to 40 minutes to build on one core |
 | `lame` | lame | libmp3lame, no assembly |
 | `libevent` | libevent | poll and select backends, no OpenSSL |
 | `liblzo2` | lzo | |
