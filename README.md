@@ -258,7 +258,7 @@ needed.
 
 | variable | when | what |
 |----------|------|------|
-| `OCAML_EMCC_C_OF_OCAML` | build | the c_of_ocaml executable (default: the one in `PATH`) |
+| `OCAML_EMCC_C_OF_OCAML` | build | the c_of_ocaml executable (default: the one of the switch, else the one in `PATH`) |
 | `OCAML_EMCC_JOBS` | build, compiled | the parts of the C compiled at a time (default: the number of processors) |
 | `OCAML_EMCC_TARGET` | build | as `--target` |
 | `OCAML_EMCC_SYSROOT` | build | as `--sysroot` |

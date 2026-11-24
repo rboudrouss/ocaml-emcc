@@ -1,5 +1,8 @@
 ## Unreleased
 
+- ocaml-emcc runs the c_of_ocaml of the switch (built by its compiler,
+  for its bytecode format) before the one in `PATH`;
+  `$OCAML_EMCC_C_OF_OCAML` still overrides both.
 - OCaml 5.0 to 5.2: interpreted, as before 4.14 (c_of_ocaml's runtime
   support does not compile with them).
 - Added recipes: flint (flint, apron's PPLite domain; the host's minor
