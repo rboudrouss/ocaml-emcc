@@ -1,5 +1,7 @@
 ## Unreleased
 
+- OCaml 5.0 to 5.2: interpreted, as before 4.14 (c_of_ocaml's runtime
+  support does not compile with them).
 - Added recipes: flint (flint, apron's PPLite domain; the host's minor
   version), leveldb (leveldb, with Snappy; its compactions need
   `--threads`), ppl (apron's PPL domains, jasmin; `std::mem_fn` in its

@@ -63,7 +63,7 @@ with emcc, compiles the program to C, and writes `main.js` and
 
 | what | version | notes |
 |------|---------|-------|
-| opam switch | OCaml 4.14 or later (4.x or 5.x) | interpreted only with 4.08 to 4.13 |
+| opam switch | OCaml 4.14, or 5.3 and later | interpreted only with 4.08 to 4.13 and 5.0 to 5.2 |
 | [emsdk](https://emscripten.org/docs/getting_started/downloads.html) | tested with 6.0.11 | `emcc` in `PATH`, 4.0 or later for standalone `.wasm` outputs |
 | c_of_ocaml | its `master` | see [Quick start](#quick-start), not needed with `--interpreted` |
 | dune | 3.11 or later | except for projects built [without dune](#without-dune) |
@@ -122,7 +122,7 @@ differs.
 | | compiled (default) | interpreted (`--interpreted`) |
 |-|--------------------|-------------------------------|
 | how | c_of_ocaml compiles the bytecode to C, emcc compiles the C | an `ocamlrun` compiled to wasm runs the bytecode |
-| OCaml | 4.14 and later | 4.08 and later |
+| OCaml | 4.14, 5.3 and later | 4.08 and later |
 | needs | c_of_ocaml | nothing more |
 | speed | at least 5 times faster than interpreted, about as fast as wasm_of_ocaml | about 1.5 times slower than the native `ocamlrun` |
 | `.wasm` size | 2 to 8 times smaller (no interpreter, no bytecode) | the interpreter and the bytecode |

@@ -5,7 +5,7 @@ each test with `ocaml-emcc build` (or make), runs it with node and
 compares the output with that of the native executable (or with
 `expected.txt`), in the opam switch `$SWITCH` (a name or a prefix, default
 `emcc-4.14`). The tests are compiled (c_of_ocaml), or interpreted with
-`--interpreted` (always before OCaml 4.14). CI
+`--interpreted` (always with OCaml before 4.14 and 5.0 to 5.2). CI
 (`.github/workflows/ci.yml`) runs the suite compiled on OCaml 4.14 and
 5.5, on both targets and WASI, and the threads and sockets tests
 interpreted. A program still running after `$TEST_TIMEOUT` seconds (900) is

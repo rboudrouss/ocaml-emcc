@@ -282,14 +282,16 @@ let parse_link_opts ?(extra = fun _ -> None) args =
 let with_config_flags (o : Link.opts) =
   let env_flags = Option.fold ~none:[] ~some:Str_util.words (Env.getenv_opt "OCAML_EMCC_LDFLAGS") in
   let p = Project.get () in
-  (* compiled unless asked otherwise, or with an OCaml older than 4.14 *)
+  (* compiled unless asked otherwise, or with an OCaml c_of_ocaml does not
+     support *)
   let compiled =
     match !compiled_flag with
     | Some c -> c
     | None when p.interpreted -> false
     | None when not (Link.compiled_supported ()) ->
-        Env.log "OCaml %s: interpreted (the compiled mode needs OCaml 4.14 or later)"
-          (Option.value (Env.manifest "ocaml_version") ~default:"?");
+        Env.log "OCaml %s: interpreted (the compiled mode needs %s)"
+          (Option.value (Env.manifest "ocaml_version") ~default:"?")
+          Link.compiled_requirement;
         false
     | None -> true
   in
