@@ -32,18 +32,19 @@ opam install ocaml-emcc             # or opam pin add ocaml-emcc git+https://git
 source /path/to/emsdk/emsdk_env.sh  # emcc in PATH
 ```
 
-The compiled mode, the default, also needs
-[c_of_ocaml](https://github.com/rboudrouss/C_of_ocaml), which is not in
-opam: it is installed apart, like emscripten. Build it in the switch of
-your project, and give it to ocaml-emcc with `$OCAML_EMCC_C_OF_OCAML` (or
-put `c_of_ocaml` in `PATH`). Only `--interpreted` does without it. Its
-tag `ocaml-emcc-1.0.3` is the c_of_ocaml this release was tested with.
+The compiled mode, the default, uses
+[c_of_ocaml](https://github.com/rboudrouss/C_of_ocaml), an opam package
+that `opam install ocaml-emcc` installs with it (`opam install c_of_ocaml`
+in a switch that lacks it). ocaml-emcc runs the one of the switch, built by
+its compiler; `$OCAML_EMCC_C_OF_OCAML` gives another one. With OCaml 4.08
+to 4.13 and 5.0 to 5.2, which c_of_ocaml does not support, ocaml-emcc
+interprets the bytecode (`--interpreted`) and installs without it.
+
+Until c_of_ocaml 0.1.0 is in opam-repository, pin it before installing
+ocaml-emcc:
 
 ```sh
-git clone --depth 1 --branch ocaml-emcc-1.0.3 https://github.com/rboudrouss/C_of_ocaml.git && cd C_of_ocaml
-opam install -y --deps-only ./js_of_ocaml-compiler.opam
-dune build --profile release compiler/bin-c_of_ocaml/c_of_ocaml.exe
-export OCAML_EMCC_C_OF_OCAML=$PWD/_build/default/compiler/bin-c_of_ocaml/c_of_ocaml.exe
+opam pin add -n c_of_ocaml.0.1.0 git+https://github.com/rboudrouss/C_of_ocaml.git#master
 ```
 
 Then, in your dune project:
@@ -65,7 +66,7 @@ with emcc, compiles the program to C, and writes `main.js` and
 |------|---------|-------|
 | opam switch | OCaml 4.14, or 5.3 and later | interpreted only with 4.08 to 4.13 and 5.0 to 5.2 |
 | [emsdk](https://emscripten.org/docs/getting_started/downloads.html) | tested with 6.0.11 | `emcc` in `PATH`, 4.0 or later for standalone `.wasm` outputs |
-| c_of_ocaml | its `master` | see [Quick start](#quick-start), not needed with `--interpreted` |
+| c_of_ocaml | 0.1 | installed by opam with ocaml-emcc, see [Quick start](#quick-start) |
 | dune | 3.11 or later | except for projects built [without dune](#without-dune) |
 | node | the one of emsdk works | to run `.js` outputs, 24 or later for wasm64 |
 
@@ -123,7 +124,7 @@ differs.
 |-|--------------------|-------------------------------|
 | how | c_of_ocaml compiles the bytecode to C, emcc compiles the C | an `ocamlrun` compiled to wasm runs the bytecode |
 | OCaml | 4.14, 5.3 and later | 4.08 and later |
-| needs | c_of_ocaml | nothing more |
+| needs | c_of_ocaml (`opam install c_of_ocaml`) | nothing more |
 | speed | at least 5 times faster than interpreted, about as fast as wasm_of_ocaml | about 1.5 times slower than the native `ocamlrun` |
 | `.wasm` size | 2 to 8 times smaller (no interpreter, no bytecode) | the interpreter and the bytecode |
 | link time | about 1.5 times longer (the generated C is compiled) | |

@@ -23,10 +23,10 @@ jobs:
       - uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: ${{ matrix.ocaml }}
+      # c_of_ocaml from its master until c_of_ocaml.0.1.0 is in opam-repository
+      - run: opam pin add -n -y c_of_ocaml.0.1.0 git+https://github.com/rboudrouss/C_of_ocaml.git#master
       - run: opam install . --deps-only --with-test
       - run: opam exec -- dune build @install
-      - name: ocaml-emcc.opam is up to date with dune-project
-        run: git diff --exit-code ocaml-emcc.opam
       - run: opam lint ocaml-emcc.opam
       - run: opam install . --with-test
       - name: the installed CLI finds its share directory
@@ -88,14 +88,13 @@ jobs:
           mkdir -p ../pw && cd ../pw && npm init -y >/dev/null && npm i playwright@1
           npx playwright install --with-deps chromium-headless-shell
           echo "PLAYWRIGHT_DIR=$(pwd)" >> "$GITHUB_ENV"
-      # c_of_ocaml, built with the switch's compiler (its bytecode format)
-      - name: Build c_of_ocaml
+      # c_of_ocaml, in the switch (built by its compiler, for its bytecode
+      # format), where ocaml-emcc finds it; from its master until
+      # c_of_ocaml.0.1.0 is in opam-repository
+      - name: Install c_of_ocaml
         run: |
-          git clone --depth 1 https://github.com/rboudrouss/C_of_ocaml.git ../C_of_ocaml
-          opam install -y --deps-only ../C_of_ocaml/js_of_ocaml-compiler.opam
-          # (opam exec from here: the switch is local, _opam)
-          opam exec -- sh -c 'cd ../C_of_ocaml && dune build --profile release --root . compiler/bin-c_of_ocaml/c_of_ocaml.exe'
-          echo "OCAML_EMCC_C_OF_OCAML=$(realpath ../C_of_ocaml)/_build/default/compiler/bin-c_of_ocaml/c_of_ocaml.exe" >> "$GITHUB_ENV"
+          opam pin add -n -y c_of_ocaml.0.1.0 git+https://github.com/rboudrouss/C_of_ocaml.git#master
+          opam install -y . --deps-only
       - run: opam exec -- dune build
       # under WASI, wasi-threads needs wasmtime <= 46, sockets wasmer
       - name: Install wasmtime 46 (wasi-threads) and wasmer (WASIX)

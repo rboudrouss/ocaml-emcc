@@ -1,5 +1,8 @@
 ## Unreleased
 
+- c_of_ocaml is an opam package, a dependency of ocaml-emcc except with
+  the OCaml versions it does not support (4.08 to 4.13, 5.0 to 5.2):
+  `opam install ocaml-emcc` installs it.
 - ocaml-emcc runs the c_of_ocaml of the switch (built by its compiler,
   for its bytecode format) before the one in `PATH`;
   `$OCAML_EMCC_C_OF_OCAML` still overrides both.
