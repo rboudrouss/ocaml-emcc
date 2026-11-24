@@ -23,8 +23,8 @@ jobs:
       - uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: ${{ matrix.ocaml }}
-      # c_of_ocaml from its master until c_of_ocaml.0.1.0 is in opam-repository
-      - run: opam pin add -n -y c_of_ocaml.0.1.0 git+https://github.com/rboudrouss/C_of_ocaml.git#master
+      # c_of_ocaml from its 0.1.0 tag until it is in opam-repository
+      - run: opam pin add -n -y c_of_ocaml.0.1.0 git+https://github.com/rboudrouss/C_of_ocaml.git#0.1.0
       - run: opam install . --deps-only --with-test
       - run: opam exec -- dune build @install
       - run: opam lint ocaml-emcc.opam
@@ -89,11 +89,11 @@ jobs:
           npx playwright install --with-deps chromium-headless-shell
           echo "PLAYWRIGHT_DIR=$(pwd)" >> "$GITHUB_ENV"
       # c_of_ocaml, in the switch (built by its compiler, for its bytecode
-      # format), where ocaml-emcc finds it; from its master until
+      # format), where ocaml-emcc finds it; from its 0.1.0 tag until
       # c_of_ocaml.0.1.0 is in opam-repository
       - name: Install c_of_ocaml
         run: |
-          opam pin add -n -y c_of_ocaml.0.1.0 git+https://github.com/rboudrouss/C_of_ocaml.git#master
+          opam pin add -n -y c_of_ocaml.0.1.0 git+https://github.com/rboudrouss/C_of_ocaml.git#0.1.0
           opam install -y . --deps-only
       - run: opam exec -- dune build
       # under WASI, wasi-threads needs wasmtime <= 46, sockets wasmer

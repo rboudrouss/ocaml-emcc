@@ -44,7 +44,7 @@ Until c_of_ocaml 0.1.0 is in opam-repository, pin it before installing
 ocaml-emcc:
 
 ```sh
-opam pin add -n c_of_ocaml.0.1.0 git+https://github.com/rboudrouss/C_of_ocaml.git#master
+opam pin add -n c_of_ocaml.0.1.0 git+https://github.com/rboudrouss/C_of_ocaml.git#0.1.0
 ```
 
 Then, in your dune project:

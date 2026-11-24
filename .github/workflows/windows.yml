@@ -25,8 +25,8 @@ jobs:
         with:
           ocaml-compiler: ${{ matrix.ocaml }}
           windows-environment: ${{ matrix.environment }}
-      # c_of_ocaml from its master until c_of_ocaml.0.1.0 is in opam-repository
-      - run: opam pin add -n -y c_of_ocaml.0.1.0 'git+https://github.com/rboudrouss/C_of_ocaml.git#master'
+      # c_of_ocaml from its 0.1.0 tag until it is in opam-repository
+      - run: opam pin add -n -y c_of_ocaml.0.1.0 'git+https://github.com/rboudrouss/C_of_ocaml.git#0.1.0'
       - run: opam install . --deps-only --with-test
       # quoted: PowerShell takes @install for a splatted variable
       - run: opam exec -- dune build -p ocaml-emcc '@install' '@runtest'
