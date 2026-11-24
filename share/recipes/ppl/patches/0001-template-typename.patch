@@ -1,0 +1,19 @@
+The `template` and `typename` keywords clang requires (PPL's git commit
+c39f6a07, after 1.2, as Debian and emscripten-forge apply it).
+
+--- a/src/Determinate_inlines.hh
++++ b/src/Determinate_inlines.hh
+@@
+ template <typename Binary_Operator_Assign>
+-inline
+-Determinate<PSET>::Binary_Operator_Assign_Lifter<Binary_Operator_Assign>
++inline typename
++Determinate<PSET>::template Binary_Operator_Assign_Lifter<Binary_Operator_Assign>
+ Determinate<PSET>::lift_op_assign(Binary_Operator_Assign op_assign) {
+--- a/src/OR_Matrix_inlines.hh
++++ b/src/OR_Matrix_inlines.hh
+@@
+ template <typename U>
+-inline OR_Matrix<T>::Pseudo_Row<U>&
++inline typename OR_Matrix<T>::template Pseudo_Row<U>&
+ OR_Matrix<T>::Pseudo_Row<U>::operator=(const Pseudo_Row& y) {

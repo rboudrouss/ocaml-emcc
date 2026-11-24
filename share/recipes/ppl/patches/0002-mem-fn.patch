@@ -1,0 +1,18 @@
+std::mem_fn instead of std::mem_fun_ref, which C++17 removed: libc++
+(emscripten's) has no mem_fun_ref in that mode, clang's default, where
+libstdc++ keeps it.  The installed ppl.hh is then usable in C++17 (apron's
+PPL domain).
+
+--- a/src/Powerset_inlines.hh
++++ b/src/Powerset_inlines.hh
+@@
+-  pairwise_apply_assign(y, std::mem_fun_ref(&D::meet_assign));
++  pairwise_apply_assign(y, std::mem_fn(&D::meet_assign));
+--- a/src/Pointset_Powerset_inlines.hh
++++ b/src/Pointset_Powerset_inlines.hh
+@@
+-                          Det_PSET::lift_op_assign(std::mem_fun_ref(&PSET::intersection_assign)));
++                          Det_PSET::lift_op_assign(std::mem_fn(&PSET::intersection_assign)));
+@@
+-                          Det_PSET::lift_op_assign(std::mem_fun_ref(&PSET::time_elapse_assign)));
++                          Det_PSET::lift_op_assign(std::mem_fn(&PSET::time_elapse_assign)));
