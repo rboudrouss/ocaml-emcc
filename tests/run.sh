@@ -93,6 +93,7 @@ notailcalls | nt     |            | cps-stack-asyncify          | wasm32 wasm64 
 argon2    | ar       |            | argon2                      | wasm32 wasm64      |
 expat     | ex       |            | expat                       | wasm32 wasm64      |
 lmdb      | lm       |            | lmdb                        | wasm32 wasm64      |
+flint     | fl       |            | flint                       | wasm32 wasm64 wasi |
 mapfile   | mf       |            | interpreted                 | wasm32 wasm64 wasi |
 glpk      | gl       |            | glpk                        | wasm32 wasm64      |
 fftw3     | ff       |            | fftw3                       | wasm32 wasm64      |

@@ -71,7 +71,7 @@ jobs:
           pkgs="$pkgs checkseum bigstringaf mirage-crypto-ec mirage-crypto-pk mirage-crypto-rng"
           pkgs="$pkgs lwt cryptokit minisat ocaml-lua stb_image extunix snappy argon2 ocaml-expat lmdb glpk fftw3"
           pkgs="$pkgs secp256k1-internal tsdl mlcuddidl hacl-star posix-time2 posix-socket posix-stat mccs raylib"
-          pkgs="$pkgs js_of_ocaml js_of_ocaml-ppx"
+          pkgs="$pkgs js_of_ocaml js_of_ocaml-ppx flint"
           # argon2 binds libargon2 with ctypes-foreign and has no conf package
           sudo apt-get install -y libargon2-dev
           # mlmpfr does not build with OCaml 5 (upstream issue)
