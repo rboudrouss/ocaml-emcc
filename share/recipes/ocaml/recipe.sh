@@ -19,8 +19,10 @@
 #   5.0    patches/5.0 (commit memory with mprotect, no mmap(MAP_FIXED); no
 #          pthread_getaffinity_np, configure only compiles its test); stub
 #          archives without the "byt" suffix
-#   >=5.1  patches/5.1+ (the same, with mprotect as on Cygwin; the memory
-#          of the heaps from malloc, not cleared as emscripten's mmap does)
+#   >=5.1  patches/5.1+ (the same, with mprotect as on Cygwin); >=5.2
+#          patches/5.2+, 5.1 patches/5.1 (the memory of the heaps from
+#          malloc, not cleared as emscripten's mmap does; 5.1's
+#          caml_plat_mem_map takes an alignment)
 #   5.0-5.2, >=5.3  patches/5.0-5.2, patches/5.3+ (the minor heaps of
 #          the domains are allocated at startup: a single domain before 5.3,
 #          the number the program's link chooses since, 1 without threads)
@@ -46,6 +48,7 @@ build() {
   apply_patches "$BASE_RECIPE_DIR/patches/all"
   apply_patches "$BASE_RECIPE_DIR/patches/$OCAML_MAJOR.x"
   if ocaml_version_ge 5 1; then apply_patches "$BASE_RECIPE_DIR/patches/5.1+"; fi
+  if ocaml_version_ge 5 2; then apply_patches "$BASE_RECIPE_DIR/patches/5.2+"; fi
   if ocaml_version_ge 5 3; then apply_patches "$BASE_RECIPE_DIR/patches/5.3+"
   elif [ "$OCAML_MAJOR" -ge 5 ]; then apply_patches "$BASE_RECIPE_DIR/patches/5.0-5.2"; fi
   apply_patches "$BASE_RECIPE_DIR/patches/$OCAML_MAJOR.$OCAML_MINOR"
