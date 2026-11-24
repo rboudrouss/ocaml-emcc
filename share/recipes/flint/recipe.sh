@@ -16,6 +16,10 @@ releases() {
 }
 
 build() {
+  # (3.4's memory usage, its BSD branch)
+  if grep -q 'KERN_PROC_PID' src/generic_files/profiler.c; then
+    apply_patches "$BASE_RECIPE_DIR/patches/from-3.4"
+  fi
   log "configure (emconfigure)"
   emconfigure ./configure --host="$TARGET-unknown-emscripten" --prefix="$SYSROOT" \
     --enable-static --disable-shared --disable-assembly --disable-dependency-tracking \

@@ -1,0 +1,15 @@
+flint 3.4: under emscripten (__unix__, neither Linux nor macOS), the
+memory usage of print_memory_usage took the BSD branch (sysctl,
+kinfo_proc): only getrusage's peak, as on the other systems.
+--- a/src/generic_files/profiler.c
++++ b/src/generic_files/profiler.c
+@@
+ #elif defined(__APPLE__)
+ # include <mach/mach.h>
+ # include <sys/resource.h>
++#elif defined(__EMSCRIPTEN__)
++# include <sys/resource.h>
+ #endif
+@@
+-# else /* BSD */
++# elif !defined(__EMSCRIPTEN__) /* BSD */
