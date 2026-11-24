@@ -1,0 +1,3 @@
+(executable
+ (name ad)
+ (libraries gmp apron apron.polkaMPQ apron.ppl apron.polkaGrid apron.fppD))

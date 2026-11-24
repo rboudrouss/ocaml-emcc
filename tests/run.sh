@@ -69,6 +69,8 @@ patchocaml | bin/main |           | ohex                        | wasm32 wasm64 
 nodune    | prog     |            | zarith                      | wasm32 wasm64 wasi |
 syslibs   | bin/main |            | mlmpfr zlib                 | wasm32 wasm64 wasi |
 apron     | ap       |            | apron                       | wasm32 wasm64 wasi | could not set fpu|cannot change the FPU
+aprondoms | ad       |            | apron/ppl.cma apron/polkaGrid.cma apron/fppD.cma | wasm32 wasm64 wasi | could not set fpu|cannot change the FPU
+apronpplite | pl     |            | apron/pplite.cma            | wasm32 wasm64 wasi |
 sqlite    | sq       |            | sqlite3                     | wasm32 wasm64 wasi |
 bz2       | bz       |            | bz2                         | wasm32 wasm64 wasi |
 zstd      | zs       |            | zstd                        | wasm32 wasm64 wasi |
@@ -169,6 +171,8 @@ has_pkg() {
     # (the c_of_ocaml before 45c785ea refuses --cps-stack with --dynlink)
     cps-stack-dynlink) has_pkg cps-stack && ! grep -qs 'not supported with --dynlink and for plugins' "$(command -v "${OCAML_EMCC_C_OF_OCAML:-c_of_ocaml}")" ;;
     ocaml\>=*) [ "$(printf '%s\n' "${1#ocaml>=}" "$(ocamlc -vnum)" | sort -V | head -1)" = "${1#ocaml>=}" ] ;;
+    # an archive (apron/ppl.cma: what the host's apron was built with)
+    */*.cma) [ -f "$OPAM_SWITCH_PREFIX/lib/$1" ] ;;
     *) ocamlfind query "$1" >/dev/null 2>&1 || [ -d "$OPAM_SWITCH_PREFIX/lib/$1" ] ;;
   esac
 }

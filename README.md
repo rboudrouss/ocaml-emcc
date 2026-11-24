@@ -980,10 +980,11 @@ with the host's library (see [system
 recipes](docs/recipes.md#system-recipes)).
 
 Recipes of OCaml packages, built from the sources of the installed package,
-cover `zarith`, `camlidl`, `mlgmpidl`, `apron` (every domain and numeric
-variant), `mlcuddidl` (its bundled CUDD, and the stubs camlidl generates),
-`hacl-star-raw` (portable C only, the vectorized and Vale variants trap if
-called), and, with sources changed for wasm (see their
+cover `zarith`, `camlidl`, `mlgmpidl`, `apron` (every domain, those on PPL,
+PPLite and GLPK included, and every numeric variant), `mlcuddidl` (its
+bundled CUDD, and the stubs camlidl generates), `hacl-star-raw` (portable
+C only, the vectorized and Vale variants trap if called), and, with sources
+changed for wasm (see their
 `share/recipes/<name>/` directory), `mirage-crypto` (and `-ec`, `-rng`),
 `lwt`, `cryptokit`, `secp256k1-internal`, `lmdb`, `mccs`, `core_unix`,
 `async_unix`, `async_ssl`, `eio_posix`, `num`, `rowex`, `mirage-block-unix`,

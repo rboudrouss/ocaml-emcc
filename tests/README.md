@@ -27,6 +27,8 @@ stopped, and its test fails.
 | `clibs`     | checkseum (optint's 32-bit code on wasm32), bigstringaf (bigarrays) |
 | `syslibs`   | mlmpfr + zlib through `conf-mpfr`/`conf-zlib`, no configuration (OCaml 4) |
 | `apron`     | apron (box, octagons, polyhedra) + mlgmpidl + camlidl: generated stubs, custom blocks |
+| `aprondoms` | apron's domains on PPL (polyhedra, strict ones, grids), the polkaGrid product, fppol on GLPK: C++ libraries behind camlidl stubs, when the host's apron has them |
+| `apronpplite` | apron's PPLite domain (C++ on flint), each of its kinds, when the host's apron has it |
 | `cudd`      | mlcuddidl: CUDD's BDDs as custom blocks finalized by the GC, OCaml closures called back by CUDD's recursive apply while `Gc.compact` runs |
 | `sqlite`    | sqlite3: SQL, JSON, math functions, a database file |
 | `bz2`       | bz2 + libbz2 (`fdopen(dup(fd))` under WASI) |
@@ -109,7 +111,8 @@ latest patch release of each; `ocaml5` from 5.0, `syslibs` before 5.0, as
 mlmpfr 4.2.1 does not build with OCaml 5), and CI runs it on 4.14 and 5.5.
 The libraries of `snappy`, `expat`, `glpk`, `fftw3`, `argon2`, `lmdb` and
 `sdl` have no `-dev` package on the machine of the last run: CI installs
-them. The zarith test also ran unmodified in Chrome, on both targets.
+them. No distribution has PPLite: `apronpplite` runs where it was installed
+by hand before apron, not in CI. The zarith test also ran unmodified in Chrome, on both targets.
 
 ## WASI
 

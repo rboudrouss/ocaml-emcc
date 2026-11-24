@@ -4,6 +4,9 @@
   version), ppl (apron's PPL domains, jasmin; `std::mem_fn` in its
   headers, which libc++ in C++17 needs), pplite (apron's PPLite domain,
   its newest release).
+- apron: every domain is built, those on PPL (`ppl`, `polkaGrid`), PPLite
+  and GLPK (`fppD`) too, whichever the host's apron has. A program using
+  them failed to link (their stubs were missing).
 - Recipes: a project recipe can patch the OCaml code of any dependency,
   even one without C (`PATCH_OCAML=1` and `patches/`), and build it from
   its own sources (`SOURCE=git:`, `url:` or `dir:`), for a package the
