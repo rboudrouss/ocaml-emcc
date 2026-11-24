@@ -1,7 +1,8 @@
 ## Unreleased
 
 - Added recipes: flint (flint, apron's PPLite domain; the host's minor
-  version), ppl (apron's PPL domains, jasmin; `std::mem_fn` in its
+  version), leveldb (leveldb, with Snappy; its compactions need
+  `--threads`), ppl (apron's PPL domains, jasmin; `std::mem_fn` in its
   headers, which libc++ in C++17 needs), pplite (apron's PPLite domain,
   its newest release).
 - apron: every domain is built, those on PPL (`ppl`, `polkaGrid`), PPLite

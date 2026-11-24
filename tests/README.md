@@ -52,6 +52,7 @@ stopped, and its test fails.
 | `snappy`, `expat`, `glpk`, `fftw3` | each binding + its library's recipe (C++ for snappy, SAX callbacks for expat, no dune for glpk, both precisions for fftw3) |
 | `argon2`    | argon2 (ctypes-foreign, `-largon2`) + libargon2 |
 | `lmdb`      | lmdb + liblmdb: a database file, cursors, transactions |
+| `leveldb`   | leveldb + LevelDB (C++, Snappy): a small write buffer, the tables compacted in its thread (`threads: yes`), the database reopened |
 | `flint`     | flint: ctypes stub generation, pkg-config, polynomials, algebraic numbers, exact reals (calcium) |
 | `sdl`       | tsdl + sdl2: timer, events, surfaces, RWops (wasm64) |
 | `raylib`    | raylib (raylib-ocaml): its vendored raylib built for the web, ctypes structs holding pointers; images, colors, collisions, text, without a window |

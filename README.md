@@ -939,6 +939,7 @@ it.
 | `gsl` | gsl | with its CBLAS |
 | `liblz4` | lz4 | |
 | `snappy` | snappy | C++ |
+| `leveldb` | leveldb | C++, with Snappy; it compacts its tables in a thread of its own: link with `--threads` |
 | `expat` | ocaml-expat | |
 | `fftw3` | fftw3 | double and single precision, no threads or SIMD |
 | `glpk` | glpk | |

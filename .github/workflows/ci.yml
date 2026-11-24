@@ -76,8 +76,9 @@ jobs:
           pkgs="$pkgs conf-ppl"
           # argon2 binds libargon2 with ctypes-foreign and has no conf package
           sudo apt-get install -y libargon2-dev
-          # mlmpfr does not build with OCaml 5 (upstream issue)
-          case ${{ matrix.ocaml }} in 4.*) pkgs="$pkgs mlmpfr" ;; esac
+          # mlmpfr does not build with OCaml 5 (upstream issue); leveldb is for
+          # OCaml 4 only
+          case ${{ matrix.ocaml }} in 4.*) pkgs="$pkgs mlmpfr leveldb" ;; esac
           # the package of tests/depgraph (mpfr through pkg-config, zarith)
           opam install $pkgs ./tests/depgraph/pkg
       # tests/jsdom runs a page in headless Chromium
