@@ -943,7 +943,7 @@ it.
 | `fftw3` | fftw3 | double and single precision, no threads or SIMD |
 | `glpk` | glpk | |
 | `ppl` | apron (its PPL domains), jasmin | the Parma Polyhedra Library, C++ and its C interface, GMP coefficients, without its floating-point domains (wasm cannot change the FPU rounding mode) |
-| `flint` | flint | generic C, thread-safe, the host's minor version |
+| `flint`, `pplite` | flint, apron (its PPLite domain) | flint in generic C, thread-safe, the host's minor version; PPLite, C++ on flint, its newest release (no opam package has it) |
 | `libargon2` | argon2 | reference implementation, no threads |
 | `liblmdb` | lmdb | `MDB_NOLOCK \| MDB_WRITEMAP`, as emscripten has no process-shared mutexes and its file mappings are copies |
 | `sdl2` | tsdl | emscripten's port (`-sUSE_SDL=2`), only the timer and events subsystems under node |
