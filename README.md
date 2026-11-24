@@ -38,7 +38,8 @@ that `opam install ocaml-emcc` installs with it (`opam install c_of_ocaml`
 in a switch that lacks it). ocaml-emcc runs the one of the switch, built by
 its compiler; `$OCAML_EMCC_C_OF_OCAML` gives another one. With OCaml 4.08
 to 4.13 and 5.0 to 5.2, which c_of_ocaml does not support, ocaml-emcc
-interprets the bytecode (`--interpreted`) and installs without it.
+installs without it, and stops unless asked for the interpreter
+(`--interpreted`, or `interpreted: yes` in `ocaml-emcc.conf`).
 
 Until c_of_ocaml 0.1.0 is in opam-repository, pin it before installing
 ocaml-emcc:
@@ -64,7 +65,7 @@ with emcc, compiles the program to C, and writes `main.js` and
 
 | what | version | notes |
 |------|---------|-------|
-| opam switch | OCaml 4.14, or 5.3 and later | interpreted only with 4.08 to 4.13 and 5.0 to 5.2 |
+| opam switch | OCaml 4.14, or 5.3 and later | 4.08 to 4.13 and 5.0 to 5.2 with `--interpreted` only |
 | [emsdk](https://emscripten.org/docs/getting_started/downloads.html) | tested with 6.0.11 | `emcc` in `PATH`, 4.0 or later for standalone `.wasm` outputs |
 | c_of_ocaml | 0.1 | installed by opam with ocaml-emcc, see [Quick start](#quick-start) |
 | dune | 3.11 or later | except for projects built [without dune](#without-dune) |

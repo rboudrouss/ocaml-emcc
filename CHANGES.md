@@ -6,8 +6,10 @@
 - ocaml-emcc runs the c_of_ocaml of the switch (built by its compiler,
   for its bytecode format) before the one in `PATH`;
   `$OCAML_EMCC_C_OF_OCAML` still overrides both.
-- OCaml 5.0 to 5.2: interpreted, as before 4.14 (c_of_ocaml's runtime
-  support does not compile with them).
+- With an OCaml the compiled mode does not support (before 4.14, and now
+  5.0 to 5.2, whose runtime c_of_ocaml's runtime support does not compile
+  with), ocaml-emcc stops and asks for `--interpreted` (or `interpreted:
+  yes`) instead of interpreting the program without being asked.
 - Added recipes: flint (flint, apron's PPLite domain; the host's minor
   version), leveldb (leveldb, with Snappy; its compactions need
   `--threads`), ppl (apron's PPL domains, jasmin; `std::mem_fn` in its

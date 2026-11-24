@@ -282,17 +282,18 @@ let parse_link_opts ?(extra = fun _ -> None) args =
 let with_config_flags (o : Link.opts) =
   let env_flags = Option.fold ~none:[] ~some:Str_util.words (Env.getenv_opt "OCAML_EMCC_LDFLAGS") in
   let p = Project.get () in
-  (* compiled unless asked otherwise, or with an OCaml c_of_ocaml does not
-     support *)
+  (* compiled unless asked otherwise; with an OCaml c_of_ocaml does not
+     support, the interpreter is never chosen silently *)
   let compiled =
     match !compiled_flag with
     | Some c -> c
     | None when p.interpreted -> false
     | None when not (Link.compiled_supported ()) ->
-        Env.log "OCaml %s: interpreted (the compiled mode needs %s)"
+        Env.fail
+          "OCaml %s: the compiled mode (the default) needs %s.\n\
+          \  Pass --interpreted (or interpreted: yes in ocaml-emcc.conf) to run the bytecode on the interpreter."
           (Option.value (Env.manifest "ocaml_version") ~default:"?")
-          Link.compiled_requirement;
-        false
+          Link.compiled_requirement
     | None -> true
   in
   { o with emcc_flags = p.link_flags @ env_flags @ o.emcc_flags; js_files = p.js_files @ o.js_files; threads = o.threads || p.threads; jspi = o.jspi || p.jspi; cps_stack = o.cps_stack || p.cps_stack;
