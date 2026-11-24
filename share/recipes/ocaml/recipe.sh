@@ -32,8 +32,9 @@
 
 SOURCE=ocaml
 
-# (the compiler of the switch compresses: compression_c_libraries)
-if ocaml_version_ge 5 1 && "$HOST_BIN/ocamlc" -config | grep -q '^compression_c_libraries: *[^ ]'; then
+# (the compiler of the switch compresses: -lzstd in compression_c_libraries,
+# or before 5.3, which has no such variable, in bytecomp_c_libraries)
+if ocaml_version_ge 5 1 && "$HOST_BIN/ocamlc" -config | grep -Eq '^(compression|bytecomp)_c_libraries:.*-lzstd'; then
   DEPENDS=zstd
 fi
 

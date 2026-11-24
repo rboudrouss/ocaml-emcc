@@ -3,6 +3,10 @@
 - OCaml 5.1: the wasm runtime builds again (since 1.0.0, the memory of
   its heaps taken from malloc was patched in for the `caml_plat_mem_map`
   of 5.2 and later only, and the patch failed).
+- OCaml 5.1 and 5.2: the runtime reads and writes compressed data
+  (`Marshal.Compression`, the `.cmi` files of a compiler with zstd), as
+  from 5.3: zstd was only looked for in `compression_c_libraries`, which
+  5.1 and 5.2 lack.
 - c_of_ocaml is an opam package, a dependency of ocaml-emcc except with
   the OCaml versions it does not support (4.08 to 4.13, 5.0 to 5.2):
   `opam install ocaml-emcc` installs it.
