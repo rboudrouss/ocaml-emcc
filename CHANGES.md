@@ -1,4 +1,4 @@
-## Unreleased
+## 1.1.0
 
 - OCaml 5.1: the wasm runtime builds again (since 1.0.0, the memory of
   its heaps taken from malloc was patched in for the `caml_plat_mem_map`
