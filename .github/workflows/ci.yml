@@ -16,9 +16,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 4.13: the oldest OCaml with c_of_ocaml (the compiled mode)
-        ocaml: ['4.13', '4.14', '5.5']
-    runs-on: ubuntu-latest
+        os: [ubuntu-latest]
+        ocaml: ['4.14', '5.5']
+        include:
+          # 4.13: the oldest OCaml with c_of_ocaml (the compiled mode); GCC
+          # 15 (C23) does not compile it
+          - { os: ubuntu-24.04, ocaml: '4.13' }
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
       - uses: ocaml/setup-ocaml@v3
