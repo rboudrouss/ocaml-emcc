@@ -16,7 +16,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ocaml: ['4.14', '5.5']
+        # 4.13: the oldest OCaml with c_of_ocaml (the compiled mode)
+        ocaml: ['4.13', '4.14', '5.5']
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
