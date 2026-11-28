@@ -28,24 +28,8 @@ tested (see
 ## Quick start
 
 ```sh
-opam install ocaml-emcc             # or opam pin add ocaml-emcc git+https://github.com/rboudrouss/ocaml-emcc.git
+opam install ocaml-emcc             # c_of_ocaml comes with it
 source /path/to/emsdk/emsdk_env.sh  # emcc in PATH
-```
-
-The compiled mode, the default, uses
-[c_of_ocaml](https://github.com/rboudrouss/C_of_ocaml), an opam package
-that `opam install ocaml-emcc` installs with it (`opam install c_of_ocaml`
-in a switch that lacks it). ocaml-emcc runs the one of the switch, built by
-its compiler; `$OCAML_EMCC_C_OF_OCAML` gives another one. With OCaml 4.08
-to 4.12, which c_of_ocaml does not support, ocaml-emcc installs without
-it, and stops unless asked for the interpreter (`--interpreted`, or
-`interpreted: yes` in `ocaml-emcc.conf`).
-
-Until c_of_ocaml 0.1.0 is in opam-repository, pin it before installing
-ocaml-emcc:
-
-```sh
-opam pin add -n c_of_ocaml.0.1.0 git+https://github.com/rboudrouss/C_of_ocaml.git#0.1.0
 ```
 
 Then, in your dune project:
@@ -61,13 +45,27 @@ time only), compiles the C stubs of the program and of its dependencies
 with emcc, compiles the program to C, and writes `main.js` and
 `main.wasm`.
 
+The compiled mode, the default, runs
+[c_of_ocaml](https://github.com/rboudrouss/C_of_ocaml), an opam package
+that `opam install ocaml-emcc` installs with it, in the same switch.
+`$OCAML_EMCC_C_OF_OCAML` gives another one. With OCaml 4.08 to 4.12,
+which c_of_ocaml does not support, ocaml-emcc installs without it, and
+stops unless asked for the interpreter (`--interpreted`, or
+`interpreted: yes` in `ocaml-emcc.conf`).
+
+The development version is pinned from this repository:
+
+```sh
+opam pin add ocaml-emcc git+https://github.com/rboudrouss/ocaml-emcc.git
+```
+
 ## Requirements
 
 | what | version | notes |
 |------|---------|-------|
 | opam switch | OCaml 4.13 or later | 4.08 to 4.12 with `--interpreted` only |
 | [emsdk](https://emscripten.org/docs/getting_started/downloads.html) | tested with 6.0.11 | `emcc` in `PATH`, 4.0 or later for standalone `.wasm` outputs |
-| c_of_ocaml | 0.1 | installed by opam with ocaml-emcc, see [Quick start](#quick-start) |
+| c_of_ocaml | 0.1 | installed by `opam install ocaml-emcc` |
 | dune | 3.11 or later | except for projects built [without dune](#without-dune) |
 | node | the one of emsdk works | to run `.js` outputs, 24 or later for wasm64 |
 
