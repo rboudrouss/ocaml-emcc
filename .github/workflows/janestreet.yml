@@ -41,12 +41,7 @@ jobs:
           "$EMSDK/emsdk" install "$EMSDK_VERSION"
           "$EMSDK/emsdk" activate "$EMSDK_VERSION"
       - run: opam install ocamlfind core core_unix async async_ssl ppx_jane
-      # c_of_ocaml, in the switch, where ocaml-emcc finds it; from its 0.1.0 tag
-      # until c_of_ocaml.0.1.0 is in opam-repository
-      - name: Install c_of_ocaml
-        run: |
-          opam pin add -n -y c_of_ocaml.0.1.0 git+https://github.com/rboudrouss/C_of_ocaml.git#0.1.0
-          opam install -y . --deps-only
+      - run: opam install -y . --deps-only
       - run: opam exec -- dune build
       - name: Install wasmtime 46 (wasi-threads)
         if: matrix.target == 'wasi'
