@@ -78,6 +78,7 @@ jobs:
           # apron with its PPL domains (and fppol: libglpk-dev, for glpk)
           pkgs="$pkgs conf-ppl"
           # argon2 binds libargon2 with ctypes-foreign and has no conf package
+          sudo apt-get update
           sudo apt-get install -y libargon2-dev
           # mlmpfr does not build with OCaml 5 (upstream issue); leveldb and
           # xxhash (oasis) are for OCaml 4 only
